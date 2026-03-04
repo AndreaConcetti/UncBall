@@ -2,11 +2,11 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(Rigidbody))]
-public class BallResetter : MonoBehaviour
+public class BallResetter1 : MonoBehaviour
 {
     [Header("References")]
     public BoxCollider launchZone;
-    public BallLauncher launcher;
+    public BallLauncher1 launcher;
 
     [Header("Reset")]
     public Key resetKey = Key.R;

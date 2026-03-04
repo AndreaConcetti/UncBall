@@ -2,8 +2,11 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(Rigidbody), typeof(Collider))]
-public class BallLauncher : MonoBehaviour
+public class BallLauncher2 : MonoBehaviour
 {
+
+
+    
     public enum State { Placing, Armed, Launched }
 
     [Header("References")]
@@ -33,10 +36,15 @@ public class BallLauncher : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         state = State.Placing;
+         Debug.Log("È il turno del Player 2");
     }
 
     private void Update()
     {
+          if (TurnManager.Instance.IsPlayer2Turn)
+          {
+   
+    
         if (Keyboard.current != null && Keyboard.current[lockKey].wasPressedThisFrame)
         {
             if (state == State.Placing) SetArmedState();
@@ -67,6 +75,7 @@ public class BallLauncher : MonoBehaviour
         if (down) Begin(screenPos);
         if (held && tracking) Drag(screenPos);
         if (up) End(screenPos);
+    }
     }
 
     public void ResetForNewShot()
