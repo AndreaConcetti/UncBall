@@ -6,7 +6,8 @@ public class BallLauncher1 : MonoBehaviour
 {
 
 
-    
+     private bool isActive = false;
+     private bool canMove = true;
     public enum State { Placing, Armed, Launched }
 
     [Header("References")]
@@ -43,7 +44,8 @@ public class BallLauncher1 : MonoBehaviour
     {
       if (TurnManager.Instance.IsPlayer1Turn)
 {
-   
+    if (!isActive || !canMove)
+            return;
         if (Keyboard.current != null && Keyboard.current[lockKey].wasPressedThisFrame)
         {
             if (state == State.Placing) SetArmedState();
@@ -90,6 +92,11 @@ public class BallLauncher1 : MonoBehaviour
         if (debugLogs) Debug.Log("[BallLauncher] ResetForNewShot -> Placing");
     }
 
+    public void SetActive(bool value)
+    {
+        isActive = value;
+    }
+
     public void SetPlacingState()
     {
         state = State.Placing;
@@ -111,6 +118,21 @@ public class BallLauncher1 : MonoBehaviour
         rb.angularVelocity = Vector3.zero;
         rb.isKinematic = true;
     }
+
+    public void DisableMovement()
+{
+    isActive = false;
+
+    Rigidbody rb = GetComponent<Rigidbody>();
+    if (rb != null)
+    {
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        rb.isKinematic = true;
+    }
+
+    Debug.Log(name + " bloccato");
+}
 
     private void Begin(Vector2 screenPos)
     {
