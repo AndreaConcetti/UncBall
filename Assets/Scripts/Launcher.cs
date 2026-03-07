@@ -17,6 +17,9 @@ public class BallLauncher : MonoBehaviour
     [Header("References")]
     public BallPhysics ball;
 
+    [Tooltip("Optional — assign to trigger camera transitions on charge/release")]
+    public BallCameraController cameraController;
+
     [Header("Force Mapping")]
     [Tooltip("Minimum launch force (short swipe)")]
     public float minForce = 3f;
@@ -46,7 +49,7 @@ public class BallLauncher : MonoBehaviour
     /// <summary>Current swipe direction in world space (X/Z plane).</summary>
     public Vector3 LaunchDirection { get; private set; }
 
-    private bool    _tracking;
+    private bool _tracking;
     private Vector2 _startScreen;
 
     // ── Unity Lifecycle ────────────────────────────────────────
@@ -99,11 +102,12 @@ public class BallLauncher : MonoBehaviour
 
     private void BeginTracking(Vector2 screenPos)
     {
-        // if (!ball.IsActive) return;
-        _tracking       = true;
-        _startScreen    = screenPos;
-        ChargeRatio     = 0f;
+        //if (!ball.IsActive) return;
+        _tracking = true;
+        _startScreen = screenPos;
+        ChargeRatio = 0f;
         LaunchDirection = forwardAxis.normalized;
+        cameraController?.SetAiming(true);
     }
 
     private void UpdateTracking(Vector2 screenPos)
@@ -126,8 +130,9 @@ public class BallLauncher : MonoBehaviour
         else
             Debug.Log("[BallLauncher] Swipe too short — no launch.");
 
-        ChargeRatio     = 0f;
+        ChargeRatio = 0f;
         LaunchDirection = Vector3.zero;
+        cameraController?.SetAiming(false);
     }
 
     private void ApplySwipe(Vector2 swipe)
@@ -150,7 +155,7 @@ public class BallLauncher : MonoBehaviour
         }
 
         LaunchDirection = dir;
-        ChargeRatio     = Mathf.Clamp01(swipe.magnitude / maxSwipePixels);
+        ChargeRatio = Mathf.Clamp01(swipe.magnitude / maxSwipePixels);
 
         Debug.Log($"[BallLauncher] Dir: {LaunchDirection:F2}  " +
                   $"Charge: {ChargeRatio * 100f:F0}%  " +
@@ -161,9 +166,9 @@ public class BallLauncher : MonoBehaviour
 
     private void DoLaunch()
     {
-        float force     = Mathf.Lerp(minForce, maxForce, ChargeRatio);
+        float force = Mathf.Lerp(minForce, maxForce, ChargeRatio);
         Vector3 impulse = LaunchDirection * force;
-        impulse.y       = 0f;
+        impulse.y = 0f;
 
         Debug.Log($"[BallLauncher] LAUNCH → dir: {LaunchDirection:F2}  force: {force:F1}  impulse: {impulse:F2}");
         ball.Launch(impulse);
@@ -172,9 +177,9 @@ public class BallLauncher : MonoBehaviour
     /// <summary>Scripted / UI launch in a fixed direction at a given force [minForce–maxForce].</summary>
     public void Launch(Vector3 direction, float force)
     {
-        LaunchDirection   = direction.normalized;
-        LaunchDirection   = new Vector3(LaunchDirection.x, 0f, LaunchDirection.z);
-        force             = Mathf.Clamp(force, minForce, maxForce);
+        LaunchDirection = direction.normalized;
+        LaunchDirection = new Vector3(LaunchDirection.x, 0f, LaunchDirection.z);
+        force = Mathf.Clamp(force, minForce, maxForce);
         Debug.Log($"[BallLauncher] Scripted LAUNCH → dir: {LaunchDirection:F2}  force: {force:F1}");
         ball.Launch(LaunchDirection * force);
     }
