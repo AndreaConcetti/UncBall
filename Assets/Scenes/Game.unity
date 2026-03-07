@@ -2612,7 +2612,7 @@ GameObject:
   - component: {fileID: 1285062261}
   - component: {fileID: 1285062260}
   m_Layer: 0
-  m_Name: Bordo R (1)
+  m_Name: Bordo D (can remove later)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
