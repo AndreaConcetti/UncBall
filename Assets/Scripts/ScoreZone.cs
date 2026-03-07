@@ -13,7 +13,7 @@ public class ScoreZone : MonoBehaviour
         if (player != null)
         {
             // Aggiunge punti
-            ScoreManager.Instance.AddScore(player, points);
+            //ScoreManager.Instance.AddScore(player, points);
 
             // Blocca la pallina
             player.DisableMovement();
