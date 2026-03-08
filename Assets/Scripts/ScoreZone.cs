@@ -3,23 +3,29 @@ using UnityEngine;
 public class ScoreZone : MonoBehaviour
 {
     public int points = 10;
-    public GameObject ballPrefab;
-    public Transform spawnPoint;
 
     private void OnTriggerEnter(Collider other)
     {
-        BallLauncher1 player = other.GetComponent<BallLauncher1>();
+        BallPhysics ball = other.GetComponent<BallPhysics>();
 
-        if (player != null)
+        if (ball != null)
         {
-            // Aggiunge punti
-            //ScoreManager.Instance.AddScore(player, points);
+            // assegna punti
+            ScoreManager.Instance.AddScore(points);
 
-            // Blocca la pallina
-            player.DisableMovement();
 
-            // Genera nuova pallina
-            Instantiate(ballPrefab, spawnPoint.position, spawnPoint.rotation);
+
+            // blocca la pallina
+            Rigidbody rb = other.GetComponent<Rigidbody>();
+
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.isKinematic = true;
+            }
+
+            Destroy(gameObject);
         }
     }
 }

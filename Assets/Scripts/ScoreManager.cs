@@ -4,25 +4,44 @@ public class ScoreManager : MonoBehaviour
 {
     public static ScoreManager Instance;
 
-    private int player1Score = 0;
-    private int player2Score = 0;
+    public GameObject ballPrefab;
 
-    private void Awake()
+    public Transform launchZone1;
+    public Transform launchZone2;
+
+    public int player1Score;
+    public int player2Score;
+
+    void Awake()
     {
         Instance = this;
     }
 
-    public void AddScore(PlayerController player, int amount)
+    public void AddScore(int points)
     {
-        if (player == TurnManager.Instance.player1)
+        if (TurnManager.Instance.IsPlayer1Turn)
         {
-            player1Score += amount;
-            Debug.Log("Player 1 Score: " + player1Score);
+            player1Score += points;
         }
-        else if (player == TurnManager.Instance.player2)
+        else
         {
-            player2Score += amount;
-            Debug.Log("Player 2 Score: " + player2Score);
+            player2Score += points;
         }
+
+        Debug.Log("P1: " + player1Score + " | P2: " + player2Score);
+
+        SpawnNewBall();
+    }
+
+    void SpawnNewBall()
+    {
+        Transform spawnPoint;
+
+        if (TurnManager.Instance.IsPlayer1Turn)
+            spawnPoint = launchZone1;
+        else
+            spawnPoint = launchZone2;
+
+        Instantiate(ballPrefab, spawnPoint.position, spawnPoint.rotation);
     }
 }
