@@ -9,6 +9,8 @@ public class TurnManager : MonoBehaviour
 
     public float turnDuration = 15f;
     private float currentTimer;
+    public float CurrentTimer => currentTimer;
+
 
     public bool IsPlayer1Turn => currentPlayer == player1;
     public bool IsPlayer2Turn => currentPlayer == player2;
