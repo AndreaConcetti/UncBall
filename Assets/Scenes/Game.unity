@@ -878,7 +878,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7650670177844803245, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 1.472
+      value: 1.355
       objectReference: {fileID: 0}
     - target: {fileID: 9050357493295956520, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
       propertyPath: m_Name
@@ -1968,7 +1968,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4d781f2904dc50d44a7c218019d39d41, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScoreManager
-  launcher: {fileID: 0}
+  launcher: {fileID: 365415164}
   ballPrefab: {fileID: 8885133465328629770, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
   launchZone1: {fileID: 1558974731}
   launchZone2: {fileID: 733478851}
@@ -4663,15 +4663,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -0.1479
+      value: -0.149
       objectReference: {fileID: 0}
     - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.71
+      value: 0.715
       objectReference: {fileID: 0}
     - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -0.0678
+      value: 0.023
       objectReference: {fileID: 0}
     - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
       propertyPath: m_LocalRotation.w
