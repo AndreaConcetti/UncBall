@@ -97,4 +97,10 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
-/Assets/TutorialInfo/Icons/URP.png
+/.vscode
+/Packages/manifest.json
+/Packages/packages-lock.json
+/ProjectSettings/PackageManagerSettings.asset
+/ProjectSettings/ShaderGraphSettings.asset
+/UncBall.slnx
+/ProjectSettings/PackageManagerSettings.asset
