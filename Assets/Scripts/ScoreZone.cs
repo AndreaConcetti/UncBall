@@ -23,6 +23,7 @@ public class ScoreZone : MonoBehaviour
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
                 rb.isKinematic = true;
+                ball.enabled = false;
             }
 
             Destroy(gameObject);
