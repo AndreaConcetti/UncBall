@@ -3,7 +3,7 @@ using UnityEngine;
 public class ScoreManager : MonoBehaviour
 {
     public static ScoreManager Instance;
-
+    public BallLauncher launcher;
     public GameObject ballPrefab;
 
     public Transform launchZone1;
@@ -42,6 +42,8 @@ public class ScoreManager : MonoBehaviour
         else
             spawnPoint = launchZone2;
 
-        Instantiate(ballPrefab, spawnPoint.position, spawnPoint.rotation);
+        GameObject ballObject = Instantiate(ballPrefab, spawnPoint.position, spawnPoint.rotation);
+        BallPhysics ballPhysics = ballObject.GetComponent<BallPhysics>();
+        launcher.ball = ballPhysics;
     }
 }
