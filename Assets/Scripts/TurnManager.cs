@@ -1,4 +1,5 @@
 using UnityEngine;
+using TMPro;
 
 public class TurnManager : MonoBehaviour
 {
@@ -7,8 +8,12 @@ public class TurnManager : MonoBehaviour
     public PlayerController player1;
     public PlayerController player2;
 
+    public TextMeshProUGUI timerText;
+
     public float turnDuration = 15f;
     private float currentTimer;
+
+    private bool timerRunning = true;
 
     public bool IsPlayer1Turn => currentPlayer == player1;
     public bool IsPlayer2Turn => currentPlayer == player2;
@@ -27,7 +32,14 @@ public class TurnManager : MonoBehaviour
 
     void Update()
     {
+
+        if (!timerRunning)
+            return;
+
+
         currentTimer -= Time.deltaTime;
+        int seconds = Mathf.CeilToInt(currentTimer);
+        timerText.text = seconds.ToString();
 
         if (currentTimer <= 0)
         {
@@ -40,13 +52,19 @@ public class TurnManager : MonoBehaviour
     {
         currentPlayer = player;
 
+        ResetTimer();
+        ResumeTimer();
+
         // reset timer
         currentTimer = turnDuration;
+
+        ScoreManager.Instance.SpawnNewBall(); 
 
         player1.SetActive(player == player1);
         player2.SetActive(player == player2);
 
         Debug.Log("Turno di: " + currentPlayer.name);
+
     }
 
     public void EndTurn()
@@ -63,4 +81,31 @@ public class TurnManager : MonoBehaviour
         Debug.Log("Palla persa!");
         EndTurn();
     }
+
+    public void ResetTimer()
+    {
+        currentTimer = turnDuration;
+    }
+
+    public void PauseTimer()
+    {
+        timerRunning = false;
+    }
+
+    public void ResumeTimer()
+    {
+        timerRunning = true;
+    }
+
+    public void AssignBallToCurrentPlayer(BallPhysics ball)
+{
+    if (IsPlayer1Turn)
+    {
+        player1.ball = ball;
+    }
+    else
+    {
+        player2.ball = ball;
+    }
+}
 }
