@@ -4,6 +4,8 @@ public class PlayerController : MonoBehaviour
 {
     private bool isActive = false;
 
+    public BallPhysics ball;
+
     public void SetActive(bool value)
     {
         isActive = value;

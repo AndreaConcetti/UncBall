@@ -981,7 +981,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c26692e2eb57204da6010d722cdb135, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallLauncher
-  ball: {fileID: 9062231955330381147}
+  ball: {fileID: 0}
   cameraController: {fileID: 2130389378}
   minForce: 3
   maxForce: 17
@@ -1938,8 +1938,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d35f193f0594e084ab14720fb795a6e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TurnManager
-  player1: {fileID: 9062231955330381148}
-  player2: {fileID: 1992889626}
+  player1: {fileID: 0}
+  player2: {fileID: 0}
+  timerText: {fileID: 1511804641}
   turnDuration: 15
 --- !u!4 &880244589
 Transform:
@@ -4079,71 +4080,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1834604041}
   m_CullTransparentMesh: 1
---- !u!1001 &1934170457
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 152000212741954434, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_Materials.Array.size
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 152000212741954434, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: 'm_Materials.Array.data[0]'
-      value: 
-      objectReference: {fileID: 2100000, guid: 20198e1d7e38cc34babe061228fc8b6f, type: 2}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 0.74
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0.71
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: -1.072
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: -0.0000000037252899
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8885133465328629770, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_Name
-      value: Ball2
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
 --- !u!1 &1936654659
 GameObject:
   m_ObjectHideFlags: 0
@@ -4266,7 +4202,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1940017667
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4351,17 +4287,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
---- !u!114 &1992889626 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 753785798348505138, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-  m_PrefabInstance: {fileID: 1934170457}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e33c230a99d3efb4593f02a4188fe2ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerController
 --- !u!1 &2044076555
 GameObject:
   m_ObjectHideFlags: 0
@@ -4653,85 +4578,6 @@ MonoBehaviour:
   overviewAnchor: {fileID: 973354175}
   aimAnchor: {fileID: 435041597}
   transitionSpeed: 4.55
---- !u!1001 &8728034678557828946
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -0.149
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0.715
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0.023
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: -0.0000000037252899
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6209323452260032296, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8885133465328629770, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-      propertyPath: m_Name
-      value: Ball1
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
---- !u!114 &9062231955330381147 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 950269281110148506, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-  m_PrefabInstance: {fileID: 8728034678557828946}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d3014f132a5a2db4480b65098b11e9f8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallPhysics
---- !u!114 &9062231955330381148 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 753785798348505138, guid: 416b0e406d27c4c4397f2dd48b23164e, type: 3}
-  m_PrefabInstance: {fileID: 8728034678557828946}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e33c230a99d3efb4593f02a4188fe2ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerController
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -4743,8 +4589,6 @@ SceneRoots:
   - {fileID: 177987693}
   - {fileID: 732044841}
   - {fileID: 94034231}
-  - {fileID: 8728034678557828946}
-  - {fileID: 1934170457}
   - {fileID: 1416772011}
   - {fileID: 1940017670}
   - {fileID: 365415165}

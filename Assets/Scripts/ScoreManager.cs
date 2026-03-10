@@ -17,6 +17,10 @@ public class ScoreManager : MonoBehaviour
         Instance = this;
     }
 
+    void Start()
+    {
+    }
+
     public void AddScore(int points)
     {
         if (TurnManager.Instance.IsPlayer1Turn)
@@ -30,10 +34,13 @@ public class ScoreManager : MonoBehaviour
 
         Debug.Log("P1: " + player1Score + " | P2: " + player2Score);
 
+        TurnManager.Instance.ResetTimer();
+        TurnManager.Instance.ResumeTimer();
+
         SpawnNewBall();
     }
 
-    void SpawnNewBall()
+    public void SpawnNewBall()
     {
         Transform spawnPoint;
 
@@ -43,7 +50,16 @@ public class ScoreManager : MonoBehaviour
             spawnPoint = launchZone2;
 
         GameObject ballObject = Instantiate(ballPrefab, spawnPoint.position, spawnPoint.rotation);
+
         BallPhysics ballPhysics = ballObject.GetComponent<BallPhysics>();
+
+        Rigidbody rb = ballObject.GetComponent<Rigidbody>();
+
+        // blocca completamente la pallina
+        rb.constraints = RigidbodyConstraints.FreezeAll;
+
         launcher.ball = ballPhysics;
+
+        TurnManager.Instance.AssignBallToCurrentPlayer(ballPhysics);
     }
 }

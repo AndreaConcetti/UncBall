@@ -166,12 +166,17 @@ public class BallLauncher : MonoBehaviour
 
     private void DoLaunch()
     {
+        Rigidbody rb = ball.GetComponent<Rigidbody>();
+
+        // sblocca la fisica
+        rb.constraints = RigidbodyConstraints.None;
         float force = Mathf.Lerp(minForce, maxForce, ChargeRatio);
         Vector3 impulse = LaunchDirection * force;
         impulse.y = 0f;
 
         Debug.Log($"[BallLauncher] LAUNCH → dir: {LaunchDirection:F2}  force: {force:F1}  impulse: {impulse:F2}");
         ball.Launch(impulse);
+        TurnManager.Instance.PauseTimer();
     }
 
     /// <summary>Scripted / UI launch in a fixed direction at a given force [minForce–maxForce].</summary>
