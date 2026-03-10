@@ -8,6 +8,16 @@ public class TurnManager : MonoBehaviour
     public PlayerController player1;
     public PlayerController player2;
 
+    public Material Player1Material;
+
+    public Material Player2Material;
+
+     public BallLauncher launcher;
+    public GameObject ballPrefab;
+
+    public Transform launchZone1;
+    public Transform launchZone2;
+
     public TextMeshProUGUI timerText;
 
     public float turnDuration = 15f;
@@ -18,7 +28,7 @@ public class TurnManager : MonoBehaviour
     public bool IsPlayer1Turn => currentPlayer == player1;
     public bool IsPlayer2Turn => currentPlayer == player2;
 
-    private PlayerController currentPlayer;
+    public PlayerController currentPlayer;
 
     void Awake()
     {
@@ -58,12 +68,10 @@ public class TurnManager : MonoBehaviour
         // reset timer
         currentTimer = turnDuration;
 
-        ScoreManager.Instance.SpawnNewBall(); 
-
-        player1.SetActive(player == player1);
-        player2.SetActive(player == player2);
+        SpawnNewBall(player);
 
         Debug.Log("Turno di: " + currentPlayer.name);
+
 
     }
 
@@ -107,5 +115,40 @@ public class TurnManager : MonoBehaviour
     {
         player2.ball = ball;
     }
+}
+
+public void SpawnNewBall(PlayerController player)
+{
+    Transform spawnPoint;
+
+    if (IsPlayer1Turn)
+        spawnPoint = launchZone1;
+    else
+        spawnPoint = launchZone2;
+
+
+    player1.SetActive(player == player1);
+    player2.SetActive(player == player2);
+
+
+    GameObject ballObject = Instantiate(ballPrefab, spawnPoint.position, spawnPoint.rotation);
+
+    ballObject.GetComponent<MeshRenderer>().material = IsPlayer1Turn ? Player1Material : Player2Material;
+
+    BallPhysics ballPhysics = ballObject.GetComponent<BallPhysics>();
+
+    Rigidbody rb = ballObject.GetComponent<Rigidbody>();
+
+    // blocca la pallina
+    rb.constraints = RigidbodyConstraints.FreezeAll;
+
+    // assegna al launcher
+    launcher.ball = ballPhysics;
+
+    //riattiva il launcher
+    launcher.ResetLaunch();
+
+    // assegna al player corrente
+    AssignBallToCurrentPlayer(ballPhysics);
 }
 }

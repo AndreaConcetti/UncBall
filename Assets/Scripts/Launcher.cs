@@ -17,6 +17,8 @@ public class BallLauncher : MonoBehaviour
     [Header("References")]
     public BallPhysics ball;
 
+    private bool hasLaunched = false;
+
     [Tooltip("Optional — assign to trigger camera transitions on charge/release")]
     public BallCameraController cameraController;
 
@@ -166,6 +168,13 @@ public class BallLauncher : MonoBehaviour
 
     private void DoLaunch()
     {
+
+        if (hasLaunched)
+        return;
+
+        hasLaunched = true;
+
+
         Rigidbody rb = ball.GetComponent<Rigidbody>();
 
         // sblocca la fisica
@@ -176,8 +185,14 @@ public class BallLauncher : MonoBehaviour
 
         Debug.Log($"[BallLauncher] LAUNCH → dir: {LaunchDirection:F2}  force: {force:F1}  impulse: {impulse:F2}");
         ball.Launch(impulse);
-        TurnManager.Instance.PauseTimer();
+        TurnManager.Instance.PauseTimer();       
+
     }
+
+    public void ResetLaunch()
+{
+    hasLaunched = false;
+}
 
     /// <summary>Scripted / UI launch in a fixed direction at a given force [minForce–maxForce].</summary>
     public void Launch(Vector3 direction, float force)
