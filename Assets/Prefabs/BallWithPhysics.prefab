@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 152000212741954434}
   - component: {fileID: 950269281110148506}
   - component: {fileID: 753785798348505138}
+  - component: {fileID: 7758610357119614738}
   m_Layer: 0
   m_Name: BallWithPhysics
   m_TagString: Untagged
@@ -171,3 +172,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   ball: {fileID: 0}
+--- !u!114 &7758610357119614738
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8885133465328629770}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b8b0d5709cce104dbb475538c6c8403, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallOwnership
+  Owner: 1
