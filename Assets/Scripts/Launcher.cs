@@ -159,9 +159,9 @@ public class BallLauncher : MonoBehaviour
         LaunchDirection = dir;
         ChargeRatio = Mathf.Clamp01(swipe.magnitude / maxSwipePixels);
 
-        Debug.Log($"[BallLauncher] Dir: {LaunchDirection:F2}  " +
-                  $"Charge: {ChargeRatio * 100f:F0}%  " +
-                  $"Force: {Mathf.Lerp(minForce, maxForce, ChargeRatio):F1}");
+       // Debug.Log($"[BallLauncher] Dir: {LaunchDirection:F2}  " +
+       //           $"Charge: {ChargeRatio * 100f:F0}%  " +
+       //           $"Force: {Mathf.Lerp(minForce, maxForce, ChargeRatio):F1}");
     }
 
     // ── Launch ─────────────────────────────────────────────────
@@ -183,7 +183,7 @@ public class BallLauncher : MonoBehaviour
         Vector3 impulse = LaunchDirection * force;
         impulse.y = 0f;
 
-        Debug.Log($"[BallLauncher] LAUNCH → dir: {LaunchDirection:F2}  force: {force:F1}  impulse: {impulse:F2}");
+        //Debug.Log($"[BallLauncher] LAUNCH → dir: {LaunchDirection:F2}  force: {force:F1}  impulse: {impulse:F2}");
         ball.Launch(impulse);
         TurnManager.Instance.PauseTimer();       
 

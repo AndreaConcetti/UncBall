@@ -8,7 +8,7 @@ public class PostGameScoreDisplay : MonoBehaviour
     public TMP_Text player2FinalScoreText;
 
     [Header("Optional Score Source")]
-    public ScoreManager scoreManager;
+    public ScoreManagerNew scoreManager;
 
     private void Awake()
     {
@@ -19,12 +19,17 @@ public class PostGameScoreDisplay : MonoBehaviour
     {
         if (scoreManager == null)
         {
-            Debug.LogWarning("PostGameScoreDisplay: ScoreManager non assegnato.");
+            scoreManager = ScoreManagerNew.Instance;
+        }
+
+        if (scoreManager == null)
+        {
+            Debug.LogWarning("PostGameScoreDisplay: ScoreManagerNew non trovato.");
             return;
         }
 
-        player1FinalScoreText.text = scoreManager.player1Score.ToString();
-        player2FinalScoreText.text = scoreManager.player2Score.ToString();
+        player1FinalScoreText.text = scoreManager.ScoreP1.ToString();
+        player2FinalScoreText.text = scoreManager.ScoreP2.ToString();
     }
 
     public void SetScores(int player1Score, int player2Score)

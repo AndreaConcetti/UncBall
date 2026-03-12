@@ -17,7 +17,12 @@ public class ScoreRollDisplay : MonoBehaviour
         [HideInInspector] public Vector2 currentStartPos;
         [HideInInspector] public Vector2 nextStartPos;
         [HideInInspector] public Coroutine colorReturnCoroutine;
+        [HideInInspector] public Coroutine scoreCoroutine;
+        [HideInInspector] public int pendingTargetScore;
     }
+
+    [Header("References")]
+    public ScoreManagerNew scoreManager;
 
     [Header("Player UI")]
     public RollingScoreUI player1UI;
@@ -38,22 +43,77 @@ public class ScoreRollDisplay : MonoBehaviour
     [Range(0f, 1f)] public float currentTopFade = 0f;
     [Range(0f, 1f)] public float nextBottomFade = 0f;
 
+    void Awake()
+    {
+        if (scoreManager == null)
+            scoreManager = ScoreManagerNew.Instance;
+    }
+
     void Start()
     {
-        Setup(player1UI, ScoreManager.Instance.player1Score);
-        Setup(player2UI, ScoreManager.Instance.player2Score);
+        if (scoreManager == null)
+        {
+            enabled = false;
+            return;
+        }
+
+        Setup(player1UI, scoreManager.ScoreP1);
+        Setup(player2UI, scoreManager.ScoreP2);
+    }
+
+    void OnEnable()
+    {
+        if (scoreManager == null)
+            scoreManager = ScoreManagerNew.Instance;
+
+        if (scoreManager != null)
+            scoreManager.onPointsScored.AddListener(OnPointsScored);
+    }
+
+    void OnDisable()
+    {
+        if (scoreManager != null)
+            scoreManager.onPointsScored.RemoveListener(OnPointsScored);
     }
 
     void Update()
     {
-        int targetP1 = ScoreManager.Instance.player1Score;
-        int targetP2 = ScoreManager.Instance.player2Score;
+        if (scoreManager == null)
+            return;
 
-        if (!player1UI.isAnimating && targetP1 > player1UI.displayedScore)
-            StartCoroutine(AnimateScoreIncrease(player1UI, targetP1));
+        bool p1WasReset = scoreManager.ScoreP1 < player1UI.displayedScore;
+        bool p2WasReset = scoreManager.ScoreP2 < player2UI.displayedScore;
 
-        if (!player2UI.isAnimating && targetP2 > player2UI.displayedScore)
-            StartCoroutine(AnimateScoreIncrease(player2UI, targetP2));
+        if (p1WasReset || p2WasReset)
+        {
+            RefreshImmediately();
+            return;
+        }
+
+        if (!player1UI.isAnimating && scoreManager.ScoreP1 > player1UI.displayedScore)
+            StartOrUpdateAnimation(player1UI, scoreManager.ScoreP1);
+
+        if (!player2UI.isAnimating && scoreManager.ScoreP2 > player2UI.displayedScore)
+            StartOrUpdateAnimation(player2UI, scoreManager.ScoreP2);
+    }
+
+    void OnPointsScored(PlayerID player, int newTotal)
+    {
+        if (player == PlayerID.Player1)
+            StartOrUpdateAnimation(player1UI, newTotal);
+        else if (player == PlayerID.Player2)
+            StartOrUpdateAnimation(player2UI, newTotal);
+    }
+
+    void StartOrUpdateAnimation(RollingScoreUI ui, int targetScore)
+    {
+        if (targetScore <= ui.displayedScore && !ui.isAnimating)
+            return;
+
+        ui.pendingTargetScore = Mathf.Max(ui.pendingTargetScore, targetScore);
+
+        if (ui.scoreCoroutine == null)
+            ui.scoreCoroutine = StartCoroutine(AnimateScoreIncrease(ui));
     }
 
     void Setup(RollingScoreUI ui, int initialScore)
@@ -68,16 +128,20 @@ public class ScoreRollDisplay : MonoBehaviour
         ui.nextRect.anchoredPosition = ui.nextStartPos;
 
         ui.displayedScore = initialScore;
+        ui.pendingTargetScore = initialScore;
+
         ui.currentText.text = initialScore.ToString();
         ui.nextText.text = "";
+
         ui.isAnimating = false;
         ui.colorReturnCoroutine = null;
+        ui.scoreCoroutine = null;
 
         SetTextColor(ui.currentText, normalColor, 1f);
         SetTextColor(ui.nextText, normalColor, 0f);
     }
 
-    IEnumerator AnimateScoreIncrease(RollingScoreUI ui, int targetScore)
+    IEnumerator AnimateScoreIncrease(RollingScoreUI ui)
     {
         ui.isAnimating = true;
 
@@ -87,7 +151,7 @@ public class ScoreRollDisplay : MonoBehaviour
             ui.colorReturnCoroutine = null;
         }
 
-        while (ui.displayedScore < targetScore)
+        while (ui.displayedScore < ui.pendingTargetScore)
         {
             int nextValue = ui.displayedScore + 1;
             ui.nextText.text = nextValue.ToString();
@@ -131,6 +195,7 @@ public class ScoreRollDisplay : MonoBehaviour
 
             ui.currentRect.anchoredPosition = ui.currentStartPos;
             ui.nextRect.anchoredPosition = ui.nextStartPos;
+
             ui.nextText.text = "";
 
             SetTextColor(ui.currentText, rollingColor, 1f);
@@ -139,6 +204,7 @@ public class ScoreRollDisplay : MonoBehaviour
 
         ui.isAnimating = false;
         ui.colorReturnCoroutine = StartCoroutine(ReturnToNormalColor(ui));
+        ui.scoreCoroutine = null;
     }
 
     IEnumerator ReturnToNormalColor(RollingScoreUI ui)
@@ -153,9 +219,7 @@ public class ScoreRollDisplay : MonoBehaviour
         {
             timer += Time.deltaTime;
             float t = Mathf.Clamp01(timer / colorReturnDuration);
-
             ui.currentText.color = Color.Lerp(startColor, endColor, t);
-
             yield return null;
         }
 
@@ -173,5 +237,34 @@ public class ScoreRollDisplay : MonoBehaviour
     float EaseOutCubic(float t)
     {
         return 1f - Mathf.Pow(1f - t, 3f);
+    }
+
+    public void RefreshImmediately()
+    {
+        if (scoreManager == null)
+            return;
+
+        StopUI(player1UI);
+        StopUI(player2UI);
+
+        Setup(player1UI, scoreManager.ScoreP1);
+        Setup(player2UI, scoreManager.ScoreP2);
+    }
+
+    void StopUI(RollingScoreUI ui)
+    {
+        if (ui.scoreCoroutine != null)
+        {
+            StopCoroutine(ui.scoreCoroutine);
+            ui.scoreCoroutine = null;
+        }
+
+        if (ui.colorReturnCoroutine != null)
+        {
+            StopCoroutine(ui.colorReturnCoroutine);
+            ui.colorReturnCoroutine = null;
+        }
+
+        ui.isAnimating = false;
     }
 }

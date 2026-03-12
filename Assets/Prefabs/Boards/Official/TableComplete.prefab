@@ -318,7 +318,7 @@ Transform:
   m_GameObject: {fileID: 4817818085177265626}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.9, y: 0, z: 0}
+  m_LocalPosition: {x: -1.37, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
   m_Children:
@@ -922,7 +922,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6765781504643263585, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0
+      value: 0.000000014901161
       objectReference: {fileID: 0}
     - target: {fileID: 6765781504643263585, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
       propertyPath: m_LocalRotation.w
@@ -989,28 +989,31 @@ PrefabInstance:
     - {fileID: 7225239187220305555, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
     m_AddedGameObjects: []
     m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 4464243001192536148, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6692432134107115676}
     - targetCorrespondingSourceObject: {fileID: 1157427731704516357, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2224806967939726538}
+      addedObject: {fileID: 1547129495558017361}
     - targetCorrespondingSourceObject: {fileID: 2066860720036942404, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 3176893665201356061}
+      addedObject: {fileID: 1882969235550190723}
     - targetCorrespondingSourceObject: {fileID: 5015109964354896610, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 9055888246448124722}
+      addedObject: {fileID: 5065551548988259466}
     - targetCorrespondingSourceObject: {fileID: 6110884939825355722, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 6853745345097761023}
+      addedObject: {fileID: 818815537847087272}
     - targetCorrespondingSourceObject: {fileID: 8805809714236921633, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 4138677342807148641}
+      addedObject: {fileID: 1205245551224910144}
   m_SourcePrefab: {fileID: 100100000, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
 --- !u!1 &298996321001109804 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 5015109964354896610, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
   m_PrefabInstance: {fileID: 4737505750175071182}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &9055888246448124722
+--- !u!114 &5065551548988259466
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1019,16 +1022,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 298996321001109804}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 2
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 6692432134107115676}
+  slotIndex: 2
 --- !u!1 &1545078926519115780 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6110884939825355722, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
   m_PrefabInstance: {fileID: 4737505750175071182}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &6853745345097761023
+--- !u!114 &818815537847087272
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1037,10 +1041,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 1545078926519115780}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 2
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 6692432134107115676}
+  slotIndex: 3
 --- !u!4 &2043475412891555759 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6765781504643263585, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
@@ -1051,7 +1056,7 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 8805809714236921633, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
   m_PrefabInstance: {fileID: 4737505750175071182}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &4138677342807148641
+--- !u!114 &1205245551224910144
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1060,16 +1065,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 4290669470542245103}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 2
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 6692432134107115676}
+  slotIndex: 4
 --- !u!1 &5885925449399350475 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 1157427731704516357, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
   m_PrefabInstance: {fileID: 4737505750175071182}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &2224806967939726538
+--- !u!114 &1547129495558017361
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1078,16 +1084,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 5885925449399350475}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 2
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 6692432134107115676}
+  slotIndex: 0
 --- !u!1 &6706412619970685322 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2066860720036942404, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
   m_PrefabInstance: {fileID: 4737505750175071182}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &3176893665201356061
+--- !u!114 &1882969235550190723
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1096,10 +1103,30 @@ MonoBehaviour:
   m_GameObject: {fileID: 6706412619970685322}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 2
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 6692432134107115676}
+  slotIndex: 1
+--- !u!1 &8956302012255101850 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4464243001192536148, guid: 15fa670f7083ef644873a42d4ca3528b, type: 3}
+  m_PrefabInstance: {fileID: 4737505750175071182}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &6692432134107115676
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8956302012255101850}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: caea8595faff81641b3383e220d65527, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StarPlate
+  plateNumber: 2
+  totalSlots: 5
 --- !u!1001 &6508106607362163959
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1198,7 +1225,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6765781504643263585, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -1.3
+      value: -1.4
       objectReference: {fileID: 0}
     - target: {fileID: 6765781504643263585, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
       propertyPath: m_LocalPosition.y
@@ -1206,7 +1233,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6765781504643263585, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0
+      value: 0.000000014901161
       objectReference: {fileID: 0}
     - target: {fileID: 6765781504643263585, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
       propertyPath: m_LocalRotation.w
@@ -1261,15 +1288,18 @@ PrefabInstance:
     - {fileID: 7225239187220305555, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
     m_AddedGameObjects: []
     m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 4464243001192536148, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1187865619248132267}
     - targetCorrespondingSourceObject: {fileID: 2066860720036942404, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 3313430585254726455}
+      addedObject: {fileID: 7740227827378276207}
     - targetCorrespondingSourceObject: {fileID: 5015109964354896610, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2010741283732417750}
+      addedObject: {fileID: 7088480793524738353}
     - targetCorrespondingSourceObject: {fileID: 6110884939825355722, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2360469533517298132}
+      addedObject: {fileID: 1364080158548541472}
   m_SourcePrefab: {fileID: 100100000, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
 --- !u!4 &555510747138533526 stripped
 Transform:
@@ -1281,7 +1311,7 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 6110884939825355722, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
   m_PrefabInstance: {fileID: 6508106607362163959}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &2360469533517298132
+--- !u!114 &1364080158548541472
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1290,16 +1320,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 1053641117370867517}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 5
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 1187865619248132267}
+  slotIndex: 2
 --- !u!1 &2290167867373815317 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 5015109964354896610, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
   m_PrefabInstance: {fileID: 6508106607362163959}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &2010741283732417750
+--- !u!114 &7088480793524738353
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1308,16 +1339,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 2290167867373815317}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 5
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 1187865619248132267}
+  slotIndex: 1
 --- !u!1 &5115955747463845555 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2066860720036942404, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
   m_PrefabInstance: {fileID: 6508106607362163959}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &3313430585254726455
+--- !u!114 &7740227827378276207
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1326,10 +1358,30 @@ MonoBehaviour:
   m_GameObject: {fileID: 5115955747463845555}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 5
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 1187865619248132267}
+  slotIndex: 0
+--- !u!1 &7468477954338266275 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4464243001192536148, guid: 4be12d604ea76dc41a10b768e8f7b28d, type: 3}
+  m_PrefabInstance: {fileID: 6508106607362163959}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1187865619248132267
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7468477954338266275}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: caea8595faff81641b3383e220d65527, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StarPlate
+  plateNumber: 3
+  totalSlots: 3
 --- !u!1001 &8677768863215738196
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1444,7 +1496,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6765781504643263585, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1.3
+      value: 1.4
       objectReference: {fileID: 0}
     - target: {fileID: 6765781504643263585, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       propertyPath: m_LocalPosition.y
@@ -1527,34 +1579,37 @@ PrefabInstance:
     - {fileID: 7225239187220305555, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
     m_AddedGameObjects: []
     m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 4464243001192536148, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5517934262209192467}
     - targetCorrespondingSourceObject: {fileID: 553768365679973388, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 5630463642343756625}
+      addedObject: {fileID: 8571753419599183825}
     - targetCorrespondingSourceObject: {fileID: 1157427731704516357, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2767862558814518494}
+      addedObject: {fileID: 4372720279366260561}
     - targetCorrespondingSourceObject: {fileID: 2066860720036942404, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2781959404836054945}
+      addedObject: {fileID: 8683696872028914938}
     - targetCorrespondingSourceObject: {fileID: 5015109964354896610, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 4522001975829643994}
+      addedObject: {fileID: 5057728425583219196}
     - targetCorrespondingSourceObject: {fileID: 6110884939825355722, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 8057065800321704800}
+      addedObject: {fileID: 3181046882089995171}
     - targetCorrespondingSourceObject: {fileID: 8805809714236921633, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 8626093357443537087}
+      addedObject: {fileID: 5759252921987253620}
     - targetCorrespondingSourceObject: {fileID: 5722402491548600479, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 7220978152310079206}
+      addedObject: {fileID: 5532569311932363729}
   m_SourcePrefab: {fileID: 100100000, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
 --- !u!1 &169207736950442613 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 8805809714236921633, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
   m_PrefabInstance: {fileID: 8677768863215738196}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &8626093357443537087
+--- !u!114 &5759252921987253620
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1563,10 +1618,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 169207736950442613}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 1
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 5517934262209192467}
+  slotIndex: 5
 --- !u!4 &2704766320850776373 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6765781504643263585, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
@@ -1577,7 +1633,7 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 6110884939825355722, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
   m_PrefabInstance: {fileID: 8677768863215738196}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &8057065800321704800
+--- !u!114 &3181046882089995171
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1586,16 +1642,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 3216583558109349534}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 1
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 5517934262209192467}
+  slotIndex: 4
 --- !u!1 &3965329804734748107 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 5722402491548600479, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
   m_PrefabInstance: {fileID: 8677768863215738196}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &7220978152310079206
+--- !u!114 &5532569311932363729
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1604,16 +1661,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 3965329804734748107}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 1
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 5517934262209192467}
+  slotIndex: 6
 --- !u!1 &4464368215376404406 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 5015109964354896610, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
   m_PrefabInstance: {fileID: 8677768863215738196}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &4522001975829643994
+--- !u!114 &5057728425583219196
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1622,16 +1680,36 @@ MonoBehaviour:
   m_GameObject: {fileID: 4464368215376404406}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 1
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 5517934262209192467}
+  slotIndex: 3
+--- !u!1 &5015195337652012288 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4464243001192536148, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
+  m_PrefabInstance: {fileID: 8677768863215738196}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &5517934262209192467
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5015195337652012288}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: caea8595faff81641b3383e220d65527, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StarPlate
+  plateNumber: 1
+  totalSlots: 7
 --- !u!1 &7260741660314291984 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2066860720036942404, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
   m_PrefabInstance: {fileID: 8677768863215738196}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &2781959404836054945
+--- !u!114 &8683696872028914938
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1640,16 +1718,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 7260741660314291984}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 1
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 5517934262209192467}
+  slotIndex: 2
 --- !u!1 &7529353020904329809 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 1157427731704516357, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
   m_PrefabInstance: {fileID: 8677768863215738196}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &2767862558814518494
+--- !u!114 &4372720279366260561
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1658,16 +1737,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 7529353020904329809}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 1
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 5517934262209192467}
+  slotIndex: 1
 --- !u!1 &9206133519403665752 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 553768365679973388, guid: 3394f5b76b57f8341b6e7f4d49e0cb35, type: 3}
   m_PrefabInstance: {fileID: 8677768863215738196}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &5630463642343756625
+--- !u!114 &8571753419599183825
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1676,7 +1756,8 @@ MonoBehaviour:
   m_GameObject: {fileID: 9206133519403665752}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1de092f89dcfffd429bd0830d06e7b39, type: 3}
+  m_Script: {fileID: 11500000, guid: 235a3e3e13effd44eb5b0289f0d7320d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ScoreZone
-  points: 1
+  m_EditorClassIdentifier: Assembly-CSharp::SlotScorer
+  parentPlate: {fileID: 5517934262209192467}
+  slotIndex: 0

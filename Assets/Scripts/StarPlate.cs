@@ -2,177 +2,221 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Which player owns a ball or scored a point.
-/// Extend this enum if you add more players.
+/// Identificatore del player proprietario di una ball o di uno slot.
 /// </summary>
-public enum PlayerID { None, Player1, Player2 }
+public enum PlayerID
+{
+    None,
+    Player1,
+    Player2
+}
 
 /// <summary>
-/// One of the three Star Plates on the table.
-/// Tracks slot occupancy, manages combo streaks per player, and computes Full Star bonuses.
-/// Reports final scored points to ScoreManager.
+/// Gestisce una singola board / star plate.
+/// Questa classe:
+/// - memorizza quale player occupa ogni slot
+/// - calcola il punteggio del nuovo inserimento
+/// - applica la regola combo stile Uncball:
+///   il valore del tiro dipende dalla lunghezza della catena contigua
+///   di palline dello stesso player che contiene lo slot appena inserito
+/// - applica eventualmente il bonus Full Star
+///
+/// NOTA IMPORTANTE:
+/// la combo qui è spaziale, non temporale.
+/// Non conta quanti tiri consecutivi hai fatto in passato.
+/// Conta solo quanti slot adiacenti dello stesso player sono collegati
+/// alla nuova ball senza interruzioni.
 /// </summary>
 public class StarPlate : MonoBehaviour
 {
-    // ── Configuration ──────────────────────────────────────────
-
     [Header("Identity")]
-    [Tooltip("1 = 7-pt zone, 2 = 5-pt zone, 3 = 3-pt zone")]
+    [Tooltip("1 = board da 1 punto, 2 = board da 2 punti, 3 = board da 5 punti")]
     [Range(1, 3)]
     public int plateNumber = 1;
 
     [Header("Slot Setup")]
-    [Tooltip("Total number of slots on this plate")]
+    [Tooltip("Numero totale di slot presenti su questa board")]
     public int totalSlots = 6;
 
-    // ── Scoring Tables (from rulebook) ─────────────────────────
+    [Header("Full Board Bonus")]
+    [Tooltip("Bonus minimo fisso assegnato quando un player completa tutta la board")]
+    public int fullBoardFlatBonus = 10;
 
-    // Base points per ball per plate
-    private static readonly Dictionary<int, int> BasePoints = new Dictionary<int, int>
-    {
-        { 1, 1 },   // Star #1: 7-pt zone → 1 pt per ball
-        { 2, 2 },   // Star #2: 5-pt zone → 2 pts per ball
-        { 3, 5 },   // Star #3: 3-pt zone → 5 pts per ball
-    };
+    [Tooltip("Se attivo, il bonus finale Full Board sarà il maggiore tra fullBoardFlatBonus e i punti già accumulati su questa board")]
+    public bool useBestBetweenFlatAndDouble = true;
 
-    // Combo increment multiplier per plate (applied as +multiplier * n for nth consecutive ball)
-    private static readonly Dictionary<int, int> ComboMultiplier = new Dictionary<int, int>
-    {
-        { 1, 1 },   // Star #1: +n pts for nth consecutive ball
-        { 2, 2 },   // Star #2: +2n pts
-        { 3, 5 },   // Star #3: +5n pts
-    };
-
-    // Full Star bonus points per plate
-    private static readonly Dictionary<int, int> FullStarBonus = new Dictionary<int, int>
-    {
-        { 1, 10 },
-        { 2, 20 },
-        { 3, 30 },
-    };
-
-    // ── Runtime State ──────────────────────────────────────────
-
-    // slotOwners[slotIndex] = which player's ball is in that slot (None = empty)
+    // Proprietario di ogni slot della board
     private PlayerID[] _slotOwners;
 
-    // How many consecutive balls each player has landed on THIS plate without interruption
-    private Dictionary<PlayerID, int> _consecutiveCount = new Dictionary<PlayerID, int>
-    {
-        { PlayerID.Player1, 0 },
-        { PlayerID.Player2, 0 },
-    };
-
-    // Points each player has accumulated in this plate so far (used for Full Star doubling)
+    // Somma dei punti accumulati da ciascun player su questa board.
+    // Serve per il calcolo del bonus Full Star / Full Board.
     private Dictionary<PlayerID, int> _platePoints = new Dictionary<PlayerID, int>
     {
         { PlayerID.Player1, 0 },
-        { PlayerID.Player2, 0 },
+        { PlayerID.Player2, 0 }
     };
 
-    // ── Unity Lifecycle ────────────────────────────────────────
+    // Valore base della board in funzione del suo numero
+    private static readonly Dictionary<int, int> BasePoints = new Dictionary<int, int>
+    {
+        { 1, 1 },
+        { 2, 2 },
+        { 3, 5 }
+    };
 
-    private void Awake()
+    void Awake()
     {
         _slotOwners = new PlayerID[totalSlots];
+
         for (int i = 0; i < totalSlots; i++)
             _slotOwners[i] = PlayerID.None;
     }
 
-    // ── Called by SlotScorer ───────────────────────────────────
-
     /// <summary>
-    /// Called when a ball enters a slot on this plate.
-    /// Computes the score for this ball including combo, reports to ScoreManager.
+    /// Chiamato da SlotScorer quando una ball entra in uno slot valido.
     /// </summary>
     public void OnBallEntered(int slotIndex, PlayerID owner, BallPhysics ball)
     {
+        if (owner == PlayerID.None)
+        {
+            Debug.LogWarning($"[StarPlate {plateNumber}] Owner None non valido.");
+            return;
+        }
+
         if (slotIndex < 0 || slotIndex >= totalSlots)
         {
-            Debug.LogWarning($"[StarPlate {plateNumber}] Invalid slotIndex {slotIndex}");
+            Debug.LogWarning($"[StarPlate {plateNumber}] slotIndex {slotIndex} non valido.");
             return;
         }
 
         if (_slotOwners[slotIndex] != PlayerID.None)
         {
-            Debug.Log($"[StarPlate {plateNumber}] Slot {slotIndex} already occupied — ignoring.");
+            Debug.Log($"[StarPlate {plateNumber}] Slot {slotIndex} già occupato.");
             return;
         }
 
-        // Mark slot as occupied
         _slotOwners[slotIndex] = owner;
 
-        // ── Step 1: Base points ────────────────────────────────
         int basePoints = BasePoints[plateNumber];
 
-        // ── Step 2: Combo ──────────────────────────────────────
-        // Increment this player's consecutive count on this plate
-        _consecutiveCount[owner]++;
-        int n = _consecutiveCount[owner];
+        // Combo spaziale: conta la catena contigua che contiene lo slot appena inserito
+        int chainLength = GetContiguousChainLength(slotIndex, owner);
 
-        // Reset opponent's streak — any ball on this plate breaks theirs
-        PlayerID opponent = owner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
-        _consecutiveCount[opponent] = 0;
+        // Regola Uncball:
+        // valore del tiro = valore base board * lunghezza catena contigua
+        int shotPoints = basePoints * chainLength;
 
-        // Combo bonus only applies from the 2nd consecutive ball onward
-        int comboBonus = n > 1 ? ComboMultiplier[plateNumber] * n : 0;
+        // Aggiorna i punti accumulati su questa board per quel player
+        _platePoints[owner] += shotPoints;
 
-        int totalThisShot = basePoints + comboBonus;
-
-        // Accumulate plate points for this player (used by Full Star calc)
-        _platePoints[owner] += totalThisShot;
-
-        Debug.Log($"[StarPlate {plateNumber}] {owner} scored slot {slotIndex} | " +
-                  $"base={basePoints}  combo streak={n}  comboBonus={comboBonus}  shot total={totalThisShot}");
-
-        // ── Step 3: Full Star check ────────────────────────────
         int fullStarExtra = 0;
+        bool didFullStar = false;
+
+        // Se tutti gli slot della board appartengono allo stesso player,
+        // assegna il bonus Full Board
         if (IsFullStar(owner))
         {
-            // Rulebook: +X points OR double total in zone — take whichever is higher
-            int flatBonus = FullStarBonus[plateNumber];
-            int doubleBonus = _platePoints[owner]; // doubling means adding the same amount again
-            fullStarExtra = Mathf.Max(flatBonus, doubleBonus);
+            didFullStar = true;
 
-            Debug.Log($"[StarPlate {plateNumber}] FULL STAR for {owner}! " +
-                      $"flat={flatBonus}  double={doubleBonus}  awarded={fullStarExtra}");
+            if (useBestBetweenFlatAndDouble)
+            {
+                int doubleBonus = _platePoints[owner];
+                fullStarExtra = Mathf.Max(fullBoardFlatBonus, doubleBonus);
+            }
+            else
+            {
+                fullStarExtra = fullBoardFlatBonus;
+            }
+
+            _platePoints[owner] += fullStarExtra;
         }
 
-        // ── Step 4: Report to ScoreManager ────────────────────
-        int finalPoints = totalThisShot + fullStarExtra;
-        ScoreManagerNew.Instance?.AddPoints(owner, finalPoints, plateNumber, n, fullStarExtra > 0);
+        int totalThisShot = shotPoints + fullStarExtra;
+
+        ScoreManagerNew scoreManager = ScoreManagerNew.Instance;
+        if (scoreManager != null)
+        {
+            scoreManager.AddPoints(
+                owner,
+                totalThisShot,
+                plateNumber,
+                chainLength,
+                didFullStar
+            );
+        }
+        else
+        {
+            Debug.LogWarning($"[StarPlate {plateNumber}] ScoreManagerNew.Instance nullo.");
+        }
+
+        Debug.Log(
+            $"[StarPlate {plateNumber}] {owner} scored slot {slotIndex} | " +
+            $"base={basePoints} chainLength={chainLength} shotPoints={shotPoints} " +
+            $"fullStarExtra={fullStarExtra} shotTotal={totalThisShot}"
+        );
     }
 
-    // ── Helpers ────────────────────────────────────────────────
-
-    /// <summary>Returns true if every slot on this plate is owned by the given player.</summary>
-    private bool IsFullStar(PlayerID owner)
+    /// <summary>
+    /// Calcola la lunghezza della sequenza contigua di slot dello stesso owner
+    /// che include slotIndex.
+    /// </summary>
+    int GetContiguousChainLength(int slotIndex, PlayerID owner)
     {
-        foreach (PlayerID slot in _slotOwners)
-            if (slot != owner) return false;
+        int count = 1;
+
+        int left = slotIndex - 1;
+        while (left >= 0 && _slotOwners[left] == owner)
+        {
+            count++;
+            left--;
+        }
+
+        int right = slotIndex + 1;
+        while (right < totalSlots && _slotOwners[right] == owner)
+        {
+            count++;
+            right++;
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// True se tutti gli slot della board appartengono allo stesso owner.
+    /// </summary>
+    bool IsFullStar(PlayerID owner)
+    {
+        for (int i = 0; i < totalSlots; i++)
+        {
+            if (_slotOwners[i] != owner)
+                return false;
+        }
+
         return true;
     }
 
-    /// <summary>Clear all slot state (e.g. halftime reset).</summary>
+    /// <summary>
+    /// Azzera completamente la board.
+    /// Da chiamare quando resetti il match o il round.
+    /// </summary>
     public void ResetPlate()
     {
         for (int i = 0; i < totalSlots; i++)
             _slotOwners[i] = PlayerID.None;
 
-        _consecutiveCount[PlayerID.Player1] = 0;
-        _consecutiveCount[PlayerID.Player2] = 0;
         _platePoints[PlayerID.Player1] = 0;
         _platePoints[PlayerID.Player2] = 0;
-
-        Debug.Log($"[StarPlate {plateNumber}] Reset.");
     }
 
-    /// <summary>How many slots are occupied by the given player on this plate.</summary>
-    public int GetSlotCount(PlayerID owner)
+    /// <summary>
+    /// Restituisce il proprietario dello slot.
+    /// Utile per debug o UI.
+    /// </summary>
+    public PlayerID GetSlotOwner(int slotIndex)
     {
-        int count = 0;
-        foreach (PlayerID slot in _slotOwners)
-            if (slot == owner) count++;
-        return count;
+        if (slotIndex < 0 || slotIndex >= totalSlots)
+            return PlayerID.None;
+
+        return _slotOwners[slotIndex];
     }
 }
