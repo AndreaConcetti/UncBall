@@ -1,18 +1,10 @@
+using System.Collections;
 using UnityEngine;
 using TMPro;
 
 /// <summary>
-/// Gestisce lo stato generale del match:
-/// - avvio partita
-/// - pausa / resume
-/// - fine partita
-/// - modalità a punti oppure a tempo
-/// - timer globale del match
-///
-/// IMPORTANTE:
-/// Questo script NON gestisce il timer del singolo turno.
-/// Il timer del turno resta nel TurnManager.
-/// Qui gestiamo solo il timer "lungo" della partita.
+/// Gestisce il flow globale del match:
+/// start, pausa, halftime, overtime, end match e timer globale.
 /// </summary>
 public class StartEndController : MonoBehaviour
 {
@@ -23,62 +15,59 @@ public class StartEndController : MonoBehaviour
     }
 
     [Header("References")]
-    [Tooltip("Score manager principale del match")]
     public ScoreManagerNew scoreManager;
-
-    [Tooltip("Script che aggiorna il punteggio nel pannello post game")]
     public PostGameScoreDisplay postGameScoreDisplay;
+    public TurnManager turnManager;
+    public BallTurnSpawner ballTurnSpawner;
 
     [Header("UI Panels")]
-    [Tooltip("UI principale di gioco")]
     public GameObject gameUIPanel;
-
-    [Tooltip("Pannello pausa")]
     public GameObject pausePanel;
-
-    [Tooltip("Pannello fine partita")]
+    public GameObject halftimePanel;
     public GameObject postGamePanel;
 
     [Header("Match Mode")]
-    [Tooltip("Modalità di partita: a punteggio oppure a tempo")]
     public MatchMode matchMode = MatchMode.ScoreTarget;
 
     [Header("Score Target Mode")]
-    [Tooltip("Punteggio necessario per terminare la partita in modalità ScoreTarget")]
     public int targetScore = 16;
 
     [Header("Time Limit Mode")]
-    [Tooltip("Durata totale della partita in secondi. 180 = 3 minuti")]
     public float matchDuration = 180f;
-
-    [Tooltip("Testo UI opzionale per mostrare il timer globale della partita")]
     public TMP_Text matchTimerText;
-
-    [Tooltip("Formato mm:ss per il timer match. Se disattivo mostra solo i secondi interi")]
     public bool useMinutesSecondsFormat = true;
 
+    [Header("Halftime")]
+    public bool enableHalftime = true;
+    public bool pauseAtHalftime = true;
+
+    [Header("Overtime")]
+    public bool enableOvertime = true;
+    public float overtimeDuration = 180f;
+
+    [Header("Transition Delay")]
+    [Tooltip("Attesa dopo la risoluzione dell'ultimo tiro prima di entrare in halftime o finire il match")]
+    public float postShotTransitionDelay = 1f;
+
     [Header("Start Options")]
-    [Tooltip("Se attivo, il match parte automaticamente allo Start della scena")]
     public bool startMatchOnStart = true;
 
     [Header("Time Options")]
-    [Tooltip("Se attivo, in pausa Time.timeScale va a 0")]
     public bool stopTimeOnPause = true;
-
-    [Tooltip("Se attivo, a fine partita Time.timeScale va a 0")]
     public bool stopTimeOnEnd = true;
 
-    // Timer runtime del match globale
     private float currentMatchTimer;
 
-    // Stato runtime del match
     private bool matchStarted = false;
     private bool matchEnded = false;
     private bool isPaused = false;
+    private bool halftimeTriggered = false;
+    private bool transitionCoroutineRunning = false;
 
-    /// <summary>
-    /// Tempo match rimanente leggibile da altri script.
-    /// </summary>
+    // Nuovi flag per congelare il clock durante le transizioni pendenti
+    private bool halftimePending = false;
+    private bool endOfTimePending = false;
+
     public float CurrentMatchTimer => currentMatchTimer;
 
     void Start()
@@ -86,22 +75,24 @@ public class StartEndController : MonoBehaviour
         if (scoreManager == null)
             scoreManager = ScoreManagerNew.Instance;
 
+        if (turnManager == null)
+            turnManager = TurnManager.Instance;
+
         Time.timeScale = 1f;
 
-        if (pausePanel != null)
-            pausePanel.SetActive(false);
-
-        if (postGamePanel != null)
-            postGamePanel.SetActive(false);
-
-        if (gameUIPanel != null)
-            gameUIPanel.SetActive(true);
+        if (pausePanel != null) pausePanel.SetActive(false);
+        if (halftimePanel != null) halftimePanel.SetActive(false);
+        if (postGamePanel != null) postGamePanel.SetActive(false);
+        if (gameUIPanel != null) gameUIPanel.SetActive(true);
 
         matchStarted = false;
         matchEnded = false;
         isPaused = false;
+        halftimeTriggered = false;
+        transitionCoroutineRunning = false;
+        halftimePending = false;
+        endOfTimePending = false;
 
-        // Inizializza il timer globale del match
         currentMatchTimer = matchDuration;
         UpdateMatchTimerUI();
 
@@ -109,14 +100,37 @@ public class StartEndController : MonoBehaviour
             StartMatch();
     }
 
+    void OnEnable()
+    {
+        if (scoreManager == null)
+            scoreManager = ScoreManagerNew.Instance;
+
+        if (scoreManager != null)
+            scoreManager.onMatchEnd.AddListener(OnScoreManagerMatchEnd);
+    }
+
+    void OnDisable()
+    {
+        if (scoreManager != null)
+            scoreManager.onMatchEnd.RemoveListener(OnScoreManagerMatchEnd);
+    }
+
     void Update()
     {
-        if (!matchStarted || matchEnded || scoreManager == null)
+        if (!matchStarted || matchEnded || isPaused || scoreManager == null)
             return;
 
-        // Modalità a tempo:
-        // il timer globale del match scende continuamente fino a 0
         if (matchMode == MatchMode.TimeLimit)
+            UpdateTimeLimitMode();
+
+        if (matchMode == MatchMode.ScoreTarget)
+            UpdateScoreTargetMode();
+    }
+
+    void UpdateTimeLimitMode()
+    {
+        // Se una transizione è pendente, il clock match resta congelato
+        if (!halftimePending && !endOfTimePending)
         {
             currentMatchTimer -= Time.deltaTime;
 
@@ -124,38 +138,67 @@ public class StartEndController : MonoBehaviour
                 currentMatchTimer = 0f;
 
             UpdateMatchTimerUI();
+        }
 
-            if (currentMatchTimer <= 0f)
+        // Se raggiungiamo la soglia di halftime, congeliamo subito il clock
+        if (enableHalftime && !halftimeTriggered && !halftimePending && !scoreManager.IsOvertime)
+        {
+            float halftimeThreshold = matchDuration * 0.5f;
+            if (currentMatchTimer <= halftimeThreshold)
             {
-                EndMatch();
-                return;
+                halftimePending = true;
+                currentMatchTimer = halftimeThreshold;
+                UpdateMatchTimerUI();
             }
         }
 
-        // Modalità a punti:
-        // la partita termina appena uno dei due raggiunge il targetScore
-        if (matchMode == MatchMode.ScoreTarget)
+        // Se l'halftime è pendente:
+        // - se il tiro è ancora in corso aspettiamo
+        // - appena si risolve, partiamo con l'halftime
+        if (halftimePending)
         {
-            if (scoreManager.ScoreP1 >= targetScore || scoreManager.ScoreP2 >= targetScore)
-            {
-                EndMatch();
+            if (turnManager != null && turnManager.IsLaunchInProgress())
                 return;
-            }
+
+            StartHalftime();
+            return;
+        }
+
+        // Se arriviamo a 0, congeliamo il timer a 0 e aspettiamo eventuale ultimo tiro
+        if (!endOfTimePending && currentMatchTimer <= 0f)
+        {
+            endOfTimePending = true;
+            currentMatchTimer = 0f;
+            UpdateMatchTimerUI();
+        }
+
+        if (endOfTimePending)
+        {
+            if (turnManager != null && turnManager.IsLaunchInProgress())
+                return;
+
+            ExecuteEndOfTimeRule();
         }
     }
 
-    /// <summary>
-    /// Avvia un nuovo match.
-    /// Questo:
-    /// - resetta timer globale match
-    /// - resetta stato pausa/fine partita
-    /// - riapre la game UI
-    /// - chiama StartMatch() sullo ScoreManagerNew
-    /// </summary>
+    void UpdateScoreTargetMode()
+    {
+        if (scoreManager.ScoreP1 >= targetScore || scoreManager.ScoreP2 >= targetScore)
+        {
+            if (turnManager != null && turnManager.IsLaunchInProgress())
+                return;
+
+            RequestEndMatch(GetWinnerOrNone());
+        }
+    }
+
     public void StartMatch()
     {
         if (scoreManager == null)
             scoreManager = ScoreManagerNew.Instance;
+
+        if (turnManager == null)
+            turnManager = TurnManager.Instance;
 
         if (scoreManager == null)
         {
@@ -165,31 +208,224 @@ public class StartEndController : MonoBehaviour
 
         Time.timeScale = 1f;
 
-        if (pausePanel != null)
-            pausePanel.SetActive(false);
+        if (pausePanel != null) pausePanel.SetActive(false);
+        if (halftimePanel != null) halftimePanel.SetActive(false);
+        if (postGamePanel != null) postGamePanel.SetActive(false);
+        if (gameUIPanel != null) gameUIPanel.SetActive(true);
 
-        if (postGamePanel != null)
-            postGamePanel.SetActive(false);
+        isPaused = false;
+        matchEnded = false;
+        matchStarted = true;
+        halftimeTriggered = false;
+        transitionCoroutineRunning = false;
+        halftimePending = false;
+        endOfTimePending = false;
+
+        currentMatchTimer = matchDuration;
+        UpdateMatchTimerUI();
+
+        scoreManager.StartMatch();
+    }
+
+    bool ShouldEnterHalftimeNow()
+    {
+        if (!enableHalftime)
+            return false;
+
+        if (halftimeTriggered)
+            return false;
+
+        if (scoreManager == null)
+            return false;
+
+        if (scoreManager.IsOvertime)
+            return false;
+
+        if (matchMode != MatchMode.TimeLimit)
+            return false;
+
+        float halftimeThreshold = matchDuration * 0.5f;
+        return currentMatchTimer <= halftimeThreshold;
+    }
+
+    /// <summary>
+    /// Chiamato dal TurnManager quando un tiro si è appena risolto
+    /// e potrebbe essere il momento di entrare in halftime o chiudere il match.
+    /// Aspetta 1 secondo e poi applica la transizione giusta.
+    /// </summary>
+    public void HandleResolvedShotTransition()
+    {
+        if (transitionCoroutineRunning)
+            return;
+
+        StartCoroutine(DelayedResolvedShotTransition());
+    }
+
+    /// <summary>
+    /// TurnManager usa questo metodo per sapere se NON deve
+    /// far partire un nuovo turno / nuova ball dopo la risoluzione del tiro.
+    /// </summary>
+    public bool ShouldDelayProgressionAfterResolvedShot()
+    {
+        if (transitionCoroutineRunning)
+            return true;
+
+        if (halftimePending || endOfTimePending)
+            return true;
+
+        if (ShouldEnterHalftimeNow())
+            return true;
+
+        if (matchMode == MatchMode.TimeLimit && currentMatchTimer <= 0f)
+            return true;
+
+        if (matchMode == MatchMode.ScoreTarget &&
+            scoreManager != null &&
+            (scoreManager.ScoreP1 >= targetScore || scoreManager.ScoreP2 >= targetScore))
+            return true;
+
+        return false;
+    }
+
+    IEnumerator DelayedResolvedShotTransition()
+    {
+        transitionCoroutineRunning = true;
+
+        yield return new WaitForSecondsRealtime(postShotTransitionDelay);
+
+        if (halftimePending)
+        {
+            StartHalftime();
+            transitionCoroutineRunning = false;
+            yield break;
+        }
+
+        if (endOfTimePending)
+        {
+            ExecuteEndOfTimeRule();
+            transitionCoroutineRunning = false;
+            yield break;
+        }
+
+        if (ShouldEnterHalftimeNow())
+        {
+            StartHalftime();
+            transitionCoroutineRunning = false;
+            yield break;
+        }
+
+        if (matchMode == MatchMode.TimeLimit && currentMatchTimer <= 0f)
+        {
+            ExecuteEndOfTimeRule();
+            transitionCoroutineRunning = false;
+            yield break;
+        }
+
+        if (matchMode == MatchMode.ScoreTarget &&
+            scoreManager != null &&
+            (scoreManager.ScoreP1 >= targetScore || scoreManager.ScoreP2 >= targetScore))
+        {
+            RequestEndMatch(GetWinnerOrNone());
+            transitionCoroutineRunning = false;
+            yield break;
+        }
+
+        transitionCoroutineRunning = false;
+    }
+
+    void ExecuteEndOfTimeRule()
+    {
+        endOfTimePending = false;
+
+        if (scoreManager.IsOvertime)
+        {
+            RequestEndMatch(GetWinnerOrNone());
+            return;
+        }
+
+        if (enableOvertime && scoreManager.ScoreP1 == scoreManager.ScoreP2)
+        {
+            StartOvertime();
+            return;
+        }
+
+        RequestEndMatch(GetWinnerOrNone());
+    }
+
+    /// <summary>
+    /// Scatta automaticamente a metà matchDuration.
+    /// Apre il panel halftime, scambia i lati e pulisce il tavolo.
+    /// </summary>
+    public void StartHalftime()
+    {
+        if (!matchStarted || matchEnded || halftimeTriggered || scoreManager == null)
+            return;
+
+        halftimeTriggered = true;
+        halftimePending = false;
+
+        scoreManager.BeginHalftime();
+
+        if (turnManager != null)
+            turnManager.SuspendTurnForHalftime();
+
+        if (ballTurnSpawner != null)
+        {
+            ballTurnSpawner.SwapPlayerSides();
+            ballTurnSpawner.ClearAllBallsInScene();
+        }
+
+        isPaused = true;
+
+        if (gameUIPanel != null)
+            gameUIPanel.SetActive(false);
+
+        if (halftimePanel != null)
+            halftimePanel.SetActive(true);
+
+        if (pauseAtHalftime && stopTimeOnPause)
+            Time.timeScale = 0f;
+    }
+
+    /// <summary>
+    /// Da collegare al bottone del panel halftime.
+    /// Chiude il panel, resetta le board del secondo tempo
+    /// e fa iniziare il secondo tempo con Player2.
+    /// </summary>
+    public void EndHalftimeAndResume()
+    {
+        if (scoreManager == null || !scoreManager.IsHalftime)
+            return;
+
+        scoreManager.EndHalftime();
+
+        if (halftimePanel != null)
+            halftimePanel.SetActive(false);
 
         if (gameUIPanel != null)
             gameUIPanel.SetActive(true);
 
         isPaused = false;
-        matchEnded = false;
-        matchStarted = true;
+        Time.timeScale = 1f;
 
-        // Reset del timer globale partita
-        currentMatchTimer = matchDuration;
-        UpdateMatchTimerUI();
-
-        // Avvia il match lato score manager
-        scoreManager.StartMatch();
+        if (turnManager != null)
+            turnManager.StartSpecificTurn(turnManager.player2);
     }
 
-    /// <summary>
-    /// Mette in pausa il match.
-    /// Se stopTimeOnPause è attivo, blocca il tempo globale di Unity.
-    /// </summary>
+    public void StartOvertime()
+    {
+        if (scoreManager == null)
+            return;
+
+        currentMatchTimer = overtimeDuration;
+        UpdateMatchTimerUI();
+
+        halftimePending = false;
+        endOfTimePending = false;
+
+        scoreManager.BeginOvertime();
+    }
+
     public void PauseMatch()
     {
         if (!matchStarted || matchEnded || isPaused)
@@ -204,12 +440,12 @@ public class StartEndController : MonoBehaviour
             Time.timeScale = 0f;
     }
 
-    /// <summary>
-    /// Riprende il match dalla pausa.
-    /// </summary>
     public void ResumeMatch()
     {
         if (!matchStarted || matchEnded || !isPaused)
+            return;
+
+        if (scoreManager != null && scoreManager.IsHalftime)
             return;
 
         isPaused = false;
@@ -220,9 +456,6 @@ public class StartEndController : MonoBehaviour
         Time.timeScale = 1f;
     }
 
-    /// <summary>
-    /// Alterna automaticamente tra pausa e resume.
-    /// </summary>
     public void TogglePause()
     {
         if (isPaused)
@@ -231,27 +464,35 @@ public class StartEndController : MonoBehaviour
             PauseMatch();
     }
 
-    /// <summary>
-    /// Termina il match.
-    /// Mostra il pannello post game, aggiorna i punteggi finali
-    /// e opzionalmente blocca il tempo di gioco.
-    /// </summary>
-    public void EndMatch()
+    public void RequestEndMatch(PlayerID winner)
+    {
+        endOfTimePending = false;
+
+        if (scoreManager != null && scoreManager.MatchActive)
+            scoreManager.EndMatch(winner);
+        else
+            FinalizeEndMatchUI();
+    }
+
+    void OnScoreManagerMatchEnd(PlayerID winner)
+    {
+        FinalizeEndMatchUI();
+    }
+
+    void FinalizeEndMatchUI()
     {
         if (matchEnded)
             return;
 
         matchEnded = true;
         isPaused = false;
+        halftimePending = false;
+        endOfTimePending = false;
 
-        if (pausePanel != null)
-            pausePanel.SetActive(false);
-
-        if (gameUIPanel != null)
-            gameUIPanel.SetActive(false);
-
-        if (postGamePanel != null)
-            postGamePanel.SetActive(true);
+        if (pausePanel != null) pausePanel.SetActive(false);
+        if (halftimePanel != null) halftimePanel.SetActive(false);
+        if (gameUIPanel != null) gameUIPanel.SetActive(false);
+        if (postGamePanel != null) postGamePanel.SetActive(true);
 
         if (postGameScoreDisplay != null)
             postGameScoreDisplay.UpdateScores();
@@ -260,24 +501,20 @@ public class StartEndController : MonoBehaviour
             Time.timeScale = 0f;
     }
 
-    /// <summary>
-    /// Resetta solo lo stato UI e del tempo globale Unity.
-    /// Non riavvia automaticamente il match.
-    /// </summary>
     public void ResetUIState()
     {
         matchStarted = false;
         matchEnded = false;
         isPaused = false;
+        halftimeTriggered = false;
+        transitionCoroutineRunning = false;
+        halftimePending = false;
+        endOfTimePending = false;
 
-        if (pausePanel != null)
-            pausePanel.SetActive(false);
-
-        if (postGamePanel != null)
-            postGamePanel.SetActive(false);
-
-        if (gameUIPanel != null)
-            gameUIPanel.SetActive(true);
+        if (pausePanel != null) pausePanel.SetActive(false);
+        if (halftimePanel != null) halftimePanel.SetActive(false);
+        if (postGamePanel != null) postGamePanel.SetActive(false);
+        if (gameUIPanel != null) gameUIPanel.SetActive(true);
 
         currentMatchTimer = matchDuration;
         UpdateMatchTimerUI();
@@ -285,18 +522,11 @@ public class StartEndController : MonoBehaviour
         Time.timeScale = 1f;
     }
 
-    /// <summary>
-    /// Riporta il Time.timeScale a 1.
-    /// Utile da collegare a bottoni UI.
-    /// </summary>
     public void ResetTimeScale()
     {
         Time.timeScale = 1f;
     }
 
-    /// <summary>
-    /// Aggiorna il testo UI del timer globale partita.
-    /// </summary>
     void UpdateMatchTimerUI()
     {
         if (matchTimerText == null)
@@ -315,18 +545,21 @@ public class StartEndController : MonoBehaviour
         }
     }
 
-    public bool IsMatchStarted()
+    PlayerID GetWinnerOrNone()
     {
-        return matchStarted;
+        if (scoreManager == null)
+            return PlayerID.None;
+
+        if (scoreManager.ScoreP1 > scoreManager.ScoreP2)
+            return PlayerID.Player1;
+
+        if (scoreManager.ScoreP2 > scoreManager.ScoreP1)
+            return PlayerID.Player2;
+
+        return PlayerID.None;
     }
 
-    public bool IsMatchEnded()
-    {
-        return matchEnded;
-    }
-
-    public bool IsPaused()
-    {
-        return isPaused;
-    }
+    public bool IsMatchStarted() => matchStarted;
+    public bool IsMatchEnded() => matchEnded;
+    public bool IsPaused() => isPaused;
 }

@@ -2,95 +2,51 @@ using UnityEngine;
 using TMPro;
 
 /// <summary>
-/// Gestisce il flusso dei turni dei due player:
-/// - decide di chi è il turno corrente
-/// - gestisce il timer del turno
-/// - spawna la nuova pallina nella launch zone corretta
-/// - cambia turno quando la palla viene persa o quando il tempo scade
-/// - dopo un punto NON cambia turno: resetta il timer e spawna una nuova palla
-/// - se una palla lanciata resta ferma troppo a lungo in una posizione "morta",
-///   termina il turno automaticamente e passa all'altro player
+/// Gestisce il flusso dei turni:
+/// - player attivo
+/// - timer turno
+/// - cambio turno
+/// - stuck ball check
+/// - stesso turno dopo punto
 ///
-/// Questo script NON calcola i punti.
-/// I punti vengono calcolati da SlotScorer / StarPlate / ScoreManagerNew.
-/// Qui ci occupiamo solo della logica di turno e spawn.
+/// Se StartEndController richiede una transizione di match
+/// (halftime o end match), il TurnManager non avanza al turno successivo
+/// finché la transizione non viene eseguita.
 /// </summary>
 public class TurnManager : MonoBehaviour
 {
     public static TurnManager Instance;
 
     [Header("Players")]
-    [Tooltip("Controller del Player 1")]
     public PlayerController player1;
-
-    [Tooltip("Controller del Player 2")]
     public PlayerController player2;
-
-    [Tooltip("Player attualmente attivo")]
     public PlayerController currentPlayer;
 
     [Header("References")]
-    [Tooltip("Launcher che gestisce il posizionamento e il lancio della pallina")]
-    public BallLauncher launcher;
-
-    [Tooltip("ScoreManager nuovo, usato solo per ascoltare l'evento di punto")]
     public ScoreManagerNew scoreManager;
-
-    [Tooltip("Testo UI che mostra il timer del turno")]
+    public BallTurnSpawner ballTurnSpawner;
+    public StartEndController startEndController;
     public TextMeshProUGUI timerText;
 
-    [Header("Ball Prefabs")]
-    [Tooltip("Prefab da spawnare quando è il turno del Player 1")]
-    public GameObject player1BallPrefab;
-
-    [Tooltip("Prefab da spawnare quando è il turno del Player 2")]
-    public GameObject player2BallPrefab;
-
-    [Tooltip("Prefab di fallback, usato solo se manca quello specifico del player")]
-    public GameObject fallbackBallPrefab;
-
-    [Header("Spawn Points")]
-    [Tooltip("Punto di spawn della pallina del Player 1")]
-    public Transform launchZone1;
-
-    [Tooltip("Punto di spawn della pallina del Player 2")]
-    public Transform launchZone2;
-
-    [Header("Optional Material Override")]
-    [Tooltip("Se attivo, forza il materiale della pallina in base al turno")]
-    public bool overrideBallMaterial = false;
-
-    [Tooltip("Materiale da applicare alla pallina del Player 1 se overrideBallMaterial è attivo")]
-    public Material player1Material;
-
-    [Tooltip("Materiale da applicare alla pallina del Player 2 se overrideBallMaterial è attivo")]
-    public Material player2Material;
+    [Header("Turn UI")]
+    public TMP_Text turnOwnerText;
+    public string player1TurnLabel = "Player 1";
+    public string player2TurnLabel = "Player 2";
 
     [Header("Turn Settings")]
-    [Tooltip("Durata del turno in secondi")]
     public float turnDuration = 15f;
 
     [Header("Stuck Ball Detection")]
-    [Tooltip("Se attivo, una ball lanciata che resta ferma troppo a lungo fa terminare il turno")]
     public bool enableStuckBallCheck = true;
-
-    [Tooltip("Numero di secondi per cui la palla deve rimanere praticamente ferma prima di terminare il turno")]
-    public float stuckTimeout = 1.25f;
-
-    [Tooltip("Spostamento minimo tra due frame per considerare la ball ancora in movimento")]
+    public float stuckTimeout = 3f;
     public float stuckPositionDeltaThreshold = 0.002f;
 
-    // Timer runtime del turno corrente
     private float currentTimer;
     public float CurrentTimer => currentTimer;
 
-    // Se false, il timer del turno non scala
     private bool timerRunning = true;
-
-    // Protezione contro doppi trigger mentre stiamo già gestendo un punto
     private bool handlingSuccessfulScore = false;
 
-    // Stato del controllo "ball bloccata"
     private BallPhysics watchedBall;
     private Rigidbody watchedBallRb;
     private bool hasBallBeenLaunched;
@@ -99,6 +55,14 @@ public class TurnManager : MonoBehaviour
 
     public bool IsPlayer1Turn => currentPlayer == player1;
     public bool IsPlayer2Turn => currentPlayer == player2;
+
+    /// <summary>
+    /// True solo se esiste ancora la ball corrente ed è già stata lanciata.
+    /// </summary>
+    public bool IsLaunchInProgress()
+    {
+        return watchedBall != null && hasBallBeenLaunched;
+    }
 
     void Awake()
     {
@@ -109,6 +73,14 @@ public class TurnManager : MonoBehaviour
     {
         if (scoreManager == null)
             scoreManager = ScoreManagerNew.Instance;
+
+#if UNITY_2023_1_OR_NEWER
+        if (startEndController == null)
+            startEndController = FindFirstObjectByType<StartEndController>();
+#else
+        if (startEndController == null)
+            startEndController = FindObjectOfType<StartEndController>();
+#endif
 
         StartTurn(player1);
     }
@@ -134,10 +106,6 @@ public class TurnManager : MonoBehaviour
         UpdateStuckBallCheck();
     }
 
-    /// <summary>
-    /// Aggiorna il timer del turno.
-    /// Se arriva a zero, il turno passa all'altro player.
-    /// </summary>
     void UpdateTurnTimer()
     {
         if (!timerRunning)
@@ -146,10 +114,7 @@ public class TurnManager : MonoBehaviour
         currentTimer -= Time.deltaTime;
 
         if (timerText != null)
-        {
-            int seconds = Mathf.CeilToInt(currentTimer);
-            timerText.text = seconds.ToString();
-        }
+            timerText.text = Mathf.CeilToInt(currentTimer).ToString();
 
         if (currentTimer <= 0f)
         {
@@ -159,14 +124,8 @@ public class TurnManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Controlla se la ball attuale è stata lanciata e poi è rimasta
-    /// praticamente ferma nello spazio per troppo tempo.
-    ///
-    /// IMPORTANTE:
-    /// il controllo è basato SOLO sulla posizione della transform.
-    /// La rotazione non viene considerata:
-    /// se la ball gira su se stessa ma resta nello stesso punto,
-    /// viene considerata ferma.
+    /// Controllo stuck basato SOLO sulla posizione.
+    /// Parte solo dopo il lancio reale e non vale se la ball è ancora nella launch area.
     /// </summary>
     void UpdateStuckBallCheck()
     {
@@ -174,6 +133,12 @@ public class TurnManager : MonoBehaviour
             return;
 
         if (watchedBall == null)
+            return;
+
+        if (!hasBallBeenLaunched)
+            return;
+
+        if (ballTurnSpawner != null && ballTurnSpawner.IsBallInsideCurrentLaunchArea(watchedBall, currentPlayer, player1, player2))
             return;
 
         if (watchedBallRb == null)
@@ -185,20 +150,6 @@ public class TurnManager : MonoBehaviour
         Vector3 currentPosition = watchedBall.transform.position;
         float positionDelta = Vector3.Distance(currentPosition, lastWatchedBallPosition);
 
-        // Prima aspettiamo che la ball sia stata davvero lanciata,
-        // cioè che abbia iniziato a muoversi nello spazio almeno una volta.
-        if (!hasBallBeenLaunched)
-        {
-            bool ballStartedMoving = positionDelta > stuckPositionDeltaThreshold;
-
-            if (ballStartedMoving)
-                hasBallBeenLaunched = true;
-
-            lastWatchedBallPosition = currentPosition;
-            return;
-        }
-
-        // Da qui in poi guardiamo solo se la posizione cambia oppure no.
         bool isNearlyStill = positionDelta <= stuckPositionDeltaThreshold;
 
         if (isNearlyStill)
@@ -207,8 +158,8 @@ public class TurnManager : MonoBehaviour
 
             if (stuckTimer >= stuckTimeout)
             {
-                Debug.Log("Palla bloccata troppo a lungo: fine turno.");
-                EndTurn();
+                Debug.Log("Palla bloccata troppo a lungo: fine risoluzione del tiro.");
+                ResolveShotWithoutScore();
                 return;
             }
         }
@@ -220,14 +171,6 @@ public class TurnManager : MonoBehaviour
         lastWatchedBallPosition = currentPosition;
     }
 
-    /// <summary>
-    /// Avvia un turno per il player indicato.
-    /// Questo metodo:
-    /// - imposta currentPlayer
-    /// - resetta e riattiva il timer
-    /// - attiva il player corretto e disattiva l'altro
-    /// - spawna una nuova pallina nella launch zone corretta
-    /// </summary>
     void StartTurn(PlayerController player)
     {
         currentPlayer = player;
@@ -241,22 +184,47 @@ public class TurnManager : MonoBehaviour
         if (player2 != null)
             player2.SetActive(player == player2);
 
-        SpawnNewBall(player);
+        UpdateTurnText();
+        SpawnBallForCurrentTurn();
 
         Debug.Log("Turno di: " + currentPlayer.name);
     }
 
-    /// <summary>
-    /// Termina il turno corrente e passa all'altro player.
-    /// Usato SOLO quando:
-    /// - il timer scade
-    /// - la palla viene persa nella death zone
-    /// - la palla resta bloccata troppo a lungo
-    ///
-    /// NON va usato quando si fa punto.
-    /// </summary>
+    void UpdateTurnText()
+    {
+        if (turnOwnerText == null)
+            return;
+
+        if (currentPlayer == player1)
+            turnOwnerText.text = player1TurnLabel;
+        else if (currentPlayer == player2)
+            turnOwnerText.text = player2TurnLabel;
+        else
+            turnOwnerText.text = string.Empty;
+    }
+
+    void SpawnBallForCurrentTurn()
+    {
+        if (ballTurnSpawner == null)
+        {
+            Debug.LogError("TurnManager: BallTurnSpawner non assegnato.", this);
+            return;
+        }
+
+        BallPhysics spawnedBall = ballTurnSpawner.PrepareBallForTurn(currentPlayer, player1, player2);
+        if (spawnedBall == null)
+            return;
+
+        AssignBallToCurrentPlayer(spawnedBall);
+        BeginWatchingBall(spawnedBall);
+    }
+
     public void EndTurn()
     {
+        // Se il player non ha ancora lanciato la ball e il turno termina,
+        // quella ball va rimossa prima di passare all'altro player.
+        DestroyCurrentBallIfNotLaunched();
+
         ResetStuckBallWatch();
 
         if (currentPlayer == player1)
@@ -265,146 +233,83 @@ public class TurnManager : MonoBehaviour
             StartTurn(player1);
     }
 
-    /// <summary>
-    /// Chiamato da DeathZone quando una pallina viene persa.
-    /// In questo caso il turno passa all'avversario.
-    /// </summary>
     public void BallLost()
     {
         Debug.Log("Palla persa!");
-        EndTurn();
+        ResolveShotWithoutScore();
     }
 
     /// <summary>
-    /// Riporta il timer alla durata piena del turno.
+    /// Chiamato dal BallLauncher quando il lancio avviene davvero.
+    /// Da questo momento il controllo stuck può partire.
     /// </summary>
+    public void NotifyBallLaunched(BallPhysics launchedBall)
+    {
+        if (launchedBall == null)
+            return;
+
+        if (watchedBall != launchedBall)
+        {
+            watchedBall = launchedBall;
+            watchedBallRb = launchedBall.GetComponent<Rigidbody>();
+        }
+
+        hasBallBeenLaunched = true;
+        stuckTimer = 0f;
+        lastWatchedBallPosition = launchedBall.transform.position;
+    }
+
+    /// <summary>
+    /// Chiamato quando il tiro si conclude senza segnare:
+    /// death zone, ball bloccata, ecc.
+    /// Se il match deve entrare in halftime/end, non avanza al turno successivo.
+    /// </summary>
+    void ResolveShotWithoutScore()
+    {
+        PauseTimer();
+        ResetStuckBallWatch();
+
+        if (player1 != null) player1.ball = null;
+        if (player2 != null) player2.ball = null;
+
+        if (startEndController != null && startEndController.ShouldDelayProgressionAfterResolvedShot())
+        {
+            startEndController.HandleResolvedShotTransition();
+            return;
+        }
+
+        EndTurn();
+    }
+
     public void ResetTimer()
     {
         currentTimer = turnDuration;
     }
 
-    /// <summary>
-    /// Ferma il countdown del timer.
-    /// </summary>
     public void PauseTimer()
     {
         timerRunning = false;
     }
 
-    /// <summary>
-    /// Riattiva il countdown del timer.
-    /// </summary>
     public void ResumeTimer()
     {
         timerRunning = true;
     }
 
-    /// <summary>
-    /// Salva il riferimento della ball appena spawnata dentro il PlayerController attivo.
-    /// Questo permette agli altri sistemi di sapere qual è la ball attualmente in mano al player.
-    /// </summary>
     public void AssignBallToCurrentPlayer(BallPhysics ball)
     {
-        if (IsPlayer1Turn)
+        if (IsPlayer1Turn && player1 != null)
             player1.ball = ball;
-        else
+        else if (IsPlayer2Turn && player2 != null)
             player2.ball = ball;
     }
 
     /// <summary>
-    /// Spawna una nuova pallina per il player indicato.
+    /// Dopo un punto il turno normalmente NON cambia:
+    /// stesso player, reset timer, nuova ball.
     ///
-    /// Regole:
-    /// - se è Player 1 usa launchZone1 e il prefab del Player 1
-    /// - se è Player 2 usa launchZone2 e il prefab del Player 2
-    /// - se manca il prefab specifico usa fallbackBallPrefab
-    ///
-    /// Inoltre:
-    /// - opzionalmente applica il materiale del player
-    /// - congela la rigidbody all'inizio
-    /// - assegna la ball al launcher
-    /// - resetta il launcher
-    /// - imposta il BallOwnership se presente
-    /// - inizializza il controllo stuck-ball
-    /// </summary>
-    public void SpawnNewBall(PlayerController player)
-    {
-        Transform spawnPoint = player == player1 ? launchZone1 : launchZone2;
-        GameObject prefabToSpawn = GetBallPrefabForPlayer(player);
-
-        if (spawnPoint == null)
-        {
-            Debug.LogError("TurnManager: spawn point non assegnato per il player corrente.", this);
-            return;
-        }
-
-        if (prefabToSpawn == null)
-        {
-            Debug.LogError("TurnManager: nessun prefab pallina assegnato per il player corrente.", this);
-            return;
-        }
-
-        GameObject ballObject = Instantiate(prefabToSpawn, spawnPoint.position, spawnPoint.rotation);
-
-        if (overrideBallMaterial)
-        {
-            MeshRenderer renderer = ballObject.GetComponent<MeshRenderer>();
-            if (renderer != null)
-                renderer.material = player == player1 ? player1Material : player2Material;
-        }
-
-        BallPhysics ballPhysics = ballObject.GetComponent<BallPhysics>();
-        if (ballPhysics == null)
-        {
-            Debug.LogError("TurnManager: il prefab spawnato non contiene BallPhysics.", ballObject);
-            return;
-        }
-
-        BallOwnership ownership = ballObject.GetComponent<BallOwnership>();
-        if (ownership != null)
-            ownership.Owner = player == player1 ? PlayerID.Player1 : PlayerID.Player2;
-
-        Rigidbody rb = ballObject.GetComponent<Rigidbody>();
-        if (rb != null)
-            rb.constraints = RigidbodyConstraints.FreezeAll;
-
-        if (launcher != null)
-        {
-            launcher.ball = ballPhysics;
-            launcher.ResetLaunch();
-        }
-
-        AssignBallToCurrentPlayer(ballPhysics);
-        BeginWatchingBall(ballPhysics);
-    }
-
-    /// <summary>
-    /// Restituisce il prefab corretto in base al player.
-    /// Se manca il prefab specifico, usa il fallback se presente.
-    /// </summary>
-    GameObject GetBallPrefabForPlayer(PlayerController player)
-    {
-        if (player == player1)
-            return player1BallPrefab != null ? player1BallPrefab : fallbackBallPrefab;
-
-        if (player == player2)
-            return player2BallPrefab != null ? player2BallPrefab : fallbackBallPrefab;
-
-        return fallbackBallPrefab;
-    }
-
-    /// <summary>
-    /// Viene chiamato automaticamente da ScoreManagerNew quando un player fa punto.
-    ///
-    /// IMPORTANTE:
-    /// - qui NON cambiamo turno
-    /// - il player che ha segnato continua a giocare
-    /// - resettiamo il timer
-    /// - riattiviamo il timer
-    /// - spawniamo una nuova pallina per il currentPlayer
-    ///
-    /// Questo replica il comportamento del sistema vecchio:
-    /// "segni -> stessa mano continua".
+    /// Ma se il match deve entrare in halftime o finire,
+    /// non spawniamo la nuova ball e lasciamo la transizione allo StartEndController.
     /// </summary>
     void OnPointsScored(PlayerID playerWhoScored, int newTotal)
     {
@@ -420,17 +325,81 @@ public class TurnManager : MonoBehaviour
 
         handlingSuccessfulScore = true;
 
+        PauseTimer();
+        ResetStuckBallWatch();
+
+        if (startEndController != null && startEndController.ShouldDelayProgressionAfterResolvedShot())
+        {
+            startEndController.HandleResolvedShotTransition();
+            handlingSuccessfulScore = false;
+            return;
+        }
+
         ResetTimer();
         ResumeTimer();
-        SpawnNewBall(currentPlayer);
+        SpawnBallForCurrentTurn();
 
         handlingSuccessfulScore = false;
     }
 
     /// <summary>
-    /// Inizia a monitorare la ball attuale per capire se, una volta lanciata,
-    /// resta bloccata troppo a lungo.
+    /// Chiamato a halftime: ferma il turno corrente e pulisce i riferimenti runtime.
+    /// Non cambia il player corrente.
     /// </summary>
+    public void SuspendTurnForHalftime()
+    {
+        PauseTimer();
+        ResetStuckBallWatch();
+
+        if (player1 != null)
+            player1.ball = null;
+
+        if (player2 != null)
+            player2.ball = null;
+    }
+
+    /// <summary>
+    /// Riparte il secondo tempo col player specificato.
+    /// Serve per far iniziare P2 nel secondo tempo.
+    /// </summary>
+    public void StartSpecificTurn(PlayerController player)
+    {
+        ResetStuckBallWatch();
+        StartTurn(player);
+    }
+
+    /// <summary>
+    /// Se il turno finisce prima del lancio, elimina la ball corrente e pulisce i riferimenti.
+    /// Se invece la ball è già stata lanciata, non la tocca.
+    /// </summary>
+    void DestroyCurrentBallIfNotLaunched()
+    {
+        if (hasBallBeenLaunched)
+            return;
+
+        BallPhysics ballToDestroy = watchedBall;
+
+        if (ballToDestroy == null)
+        {
+            if (IsPlayer1Turn && player1 != null)
+                ballToDestroy = player1.ball;
+            else if (IsPlayer2Turn && player2 != null)
+                ballToDestroy = player2.ball;
+        }
+
+        if (ballToDestroy != null)
+            Destroy(ballToDestroy.gameObject);
+
+        if (ballTurnSpawner != null && ballTurnSpawner.launcher != null)
+            ballTurnSpawner.launcher.ball = null;
+
+        if (player1 != null)
+            player1.ball = null;
+
+        if (player2 != null)
+            player2.ball = null;
+    }
+
     void BeginWatchingBall(BallPhysics ball)
     {
         watchedBall = ball;
@@ -440,10 +409,6 @@ public class TurnManager : MonoBehaviour
         lastWatchedBallPosition = ball != null ? ball.transform.position : Vector3.zero;
     }
 
-    /// <summary>
-    /// Azzera completamente il controllo sulla ball attuale.
-    /// Da usare quando il turno finisce o cambia player.
-    /// </summary>
     void ResetStuckBallWatch()
     {
         watchedBall = null;

@@ -1,13 +1,13 @@
 ﻿using UnityEngine;
 
 /// <summary>
-/// Transitions the camera between two static positions:
-///   OVERVIEW  — top-down table view, default gameplay camera
-///   AIM       — fixed low angle while the player charges a shot
+/// Muove una singola camera tra:
+/// - overview strategica
+/// - aim Player 1
+/// - aim Player 2
 ///
-/// Both positions are defined as world-space transforms so you can place
-/// them freely in the scene with full position + rotation control.
-/// BallLauncher calls SetAiming() automatically if this component is assigned.
+/// Il BallLauncher chiede solo di entrare o uscire dalla modalità aim.
+/// Questo script decide quale anchor usare in base al turno corrente.
 /// </summary>
 public class BallCameraController : MonoBehaviour
 {
@@ -15,49 +15,65 @@ public class BallCameraController : MonoBehaviour
     public Camera cam;
 
     [Header("Camera Positions")]
-    [Tooltip("Transform marking the overview camera position/rotation (create an empty GameObject)")]
+    [Tooltip("Posizione/rotazione overview strategica")]
     public Transform overviewAnchor;
 
-    [Tooltip("Transform marking the aim camera position/rotation (create an empty GameObject)")]
-    public Transform aimAnchor;
+    [Tooltip("Posizione/rotazione aim per Player 1")]
+    public Transform aimAnchorPlayer1;
+
+    [Tooltip("Posizione/rotazione aim per Player 2")]
+    public Transform aimAnchorPlayer2;
 
     [Header("Transition")]
-    [Tooltip("How fast the camera lerps between positions (higher = snappier)")]
     [Range(1f, 20f)]
     public float transitionSpeed = 5f;
 
-    // ── Runtime State ──────────────────────────────────────────
+    private Transform targetAnchor;
 
-    private Transform _target;
-
-    // ── Unity Lifecycle ────────────────────────────────────────
-
-    private void Awake()
+    void Awake()
     {
-        _target = overviewAnchor;
+        targetAnchor = overviewAnchor;
     }
 
-    private void LateUpdate()
+    void LateUpdate()
     {
-        if (cam == null || _target == null) return;
+        if (cam == null || targetAnchor == null)
+            return;
 
         float t = 1f - Mathf.Exp(-transitionSpeed * Time.deltaTime);
-        cam.transform.position = Vector3.Lerp(cam.transform.position, _target.position, t);
-        cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, _target.rotation, t);
+
+        cam.transform.position = Vector3.Lerp(cam.transform.position, targetAnchor.position, t);
+        cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, targetAnchor.rotation, t);
     }
 
-    // ── Public API ─────────────────────────────────────────────
-
     /// <summary>
-    /// Call with true when charging begins, false when shot is released or cancelled.
+    /// aiming = true  -> usa l'anchor aim del player attivo
+    /// aiming = false -> torna in overview
     /// </summary>
     public void SetAiming(bool aiming)
     {
-        _target = aiming ? aimAnchor : overviewAnchor;
+        if (!aiming)
+        {
+            targetAnchor = overviewAnchor;
+            return;
+        }
+
+        if (TurnManager.Instance == null)
+        {
+            targetAnchor = overviewAnchor;
+            return;
+        }
+
+        if (TurnManager.Instance.IsPlayer1Turn)
+            targetAnchor = aimAnchorPlayer1 != null ? aimAnchorPlayer1 : overviewAnchor;
+        else if (TurnManager.Instance.IsPlayer2Turn)
+            targetAnchor = aimAnchorPlayer2 != null ? aimAnchorPlayer2 : overviewAnchor;
+        else
+            targetAnchor = overviewAnchor;
     }
 
 #if UNITY_EDITOR
-    private void OnDrawGizmosSelected()
+    void OnDrawGizmosSelected()
     {
         if (overviewAnchor != null)
         {
@@ -65,11 +81,19 @@ public class BallCameraController : MonoBehaviour
             Gizmos.DrawWireSphere(overviewAnchor.position, 0.2f);
             Gizmos.DrawRay(overviewAnchor.position, overviewAnchor.forward * 1.5f);
         }
-        if (aimAnchor != null)
+
+        if (aimAnchorPlayer1 != null)
         {
             Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(aimAnchor.position, 0.2f);
-            Gizmos.DrawRay(aimAnchor.position, aimAnchor.forward * 1.5f);
+            Gizmos.DrawWireSphere(aimAnchorPlayer1.position, 0.2f);
+            Gizmos.DrawRay(aimAnchorPlayer1.position, aimAnchorPlayer1.forward * 1.5f);
+        }
+
+        if (aimAnchorPlayer2 != null)
+        {
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawWireSphere(aimAnchorPlayer2.position, 0.2f);
+            Gizmos.DrawRay(aimAnchorPlayer2.position, aimAnchorPlayer2.forward * 1.5f);
         }
     }
 #endif
