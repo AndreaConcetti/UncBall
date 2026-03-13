@@ -3,26 +3,29 @@
 /// <summary>
 /// Muove una singola camera tra:
 /// - overview strategica
-/// - aim Player 1
-/// - aim Player 2
+/// - aim lato sinistro
+/// - aim lato destro
 ///
-/// Il BallLauncher chiede solo di entrare o uscire dalla modalità aim.
-/// Questo script decide quale anchor usare in base al turno corrente.
+/// La scelta del lato non dipende dall'identità fissa Player1/Player2,
+/// ma dalla posizione reale corrente del player sul tavolo.
+/// Questo evita errori dopo lo swap di halftime.
 /// </summary>
 public class BallCameraController : MonoBehaviour
 {
     [Header("References")]
     public Camera cam;
+    public TurnManager turnManager;
+    public BallTurnSpawner ballTurnSpawner;
 
     [Header("Camera Positions")]
     [Tooltip("Posizione/rotazione overview strategica")]
     public Transform overviewAnchor;
 
-    [Tooltip("Posizione/rotazione aim per Player 1")]
-    public Transform aimAnchorPlayer1;
+    [Tooltip("Posizione/rotazione aim per il lato sinistro del tavolo")]
+    public Transform leftSideAimAnchor;
 
-    [Tooltip("Posizione/rotazione aim per Player 2")]
-    public Transform aimAnchorPlayer2;
+    [Tooltip("Posizione/rotazione aim per il lato destro del tavolo")]
+    public Transform rightSideAimAnchor;
 
     [Header("Transition")]
     [Range(1f, 20f)]
@@ -33,6 +36,20 @@ public class BallCameraController : MonoBehaviour
     void Awake()
     {
         targetAnchor = overviewAnchor;
+    }
+
+    void Start()
+    {
+        if (turnManager == null)
+            turnManager = TurnManager.Instance;
+
+#if UNITY_2023_1_OR_NEWER
+        if (ballTurnSpawner == null)
+            ballTurnSpawner = FindFirstObjectByType<BallTurnSpawner>();
+#else
+        if (ballTurnSpawner == null)
+            ballTurnSpawner = FindObjectOfType<BallTurnSpawner>();
+#endif
     }
 
     void LateUpdate()
@@ -47,7 +64,7 @@ public class BallCameraController : MonoBehaviour
     }
 
     /// <summary>
-    /// aiming = true  -> usa l'anchor aim del player attivo
+    /// aiming = true  -> usa l'anchor aim del lato occupato dal player di turno
     /// aiming = false -> torna in overview
     /// </summary>
     public void SetAiming(bool aiming)
@@ -58,18 +75,25 @@ public class BallCameraController : MonoBehaviour
             return;
         }
 
-        if (TurnManager.Instance == null)
+        if (turnManager == null)
+            turnManager = TurnManager.Instance;
+
+        if (turnManager == null || ballTurnSpawner == null || turnManager.currentPlayer == null)
         {
             targetAnchor = overviewAnchor;
             return;
         }
 
-        if (TurnManager.Instance.IsPlayer1Turn)
-            targetAnchor = aimAnchorPlayer1 != null ? aimAnchorPlayer1 : overviewAnchor;
-        else if (TurnManager.Instance.IsPlayer2Turn)
-            targetAnchor = aimAnchorPlayer2 != null ? aimAnchorPlayer2 : overviewAnchor;
+        bool playerIsOnLeft = ballTurnSpawner.IsPlayerOnLeft(
+            turnManager.currentPlayer,
+            turnManager.player1,
+            turnManager.player2
+        );
+
+        if (playerIsOnLeft)
+            targetAnchor = leftSideAimAnchor != null ? leftSideAimAnchor : overviewAnchor;
         else
-            targetAnchor = overviewAnchor;
+            targetAnchor = rightSideAimAnchor != null ? rightSideAimAnchor : overviewAnchor;
     }
 
 #if UNITY_EDITOR
@@ -82,18 +106,18 @@ public class BallCameraController : MonoBehaviour
             Gizmos.DrawRay(overviewAnchor.position, overviewAnchor.forward * 1.5f);
         }
 
-        if (aimAnchorPlayer1 != null)
+        if (leftSideAimAnchor != null)
         {
             Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(aimAnchorPlayer1.position, 0.2f);
-            Gizmos.DrawRay(aimAnchorPlayer1.position, aimAnchorPlayer1.forward * 1.5f);
+            Gizmos.DrawWireSphere(leftSideAimAnchor.position, 0.2f);
+            Gizmos.DrawRay(leftSideAimAnchor.position, leftSideAimAnchor.forward * 1.5f);
         }
 
-        if (aimAnchorPlayer2 != null)
+        if (rightSideAimAnchor != null)
         {
             Gizmos.color = Color.magenta;
-            Gizmos.DrawWireSphere(aimAnchorPlayer2.position, 0.2f);
-            Gizmos.DrawRay(aimAnchorPlayer2.position, aimAnchorPlayer2.forward * 1.5f);
+            Gizmos.DrawWireSphere(rightSideAimAnchor.position, 0.2f);
+            Gizmos.DrawRay(rightSideAimAnchor.position, rightSideAimAnchor.forward * 1.5f);
         }
     }
 #endif

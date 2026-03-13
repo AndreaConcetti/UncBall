@@ -2,10 +2,12 @@ using UnityEngine;
 
 /// <summary>
 /// Gestisce la creazione e la preparazione della ball del turno corrente.
-/// Tiene anche la configurazione dei lati di gioco:
-/// - spawn point P1/P2
-/// - placement area P1/P2
-/// e permette di scambiarli a halftime.
+/// Tiene anche traccia dei lati di gioco:
+/// - quale player è a sinistra
+/// - quale player è a destra
+///
+/// In questo modo altri sistemi, come camera e UI,
+/// possono sapere il lato reale del player dopo lo swap di halftime.
 /// </summary>
 public class BallTurnSpawner : MonoBehaviour
 {
@@ -30,6 +32,13 @@ public class BallTurnSpawner : MonoBehaviour
     public Material player1Material;
     public Material player2Material;
 
+    [Header("Runtime Sides")]
+    [Tooltip("True se Player1 occupa attualmente il lato sinistro del tavolo")]
+    [SerializeField] private bool player1IsOnLeft = true;
+
+    /// <summary>
+    /// Crea e prepara la ball del player richiesto.
+    /// </summary>
     public BallPhysics PrepareBallForTurn(PlayerController player, PlayerController player1, PlayerController player2)
     {
         if (player == null)
@@ -92,6 +101,10 @@ public class BallTurnSpawner : MonoBehaviour
         return ballPhysics;
     }
 
+    /// <summary>
+    /// Scambia i lati fisici dei player:
+    /// spawn point, placement area e side mapping logico.
+    /// </summary>
     public void SwapPlayerSides()
     {
         Transform tempSpawn = player1SpawnPoint;
@@ -102,9 +115,15 @@ public class BallTurnSpawner : MonoBehaviour
         player1PlacementArea = player2PlacementArea;
         player2PlacementArea = tempArea;
 
+        player1IsOnLeft = !player1IsOnLeft;
+
         Debug.Log("[BallTurnSpawner] Player sides swapped.");
     }
 
+    /// <summary>
+    /// Elimina tutte le ball presenti in scena.
+    /// Utile a halftime per pulire il tavolo senza toccare i punteggi.
+    /// </summary>
     public void ClearAllBallsInScene()
     {
 #if UNITY_2023_1_OR_NEWER
@@ -146,6 +165,31 @@ public class BallTurnSpawner : MonoBehaviour
         bool insideZ = local.z >= center.z - half.z && local.z <= center.z + half.z;
 
         return insideX && insideY && insideZ;
+    }
+
+    /// <summary>
+    /// True se il player indicato occupa il lato sinistro del tavolo.
+    /// </summary>
+    public bool IsPlayerOnLeft(PlayerController player, PlayerController player1, PlayerController player2)
+    {
+        if (player == null)
+            return false;
+
+        if (player == player1)
+            return player1IsOnLeft;
+
+        if (player == player2)
+            return !player1IsOnLeft;
+
+        return false;
+    }
+
+    /// <summary>
+    /// True se il player indicato occupa il lato destro del tavolo.
+    /// </summary>
+    public bool IsPlayerOnRight(PlayerController player, PlayerController player1, PlayerController player2)
+    {
+        return !IsPlayerOnLeft(player, player1, player2);
     }
 
     Transform GetSpawnPointForPlayer(PlayerController player, PlayerController player1, PlayerController player2)

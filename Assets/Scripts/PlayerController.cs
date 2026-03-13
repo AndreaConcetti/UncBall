@@ -1,26 +1,24 @@
 using UnityEngine;
 
+/// <summary>
+/// Rappresenta un player logico della partita.
+/// Non gestisce input diretto.
+/// Serve solo a mantenere:
+/// - lo stato attivo del player
+/// - il riferimento alla ball corrente.
+/// </summary>
 public class PlayerController : MonoBehaviour
 {
-    private bool isActive = false;
+    public bool isActive = false;
 
+    [HideInInspector]
     public BallPhysics ball;
 
-    public void SetActive(bool value)
+    /// <summary>
+    /// Attiva o disattiva il player nel turno corrente.
+    /// </summary>
+    public void SetActive(bool active)
     {
-        isActive = value;
-    }
-
-    void Update()
-    {
-        if (!isActive)
-            return;
-
-        // Input di esempio
-        if (Input.GetKeyDown(KeyCode.T))
-        {
-            Debug.Log(name + " ha finito il turno");
-            TurnManager.Instance.EndTurn();
-        }
+        isActive = active;
     }
 }

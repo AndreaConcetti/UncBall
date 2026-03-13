@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1083912485503218811}
   - component: {fileID: 8222649611390671170}
-  - component: {fileID: 8038614520461959487}
   - component: {fileID: 4500738214376203590}
   - component: {fileID: 6232224979371898845}
   - component: {fileID: 6199200049888770382}
@@ -46,19 +45,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7932768176900474815}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
---- !u!114 &8038614520461959487
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e33c230a99d3efb4593f02a4188fe2ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  ball: {fileID: 0}
 --- !u!54 &4500738214376203590
 Rigidbody:
   m_ObjectHideFlags: 0
