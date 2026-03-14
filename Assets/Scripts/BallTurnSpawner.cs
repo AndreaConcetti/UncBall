@@ -5,9 +5,6 @@ using UnityEngine;
 /// Tiene anche traccia dei lati di gioco:
 /// - quale player è a sinistra
 /// - quale player è a destra
-///
-/// In questo modo altri sistemi, come camera e UI,
-/// possono sapere il lato reale del player dopo lo swap di halftime.
 /// </summary>
 public class BallTurnSpawner : MonoBehaviour
 {
@@ -36,9 +33,6 @@ public class BallTurnSpawner : MonoBehaviour
     [Tooltip("True se Player1 occupa attualmente il lato sinistro del tavolo")]
     [SerializeField] private bool player1IsOnLeft = true;
 
-    /// <summary>
-    /// Crea e prepara la ball del player richiesto.
-    /// </summary>
     public BallPhysics PrepareBallForTurn(PlayerController player, PlayerController player1, PlayerController player2)
     {
         if (player == null)
@@ -86,9 +80,11 @@ public class BallTurnSpawner : MonoBehaviour
         Rigidbody rb = ballObject.GetComponent<Rigidbody>();
         if (rb != null)
         {
+            rb.isKinematic = false;
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             rb.constraints = RigidbodyConstraints.FreezeAll;
+            rb.isKinematic = true;
         }
 
         if (launcher != null)
@@ -101,10 +97,6 @@ public class BallTurnSpawner : MonoBehaviour
         return ballPhysics;
     }
 
-    /// <summary>
-    /// Scambia i lati fisici dei player:
-    /// spawn point, placement area e side mapping logico.
-    /// </summary>
     public void SwapPlayerSides()
     {
         Transform tempSpawn = player1SpawnPoint;
@@ -120,10 +112,6 @@ public class BallTurnSpawner : MonoBehaviour
         Debug.Log("[BallTurnSpawner] Player sides swapped.");
     }
 
-    /// <summary>
-    /// Elimina tutte le ball presenti in scena.
-    /// Utile a halftime per pulire il tavolo senza toccare i punteggi.
-    /// </summary>
     public void ClearAllBallsInScene()
     {
 #if UNITY_2023_1_OR_NEWER
@@ -144,9 +132,6 @@ public class BallTurnSpawner : MonoBehaviour
         Debug.Log("[BallTurnSpawner] All balls cleared.");
     }
 
-    /// <summary>
-    /// True se la ball si trova ancora dentro la launch area attiva del player corrente.
-    /// </summary>
     public bool IsBallInsideCurrentLaunchArea(BallPhysics ball, PlayerController currentPlayer, PlayerController player1, PlayerController player2)
     {
         if (ball == null || currentPlayer == null)
@@ -167,9 +152,6 @@ public class BallTurnSpawner : MonoBehaviour
         return insideX && insideY && insideZ;
     }
 
-    /// <summary>
-    /// True se il player indicato occupa il lato sinistro del tavolo.
-    /// </summary>
     public bool IsPlayerOnLeft(PlayerController player, PlayerController player1, PlayerController player2)
     {
         if (player == null)
@@ -184,9 +166,6 @@ public class BallTurnSpawner : MonoBehaviour
         return false;
     }
 
-    /// <summary>
-    /// True se il player indicato occupa il lato destro del tavolo.
-    /// </summary>
     public bool IsPlayerOnRight(PlayerController player, PlayerController player1, PlayerController player2)
     {
         return !IsPlayerOnLeft(player, player1, player2);

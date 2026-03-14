@@ -3,28 +3,6 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
-/// <summary>
-/// Gestisce il controllo della ball corrente in 3 fasi:
-/// 1. Placement
-/// 2. Confirm
-/// 3. Launch
-///
-/// Mobile:
-/// - drag touch per placement
-/// - pulsante UI oppure double tap per confermare
-/// - swipe per launch
-///
-/// PC / Editor:
-/// - drag mouse per placement
-/// - Enter per conferma
-/// - drag mouse per launch
-///
-/// Placement:
-/// - usa un piano orizzontale fisso
-/// - mantiene un offset iniziale tra dito e ball
-/// - clampa SOLO X/Z dentro la launch area
-/// - non smussa il movimento di default, per evitare lag percepito
-/// </summary>
 public class BallLauncher : MonoBehaviour
 {
     public enum LaunchPhase
@@ -60,13 +38,8 @@ public class BallLauncher : MonoBehaviour
     public float placementSmoothSpeed = 20f;
 
     [Header("Confirm")]
-    [Tooltip("Se attivo, Enter conferma la posizione in editor/PC")]
     public bool allowKeyboardConfirm = true;
-
-    [Tooltip("Se attivo, un double tap conferma la posizione sul telefono")]
     public bool allowDoubleTapConfirm = true;
-
-    [Tooltip("Intervallo massimo tra due tap per considerarli double tap")]
     public float doubleTapMaxInterval = 0.30f;
 
     [Header("Force Mapping")]
@@ -108,7 +81,6 @@ public class BallLauncher : MonoBehaviour
     private float lastPlacementTapTime = -999f;
     private Vector2 lastPlacementTapScreenPos;
 
-    // Offset iniziale tra punto sotto il dito e posizione reale della ball
     private Vector3 placementDragOffset = Vector3.zero;
 
     void OnEnable()
@@ -165,7 +137,19 @@ public class BallLauncher : MonoBehaviour
         CurrentPhase = LaunchPhase.Placement;
 
         if (ball != null)
+        {
             fixedPlacementY = ball.transform.position.y + placementYOffset;
+
+            Rigidbody rb = ball.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.isKinematic = false;
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.constraints = RigidbodyConstraints.FreezeAll;
+                rb.isKinematic = true;
+            }
+        }
 
         lastPlacementTapTime = -999f;
         lastPlacementTapScreenPos = Vector2.zero;
@@ -177,9 +161,6 @@ public class BallLauncher : MonoBehaviour
             Debug.Log("[BallLauncher] Reset -> Placement");
     }
 
-    /// <summary>
-    /// Metodo pubblico per il pulsante UI "Ready".
-    /// </summary>
     public void ConfirmPlacementFromUI()
     {
         ConfirmPlacement();
@@ -187,13 +168,7 @@ public class BallLauncher : MonoBehaviour
 
     void HandleKeyboardConfirm()
     {
-        if (!allowKeyboardConfirm)
-            return;
-
-        if (CurrentPhase != LaunchPhase.Placement)
-            return;
-
-        if (hasLaunched)
+        if (!allowKeyboardConfirm || CurrentPhase != LaunchPhase.Placement || hasLaunched)
             return;
 
         if (Keyboard.current == null)
@@ -298,14 +273,10 @@ public class BallLauncher : MonoBehaviour
             }
 
             if (mousePlacementDragging && Mouse.current.leftButton.isPressed)
-            {
                 UpdatePlacement(mousePos);
-            }
 
             if (mousePlacementDragging && Mouse.current.leftButton.wasReleasedThisFrame)
-            {
                 mousePlacementDragging = false;
-            }
         }
         else if (CurrentPhase == LaunchPhase.AimReady)
         {
@@ -341,7 +312,7 @@ public class BallLauncher : MonoBehaviour
 
     bool TryBeginPlacement(Touch touch)
     {
-        if (ball == null || CurrentPhase != LaunchPhase.Placement)
+        if (ball == null || CurrentPhase != LaunchPhase.Placement || gameplayCamera == null)
             return false;
 
         Vector2 screenPos = touch.screenPosition;
@@ -392,14 +363,30 @@ public class BallLauncher : MonoBehaviour
         if (lockPlacementY)
             targetWorld.y = fixedPlacementY;
 
-        if (smoothPlacement)
+        Rigidbody rb = ball.GetComponent<Rigidbody>();
+        if (rb != null)
         {
-            float t = 1f - Mathf.Exp(-placementSmoothSpeed * Time.deltaTime);
-            ball.transform.position = Vector3.Lerp(ball.transform.position, targetWorld, t);
+            if (!rb.isKinematic)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.constraints = RigidbodyConstraints.FreezeAll;
+                rb.isKinematic = true;
+            }
+
+            rb.position = targetWorld;
         }
         else
         {
-            ball.transform.position = targetWorld;
+            if (smoothPlacement)
+            {
+                float t = 1f - Mathf.Exp(-placementSmoothSpeed * Time.deltaTime);
+                ball.transform.position = Vector3.Lerp(ball.transform.position, targetWorld, t);
+            }
+            else
+            {
+                ball.transform.position = targetWorld;
+            }
         }
     }
 
@@ -505,14 +492,21 @@ public class BallLauncher : MonoBehaviour
 
         Rigidbody rb = ball.GetComponent<Rigidbody>();
         if (rb != null)
-            rb.constraints = RigidbodyConstraints.None;
+        {
+            rb.isKinematic = false;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.constraints =
+                RigidbodyConstraints.FreezePositionY |
+                RigidbodyConstraints.FreezeRotationX |
+                RigidbodyConstraints.FreezeRotationZ;
+        }
 
         float force = Mathf.Lerp(minForce, maxForce, ChargeRatio);
         Vector3 impulse = LaunchDirection * force;
         impulse.y = 0f;
 
         TurnManager.Instance?.NotifyBallLaunched(ball);
-
         ball.Launch(impulse);
 
         cameraController?.SetAiming(false);
@@ -549,10 +543,6 @@ public class BallLauncher : MonoBehaviour
         ChargeRatio = Mathf.Clamp01(swipe.magnitude / maxSwipePixels);
     }
 
-    /// <summary>
-    /// Proietta il touch su un piano orizzontale alla Y della ball.
-    /// Nessun raycast sui collider della scena.
-    /// </summary>
     bool TryGetPlacementWorldPoint(Vector2 screenPos, out Vector3 worldPoint)
     {
         worldPoint = Vector3.zero;
@@ -574,10 +564,6 @@ public class BallLauncher : MonoBehaviour
         return false;
     }
 
-    /// <summary>
-    /// Clampa SOLO gli assi orizzontali della launch area.
-    /// Non clampa la Y del collider, che è una delle cause più probabili dello snap.
-    /// </summary>
     Vector3 ClampPointInsidePlacementAreaXZOnly(Vector3 worldPoint)
     {
         if (activePlacementArea == null)
@@ -589,8 +575,6 @@ public class BallLauncher : MonoBehaviour
 
         local.x = Mathf.Clamp(local.x, center.x - half.x, center.x + half.x);
         local.z = Mathf.Clamp(local.z, center.z - half.z, center.z + half.z);
-
-        // manteniamo la quota locale al centro del box, così evitiamo snap strani sulla Y locale
         local.y = center.y;
 
         return activePlacementArea.transform.TransformPoint(local);
@@ -605,6 +589,18 @@ public class BallLauncher : MonoBehaviour
     {
         if (ball == null)
             return;
+
+        Rigidbody rb = ball.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.constraints =
+                RigidbodyConstraints.FreezePositionY |
+                RigidbodyConstraints.FreezeRotationX |
+                RigidbodyConstraints.FreezeRotationZ;
+        }
 
         LaunchDirection = direction.normalized;
         LaunchDirection = new Vector3(LaunchDirection.x, 0f, LaunchDirection.z);

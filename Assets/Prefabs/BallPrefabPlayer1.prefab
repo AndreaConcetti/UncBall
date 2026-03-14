@@ -10,11 +10,11 @@ GameObject:
   m_Component:
   - component: {fileID: 1083912485503218811}
   - component: {fileID: 8222649611390671170}
+  - component: {fileID: 5796894742378599577}
   - component: {fileID: 4500738214376203590}
   - component: {fileID: 6232224979371898845}
   - component: {fileID: 6199200049888770382}
   - component: {fileID: -6866850667370311098}
-  - component: {fileID: 5796894742378599577}
   m_Layer: 0
   m_Name: BallPrefabPlayer1
   m_TagString: Untagged
@@ -32,7 +32,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.09, y: 0.09, z: 0.09}
+  m_LocalScale: {x: 0.125, y: 0.125, z: 0.125}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
@@ -45,6 +45,22 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7932768176900474815}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &5796894742378599577
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7932768176900474815}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3014f132a5a2db4480b65098b11e9f8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallPhysics
+  gravityStrength: 2.5
+  gravityDirection: {x: 0, y: 0, z: -1}
+  linearDrag: 0.4
+  maxSpeed: 50
 --- !u!54 &4500738214376203590
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -53,7 +69,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7932768176900474815}
   serializedVersion: 5
-  m_Mass: 5
+  m_Mass: 4.2
   m_LinearDamping: 0
   m_AngularDamping: 0
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -155,19 +171,3 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallOwnership
   Owner: 1
---- !u!114 &5796894742378599577
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d3014f132a5a2db4480b65098b11e9f8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallPhysics
-  gravityStrength: 1.5
-  gravityDirection: {x: 0, y: 0, z: -1}
-  linearDrag: 0.4
-  maxSpeed: 15
