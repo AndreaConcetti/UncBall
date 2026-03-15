@@ -19,6 +19,7 @@ public class StartEndController : MonoBehaviour
     public TurnManager turnManager;
     public BallTurnSpawner ballTurnSpawner;
     public SimpleCurrentScoreDisplay simpleCurrentScoreDisplay;
+    public BottomBarOrderSwapper bottomBarOrderSwapper;
 
     [Header("UI Panels")]
     public GameObject gameUIPanel;
@@ -64,7 +65,6 @@ public class StartEndController : MonoBehaviour
     private bool halftimeTriggered = false;
     private bool transitionCoroutineRunning = false;
 
-    // Nuovi flag per congelare il clock durante le transizioni pendenti
     private bool halftimePending = false;
     private bool endOfTimePending = false;
 
@@ -129,7 +129,6 @@ public class StartEndController : MonoBehaviour
 
     void UpdateTimeLimitMode()
     {
-        // Se una transizione è pendente, il clock match resta congelato
         if (!halftimePending && !endOfTimePending)
         {
             currentMatchTimer -= Time.deltaTime;
@@ -140,7 +139,6 @@ public class StartEndController : MonoBehaviour
             UpdateMatchTimerUI();
         }
 
-        // Se raggiungiamo la soglia di halftime, congeliamo subito il clock
         if (enableHalftime && !halftimeTriggered && !halftimePending && !scoreManager.IsOvertime)
         {
             float halftimeThreshold = matchDuration * 0.5f;
@@ -152,9 +150,6 @@ public class StartEndController : MonoBehaviour
             }
         }
 
-        // Se l'halftime è pendente:
-        // - se il tiro è ancora in corso aspettiamo
-        // - appena si risolve, partiamo con l'halftime
         if (halftimePending)
         {
             if (turnManager != null && turnManager.IsLaunchInProgress())
@@ -164,7 +159,6 @@ public class StartEndController : MonoBehaviour
             return;
         }
 
-        // Se arriviamo a 0, congeliamo il timer a 0 e aspettiamo eventuale ultimo tiro
         if (!endOfTimePending && currentMatchTimer <= 0f)
         {
             endOfTimePending = true;
@@ -225,6 +219,9 @@ public class StartEndController : MonoBehaviour
         UpdateMatchTimerUI();
 
         scoreManager.StartMatch();
+
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SetOrder(true);
     }
 
     bool ShouldEnterHalftimeNow()
@@ -248,11 +245,6 @@ public class StartEndController : MonoBehaviour
         return currentMatchTimer <= halftimeThreshold;
     }
 
-    /// <summary>
-    /// Chiamato dal TurnManager quando un tiro si è appena risolto
-    /// e potrebbe essere il momento di entrare in halftime o chiudere il match.
-    /// Aspetta 1 secondo e poi applica la transizione giusta.
-    /// </summary>
     public void HandleResolvedShotTransition()
     {
         if (transitionCoroutineRunning)
@@ -261,10 +253,6 @@ public class StartEndController : MonoBehaviour
         StartCoroutine(DelayedResolvedShotTransition());
     }
 
-    /// <summary>
-    /// TurnManager usa questo metodo per sapere se NON deve
-    /// far partire un nuovo turno / nuova ball dopo la risoluzione del tiro.
-    /// </summary>
     public bool ShouldDelayProgressionAfterResolvedShot()
     {
         if (transitionCoroutineRunning)
@@ -352,10 +340,6 @@ public class StartEndController : MonoBehaviour
         RequestEndMatch(GetWinnerOrNone());
     }
 
-    /// <summary>
-    /// Scatta automaticamente a metà matchDuration.
-    /// Apre il panel halftime, scambia i lati e pulisce il tavolo.
-    /// </summary>
     public void StartHalftime()
     {
         if (!matchStarted || matchEnded || halftimeTriggered || scoreManager == null)
@@ -375,6 +359,9 @@ public class StartEndController : MonoBehaviour
             ballTurnSpawner.ClearAllBallsInScene();
         }
 
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SwapOrder();
+
         isPaused = true;
 
         if (gameUIPanel != null)
@@ -390,11 +377,6 @@ public class StartEndController : MonoBehaviour
             Time.timeScale = 0f;
     }
 
-    /// <summary>
-    /// Da collegare al bottone del panel halftime.
-    /// Chiude il panel, resetta le board del secondo tempo
-    /// e fa iniziare il secondo tempo con Player2.
-    /// </summary>
     public void EndHalftimeAndResume()
     {
         if (scoreManager == null || !scoreManager.IsHalftime)
@@ -523,6 +505,9 @@ public class StartEndController : MonoBehaviour
         UpdateMatchTimerUI();
 
         Time.timeScale = 1f;
+
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SetOrder(true);
     }
 
     public void ResetTimeScale()
