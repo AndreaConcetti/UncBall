@@ -60,7 +60,7 @@ MonoBehaviour:
   gravityStrength: 2.5
   gravityDirection: {x: 0, y: 0, z: -1}
   linearDrag: 0.4
-  maxSpeed: 50
+  maxSpeed: 60
 --- !u!54 &4500738214376203590
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -69,7 +69,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7932768176900474815}
   serializedVersion: 5
-  m_Mass: 4.2
+  m_Mass: 5
   m_LinearDamping: 0
   m_AngularDamping: 0
   m_CenterOfMass: {x: 0, y: 0, z: 0}

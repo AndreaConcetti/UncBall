@@ -509,7 +509,7 @@ public class BallLauncher : MonoBehaviour
         TurnManager.Instance?.NotifyBallLaunched(ball);
         ball.Launch(impulse);
 
-        cameraController?.SetAiming(false);
+        cameraController?.OnBallLaunched();
         TurnManager.Instance?.PauseTimer();
 
         if (debugLogs)
@@ -612,7 +612,7 @@ public class BallLauncher : MonoBehaviour
         hasLaunched = true;
         CurrentPhase = LaunchPhase.Launched;
 
-        cameraController?.SetAiming(false);
+        cameraController?.OnBallLaunched();
         TurnManager.Instance?.PauseTimer();
     }
 

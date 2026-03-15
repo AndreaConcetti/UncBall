@@ -16,9 +16,9 @@ public class StartEndController : MonoBehaviour
 
     [Header("References")]
     public ScoreManagerNew scoreManager;
-    public PostGameScoreDisplay postGameScoreDisplay;
     public TurnManager turnManager;
     public BallTurnSpawner ballTurnSpawner;
+    public SimpleCurrentScoreDisplay simpleCurrentScoreDisplay;
 
     [Header("UI Panels")]
     public GameObject gameUIPanel;
@@ -383,6 +383,9 @@ public class StartEndController : MonoBehaviour
         if (halftimePanel != null)
             halftimePanel.SetActive(true);
 
+        if (simpleCurrentScoreDisplay != null)
+            simpleCurrentScoreDisplay.RefreshScores();
+
         if (pauseAtHalftime && stopTimeOnPause)
             Time.timeScale = 0f;
     }
@@ -494,8 +497,8 @@ public class StartEndController : MonoBehaviour
         if (gameUIPanel != null) gameUIPanel.SetActive(false);
         if (postGamePanel != null) postGamePanel.SetActive(true);
 
-        if (postGameScoreDisplay != null)
-            postGameScoreDisplay.UpdateScores();
+        if (simpleCurrentScoreDisplay != null)
+            simpleCurrentScoreDisplay.RefreshScores();
 
         if (stopTimeOnEnd)
             Time.timeScale = 0f;

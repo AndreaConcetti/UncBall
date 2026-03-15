@@ -57,10 +57,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d3014f132a5a2db4480b65098b11e9f8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallPhysics
-  gravityStrength: 1.5
+  gravityStrength: 2.5
   gravityDirection: {x: 0, y: 0, z: -1}
   linearDrag: 0.4
-  maxSpeed: 15
+  maxSpeed: 60
 --- !u!54 &4500738214376203590
 Rigidbody:
   m_ObjectHideFlags: 0
