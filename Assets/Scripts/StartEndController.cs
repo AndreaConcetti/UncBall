@@ -1,6 +1,6 @@
 using System.Collections;
 using UnityEngine;
-using TMPro;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Gestisce il flow globale del match:
@@ -20,6 +20,7 @@ public class StartEndController : MonoBehaviour
     public BallTurnSpawner ballTurnSpawner;
     public SimpleCurrentScoreDisplay simpleCurrentScoreDisplay;
     public BottomBarOrderSwapper bottomBarOrderSwapper;
+    public GameModeUIChanger gameModeUIChanger;
 
     [Header("UI Panels")]
     public GameObject gameUIPanel;
@@ -35,8 +36,6 @@ public class StartEndController : MonoBehaviour
 
     [Header("Time Limit Mode")]
     public float matchDuration = 180f;
-    public TMP_Text matchTimerText;
-    public bool useMinutesSecondsFormat = true;
 
     [Header("Halftime")]
     public bool enableHalftime = true;
@@ -78,6 +77,11 @@ public class StartEndController : MonoBehaviour
         if (turnManager == null)
             turnManager = TurnManager.Instance;
 
+        if (gameModeUIChanger == null)
+            gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
+
+        ApplyMenuSettings();
+
         Time.timeScale = 1f;
 
         if (pausePanel != null) pausePanel.SetActive(false);
@@ -94,7 +98,7 @@ public class StartEndController : MonoBehaviour
         endOfTimePending = false;
 
         currentMatchTimer = matchDuration;
-        UpdateMatchTimerUI();
+        RefreshModeUI();
 
         if (startMatchOnStart)
             StartMatch();
@@ -127,6 +131,24 @@ public class StartEndController : MonoBehaviour
             UpdateScoreTargetMode();
     }
 
+    void ApplyMenuSettings()
+    {
+        matchMode = MainMenu.selectedMatchMode;
+        targetScore = Mathf.Max(1, MainMenu.selectedPointsToWin);
+        matchDuration = Mathf.Max(1f, MainMenu.selectedMatchDuration);
+    }
+
+    void RefreshModeUI()
+    {
+        if (gameModeUIChanger == null)
+            return;
+
+        gameModeUIChanger.ApplyCurrentMode();
+        gameModeUIChanger.RefreshPlayerNameTexts();
+        gameModeUIChanger.RefreshTargetScoreTexts();
+        gameModeUIChanger.RefreshTimerText();
+    }
+
     void UpdateTimeLimitMode()
     {
         if (!halftimePending && !endOfTimePending)
@@ -136,7 +158,8 @@ public class StartEndController : MonoBehaviour
             if (currentMatchTimer < 0f)
                 currentMatchTimer = 0f;
 
-            UpdateMatchTimerUI();
+            if (gameModeUIChanger != null)
+                gameModeUIChanger.RefreshTimerText();
         }
 
         if (enableHalftime && !halftimeTriggered && !halftimePending && !scoreManager.IsOvertime)
@@ -146,7 +169,9 @@ public class StartEndController : MonoBehaviour
             {
                 halftimePending = true;
                 currentMatchTimer = halftimeThreshold;
-                UpdateMatchTimerUI();
+
+                if (gameModeUIChanger != null)
+                    gameModeUIChanger.RefreshTimerText();
             }
         }
 
@@ -163,7 +188,9 @@ public class StartEndController : MonoBehaviour
         {
             endOfTimePending = true;
             currentMatchTimer = 0f;
-            UpdateMatchTimerUI();
+
+            if (gameModeUIChanger != null)
+                gameModeUIChanger.RefreshTimerText();
         }
 
         if (endOfTimePending)
@@ -194,11 +221,16 @@ public class StartEndController : MonoBehaviour
         if (turnManager == null)
             turnManager = TurnManager.Instance;
 
+        if (gameModeUIChanger == null)
+            gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
+
         if (scoreManager == null)
         {
             Debug.LogError("[StartEndController] ScoreManagerNew non trovato.", this);
             return;
         }
+
+        ApplyMenuSettings();
 
         Time.timeScale = 1f;
 
@@ -216,7 +248,7 @@ public class StartEndController : MonoBehaviour
         endOfTimePending = false;
 
         currentMatchTimer = matchDuration;
-        UpdateMatchTimerUI();
+        RefreshModeUI();
 
         scoreManager.StartMatch();
 
@@ -395,6 +427,8 @@ public class StartEndController : MonoBehaviour
 
         if (turnManager != null)
             turnManager.StartSpecificTurn(turnManager.player2);
+
+        RefreshModeUI();
     }
 
     public void StartOvertime()
@@ -403,7 +437,9 @@ public class StartEndController : MonoBehaviour
             return;
 
         currentMatchTimer = overtimeDuration;
-        UpdateMatchTimerUI();
+
+        if (gameModeUIChanger != null)
+            gameModeUIChanger.RefreshTimerText();
 
         halftimePending = false;
         endOfTimePending = false;
@@ -454,13 +490,23 @@ public class StartEndController : MonoBehaviour
         endOfTimePending = false;
 
         if (scoreManager != null && scoreManager.MatchActive)
+        {
             scoreManager.EndMatch(winner);
+        }
         else
+        {
+            if (gameModeUIChanger != null)
+                gameModeUIChanger.RefreshWinnerTexts(winner);
+
             FinalizeEndMatchUI();
+        }
     }
 
     void OnScoreManagerMatchEnd(PlayerID winner)
     {
+        if (gameModeUIChanger != null)
+            gameModeUIChanger.RefreshWinnerTexts(winner);
+
         FinalizeEndMatchUI();
     }
 
@@ -502,7 +548,7 @@ public class StartEndController : MonoBehaviour
         if (gameUIPanel != null) gameUIPanel.SetActive(true);
 
         currentMatchTimer = matchDuration;
-        UpdateMatchTimerUI();
+        RefreshModeUI();
 
         Time.timeScale = 1f;
 
@@ -515,22 +561,16 @@ public class StartEndController : MonoBehaviour
         Time.timeScale = 1f;
     }
 
-    void UpdateMatchTimerUI()
+    public void PlayAgain()
     {
-        if (matchTimerText == null)
-            return;
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
 
-        if (useMinutesSecondsFormat)
-        {
-            int totalSeconds = Mathf.CeilToInt(currentMatchTimer);
-            int minutes = totalSeconds / 60;
-            int seconds = totalSeconds % 60;
-            matchTimerText.text = minutes.ToString("00") + ":" + seconds.ToString("00");
-        }
-        else
-        {
-            matchTimerText.text = Mathf.CeilToInt(currentMatchTimer).ToString();
-        }
+    public void ReturnToMainMenu()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene("MainMenu");
     }
 
     PlayerID GetWinnerOrNone()

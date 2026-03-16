@@ -106,6 +106,14 @@ public class TurnManager : MonoBehaviour
         UpdateStuckBallCheck();
     }
 
+    public void ApplyPlayerNames(string player1Name, string player2Name)
+    {
+        player1TurnLabel = string.IsNullOrWhiteSpace(player1Name) ? "Player 1" : player1Name;
+        player2TurnLabel = string.IsNullOrWhiteSpace(player2Name) ? "Player 2" : player2Name;
+
+        UpdateTurnText();
+    }
+
     void UpdateTurnTimer()
     {
         if (!timerRunning)
@@ -221,8 +229,6 @@ public class TurnManager : MonoBehaviour
 
     public void EndTurn()
     {
-        // Se il player non ha ancora lanciato la ball e il turno termina,
-        // quella ball va rimossa prima di passare all'altro player.
         DestroyCurrentBallIfNotLaunched();
 
         ResetStuckBallWatch();
