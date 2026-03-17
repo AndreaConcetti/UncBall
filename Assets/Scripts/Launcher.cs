@@ -19,13 +19,10 @@ public class BallLauncher : MonoBehaviour
     public Camera gameplayCamera;
 
     [Header("Placement")]
-    [Tooltip("Area di placement attualmente valida per la ball corrente")]
+    [Tooltip("Area di placement valida per la ball corrente")]
     public BoxCollider activePlacementArea;
 
-    [Tooltip("Mantiene bloccata la Y della ball durante il placement")]
-    public bool lockPlacementY = true;
-
-    [Tooltip("Offset verticale opzionale durante il placement")]
+    [Tooltip("Offset verticale opzionale applicato in placement")]
     public float placementYOffset = 0f;
 
     [Tooltip("Distanza massima tra touch iniziale e centro ball per iniziare il drag di placement")]
@@ -43,9 +40,18 @@ public class BallLauncher : MonoBehaviour
     public float doubleTapMaxInterval = 0.30f;
 
     [Header("Force Mapping")]
-    public float minForce = 3f;
-    public float maxForce = 14f;
+    public float minForce = 8f;
+    public float maxForce = 37.5f;
     public float maxSwipePixels = 300f;
+
+    [Tooltip("Soglia minima di swipe in pixel per considerare valido il lancio")]
+    public float minLaunchSwipePixels = 20f;
+
+    [Tooltip("Esponente della curva di carica. >1 = più controllo sui tiri bassi/medi")]
+    public float chargeCurveExponent = 1.5f;
+
+    [Tooltip("Se attivo, la potenza usa quasi solo la componente forward (Y) dello swipe")]
+    public bool useForwardOnlyForPower = true;
 
     [Header("Direction Constraint")]
     public bool constrainAngle = false;
@@ -76,12 +82,18 @@ public class BallLauncher : MonoBehaviour
     private bool mouseAimDragging;
     private Vector2 mouseAimStartScreen;
 
-    private float fixedPlacementY;
-
     private float lastPlacementTapTime = -999f;
     private Vector2 lastPlacementTapScreenPos;
 
-    private Vector3 placementDragOffset = Vector3.zero;
+    // Placement line data: la ball si muove solo lungo l'asse X locale del BoxCollider
+    private float placementPlaneY;
+    private float placementLineLocalY;
+    private float placementLineLocalZ;
+
+    // Drag state stabile
+    private bool hasPlacementDragStart;
+    private Vector3 placementDragStartWorldPoint;
+    private Vector3 placementDragStartBallWorldPosition;
 
     void OnEnable()
     {
@@ -134,11 +146,15 @@ public class BallLauncher : MonoBehaviour
         mousePlacementDragging = false;
         mouseAimDragging = false;
 
+        hasPlacementDragStart = false;
+        placementDragStartWorldPoint = Vector3.zero;
+        placementDragStartBallWorldPosition = Vector3.zero;
+
         CurrentPhase = LaunchPhase.Placement;
 
         if (ball != null)
         {
-            fixedPlacementY = ball.transform.position.y + placementYOffset;
+            CachePlacementLineFromCurrentBall();
 
             Rigidbody rb = ball.GetComponent<Rigidbody>();
             if (rb != null)
@@ -153,7 +169,6 @@ public class BallLauncher : MonoBehaviour
 
         lastPlacementTapTime = -999f;
         lastPlacementTapScreenPos = Vector2.zero;
-        placementDragOffset = Vector3.zero;
 
         cameraController?.SetAiming(false);
 
@@ -192,10 +207,12 @@ public class BallLauncher : MonoBehaviour
 
                 if (CurrentPhase == LaunchPhase.Placement)
                 {
+                    if (TryRegisterPlacementTap(touch))
+                        return;
+
                     if (TryBeginPlacement(touch))
                         return;
 
-                    TryRegisterPlacementTap(touch);
                     return;
                 }
                 else if (CurrentPhase == LaunchPhase.AimReady)
@@ -261,14 +278,39 @@ public class BallLauncher : MonoBehaviour
             {
                 Vector2 ballScreen = gameplayCamera.WorldToScreenPoint(ball.transform.position);
 
+                bool confirmedByDoubleClick = false;
+
+                if (allowDoubleTapConfirm)
+                {
+                    float timeNow = Time.time;
+                    bool sameAreaAsPreviousClick = Vector2.Distance(mousePos, lastPlacementTapScreenPos) <= 120f;
+                    bool quickEnough = (timeNow - lastPlacementTapTime) <= doubleTapMaxInterval;
+
+                    if (quickEnough && sameAreaAsPreviousClick)
+                    {
+                        ConfirmPlacement();
+                        lastPlacementTapTime = -999f;
+                        lastPlacementTapScreenPos = Vector2.zero;
+                        confirmedByDoubleClick = true;
+
+                        if (debugLogs)
+                            Debug.Log("[BallLauncher] Mouse double click confirm");
+                    }
+                    else
+                    {
+                        lastPlacementTapTime = timeNow;
+                        lastPlacementTapScreenPos = mousePos;
+                    }
+                }
+
+                if (confirmedByDoubleClick)
+                    return;
+
                 if (Vector2.Distance(mousePos, ballScreen) <= placementPickRadiusScreen)
                 {
                     mousePlacementDragging = true;
-
-                    if (lockPlacementY)
-                        fixedPlacementY = ball.transform.position.y + placementYOffset;
-
-                    CachePlacementOffset(mousePos);
+                    CachePlacementLineFromCurrentBall();
+                    CachePlacementDragStart(mousePos);
                 }
             }
 
@@ -276,7 +318,7 @@ public class BallLauncher : MonoBehaviour
                 UpdatePlacement(mousePos);
 
             if (mousePlacementDragging && Mouse.current.leftButton.wasReleasedThisFrame)
-                mousePlacementDragging = false;
+                EndMousePlacementDrag();
         }
         else if (CurrentPhase == LaunchPhase.AimReady)
         {
@@ -285,7 +327,7 @@ public class BallLauncher : MonoBehaviour
                 mouseAimDragging = true;
                 mouseAimStartScreen = mousePos;
                 ChargeRatio = 0f;
-                LaunchDirection = forwardAxis.normalized;
+                LaunchDirection = GetSafeForward();
             }
 
             if (mouseAimDragging && Mouse.current.leftButton.isPressed)
@@ -301,7 +343,7 @@ public class BallLauncher : MonoBehaviour
 
                 mouseAimDragging = false;
 
-                if (swipe.magnitude > 5f)
+                if (IsSwipeValidForLaunch(swipe))
                     DoLaunch();
                 else
                     CancelAimState();
@@ -324,28 +366,47 @@ public class BallLauncher : MonoBehaviour
         activeFinger = touch.finger;
         isPlacementDragging = true;
 
-        if (lockPlacementY)
-            fixedPlacementY = ball.transform.position.y + placementYOffset;
-
-        CachePlacementOffset(screenPos);
+        CachePlacementLineFromCurrentBall();
+        CachePlacementDragStart(screenPos);
         return true;
     }
 
-    void CachePlacementOffset(Vector2 screenPos)
+    void CachePlacementLineFromCurrentBall()
+    {
+        if (ball == null)
+            return;
+
+        placementPlaneY = ball.transform.position.y + placementYOffset;
+
+        if (activePlacementArea != null)
+        {
+            Vector3 local = activePlacementArea.transform.InverseTransformPoint(ball.transform.position);
+            placementLineLocalY = local.y;
+            placementLineLocalZ = local.z;
+        }
+        else
+        {
+            placementLineLocalY = ball.transform.position.y;
+            placementLineLocalZ = ball.transform.position.z;
+        }
+    }
+
+    void CachePlacementDragStart(Vector2 screenPos)
     {
         if (ball == null)
             return;
 
         if (TryGetPlacementWorldPoint(screenPos, out Vector3 worldPoint))
         {
-            if (lockPlacementY)
-                worldPoint.y = fixedPlacementY;
-
-            placementDragOffset = ball.transform.position - worldPoint;
+            placementDragStartWorldPoint = worldPoint;
+            placementDragStartBallWorldPosition = ball.transform.position;
+            hasPlacementDragStart = true;
         }
         else
         {
-            placementDragOffset = Vector3.zero;
+            placementDragStartWorldPoint = Vector3.zero;
+            placementDragStartBallWorldPosition = ball.transform.position;
+            hasPlacementDragStart = false;
         }
     }
 
@@ -354,14 +415,19 @@ public class BallLauncher : MonoBehaviour
         if (ball == null)
             return;
 
-        if (!TryGetPlacementWorldPoint(screenPos, out Vector3 worldPoint))
+        if (!hasPlacementDragStart)
             return;
 
-        Vector3 targetWorld = worldPoint + placementDragOffset;
-        targetWorld = ClampPointInsidePlacementAreaXZOnly(targetWorld);
+        if (!TryGetPlacementWorldPoint(screenPos, out Vector3 currentWorldPoint))
+            return;
 
-        if (lockPlacementY)
-            targetWorld.y = fixedPlacementY;
+        Vector3 placementAxisWorld = GetPlacementAxisWorld();
+
+        Vector3 worldDelta = currentWorldPoint - placementDragStartWorldPoint;
+        float deltaAlongAxis = Vector3.Dot(worldDelta, placementAxisWorld);
+
+        Vector3 targetWorld = placementDragStartBallWorldPosition + placementAxisWorld * deltaAlongAxis;
+        targetWorld = ClampToPlacementLineAndArea(targetWorld);
 
         Rigidbody rb = ball.GetComponent<Rigidbody>();
         if (rb != null)
@@ -393,13 +459,20 @@ public class BallLauncher : MonoBehaviour
     void EndPlacementDrag()
     {
         isPlacementDragging = false;
+        hasPlacementDragStart = false;
         ClearActiveFinger();
     }
 
-    void TryRegisterPlacementTap(Touch touch)
+    void EndMousePlacementDrag()
+    {
+        mousePlacementDragging = false;
+        hasPlacementDragStart = false;
+    }
+
+    bool TryRegisterPlacementTap(Touch touch)
     {
         if (!allowDoubleTapConfirm || CurrentPhase != LaunchPhase.Placement)
-            return;
+            return false;
 
         Vector2 screenPos = touch.screenPosition;
         float timeNow = Time.time;
@@ -410,17 +483,23 @@ public class BallLauncher : MonoBehaviour
         if (quickEnough && sameAreaAsPreviousTap)
         {
             ConfirmPlacement();
+
             lastPlacementTapTime = -999f;
             lastPlacementTapScreenPos = Vector2.zero;
 
+            activeFinger = null;
+            isPlacementDragging = false;
+            hasPlacementDragStart = false;
+
             if (debugLogs)
                 Debug.Log("[BallLauncher] Double tap confirm");
+
+            return true;
         }
-        else
-        {
-            lastPlacementTapTime = timeNow;
-            lastPlacementTapScreenPos = screenPos;
-        }
+
+        lastPlacementTapTime = timeNow;
+        lastPlacementTapScreenPos = screenPos;
+        return false;
     }
 
     void ConfirmPlacement()
@@ -430,7 +509,7 @@ public class BallLauncher : MonoBehaviour
 
         CurrentPhase = LaunchPhase.AimReady;
         ChargeRatio = 0f;
-        LaunchDirection = forwardAxis.normalized;
+        LaunchDirection = GetSafeForward();
 
         cameraController?.SetAiming(true);
 
@@ -447,7 +526,7 @@ public class BallLauncher : MonoBehaviour
         isAimTracking = true;
         aimStartScreen = touch.screenPosition;
         ChargeRatio = 0f;
-        LaunchDirection = forwardAxis.normalized;
+        LaunchDirection = GetSafeForward();
     }
 
     void UpdateAimSwipe(Vector2 screenPos)
@@ -470,7 +549,7 @@ public class BallLauncher : MonoBehaviour
         isAimTracking = false;
         ClearActiveFinger();
 
-        if (swipe.magnitude > 5f)
+        if (IsSwipeValidForLaunch(swipe))
             DoLaunch();
         else
             CancelAimState();
@@ -480,6 +559,16 @@ public class BallLauncher : MonoBehaviour
     {
         ChargeRatio = 0f;
         LaunchDirection = Vector3.zero;
+    }
+
+    bool IsSwipeValidForLaunch(Vector2 swipe)
+    {
+        float forwardPixels = Mathf.Max(0f, swipe.y);
+
+        if (useForwardOnlyForPower)
+            return forwardPixels >= minLaunchSwipePixels;
+
+        return swipe.magnitude >= minLaunchSwipePixels;
     }
 
     void DoLaunch()
@@ -513,7 +602,7 @@ public class BallLauncher : MonoBehaviour
         TurnManager.Instance?.PauseTimer();
 
         if (debugLogs)
-            Debug.Log($"[BallLauncher] Launch -> force={force:F2}");
+            Debug.Log($"[BallLauncher] Launch -> charge={ChargeRatio:F3} force={force:F2} dir={LaunchDirection}");
     }
 
     void ApplySwipe(Vector2 swipe)
@@ -524,23 +613,37 @@ public class BallLauncher : MonoBehaviour
             return;
 
         Vector3 dir = worldSwipe.normalized;
+        Vector3 forward = GetSafeForward();
 
         if (constrainAngle)
         {
-            float angle = Vector3.Angle(forwardAxis, dir);
-            if (angle > angleLimit)
-            {
-                dir = Vector3.RotateTowards(
-                    forwardAxis.normalized,
-                    dir,
-                    angleLimit * Mathf.Deg2Rad,
-                    0f
-                );
-            }
+            float signedAngle = Vector3.SignedAngle(forward, dir, Vector3.up);
+            float clampedAngle = Mathf.Clamp(signedAngle, -angleLimit, angleLimit);
+            dir = Quaternion.AngleAxis(clampedAngle, Vector3.up) * forward;
         }
 
+        dir.y = 0f;
+        dir.Normalize();
+
         LaunchDirection = dir;
-        ChargeRatio = Mathf.Clamp01(swipe.magnitude / maxSwipePixels);
+
+        float rawCharge;
+
+        if (useForwardOnlyForPower)
+        {
+            float forwardPixels = Mathf.Max(0f, swipe.y);
+            rawCharge = Mathf.Clamp01(forwardPixels / Mathf.Max(1f, maxSwipePixels));
+        }
+        else
+        {
+            rawCharge = Mathf.Clamp01(swipe.magnitude / Mathf.Max(1f, maxSwipePixels));
+        }
+
+        float safeExponent = Mathf.Max(0.01f, chargeCurveExponent);
+        ChargeRatio = Mathf.Pow(rawCharge, safeExponent);
+
+        if (debugLogs)
+            Debug.Log($"[BallLauncher] Swipe={swipe} rawCharge={rawCharge:F3} curvedCharge={ChargeRatio:F3}");
     }
 
     bool TryGetPlacementWorldPoint(Vector2 screenPos, out Vector3 worldPoint)
@@ -550,10 +653,8 @@ public class BallLauncher : MonoBehaviour
         if (gameplayCamera == null || ball == null)
             return false;
 
-        float planeY = lockPlacementY ? fixedPlacementY : ball.transform.position.y;
-
         Ray ray = gameplayCamera.ScreenPointToRay(screenPos);
-        Plane plane = new Plane(Vector3.up, new Vector3(0f, planeY, 0f));
+        Plane plane = new Plane(Vector3.up, new Vector3(0f, placementPlaneY, 0f));
 
         if (plane.Raycast(ray, out float enter))
         {
@@ -564,20 +665,49 @@ public class BallLauncher : MonoBehaviour
         return false;
     }
 
-    Vector3 ClampPointInsidePlacementAreaXZOnly(Vector3 worldPoint)
+    Vector3 GetPlacementAxisWorld()
+    {
+        if (activePlacementArea != null)
+        {
+            Vector3 axis = activePlacementArea.transform.right;
+            axis.y = 0f;
+
+            if (axis.sqrMagnitude > 0.0001f)
+                return axis.normalized;
+        }
+
+        return Vector3.right;
+    }
+
+    Vector3 ClampToPlacementLineAndArea(Vector3 targetWorld)
     {
         if (activePlacementArea == null)
-            return worldPoint;
+        {
+            targetWorld.y = placementPlaneY;
+            targetWorld.z = placementDragStartBallWorldPosition.z;
+            return targetWorld;
+        }
 
-        Vector3 local = activePlacementArea.transform.InverseTransformPoint(worldPoint);
+        Vector3 local = activePlacementArea.transform.InverseTransformPoint(targetWorld);
         Vector3 half = activePlacementArea.size * 0.5f;
         Vector3 center = activePlacementArea.center;
 
         local.x = Mathf.Clamp(local.x, center.x - half.x, center.x + half.x);
-        local.z = Mathf.Clamp(local.z, center.z - half.z, center.z + half.z);
-        local.y = center.y;
+        local.y = placementLineLocalY;
+        local.z = placementLineLocalZ;
 
         return activePlacementArea.transform.TransformPoint(local);
+    }
+
+    Vector3 GetSafeForward()
+    {
+        Vector3 forward = forwardAxis;
+        forward.y = 0f;
+
+        if (forward.sqrMagnitude < 0.0001f)
+            return Vector3.forward;
+
+        return forward.normalized;
     }
 
     void ClearActiveFinger()
@@ -625,13 +755,26 @@ public class BallLauncher : MonoBehaviour
         Vector3 origin = ball.transform.position;
 
         Gizmos.color = Color.white;
-        Gizmos.DrawRay(origin, forwardAxis.normalized * 1.5f);
+        Gizmos.DrawRay(origin, GetSafeForward() * 1.5f);
+
+        if (activePlacementArea != null)
+        {
+            Vector3 placementAxis = activePlacementArea.transform.right;
+            placementAxis.y = 0f;
+
+            if (placementAxis.sqrMagnitude > 0.0001f)
+            {
+                Gizmos.color = Color.cyan;
+                Gizmos.DrawRay(origin, placementAxis.normalized * 0.75f);
+                Gizmos.DrawRay(origin, -placementAxis.normalized * 0.75f);
+            }
+        }
 
         if (constrainAngle)
         {
             Gizmos.color = new Color(1f, 1f, 0f, 0.3f);
-            Vector3 left = Quaternion.AngleAxis(-angleLimit, Vector3.up) * forwardAxis.normalized;
-            Vector3 right = Quaternion.AngleAxis(angleLimit, Vector3.up) * forwardAxis.normalized;
+            Vector3 left = Quaternion.AngleAxis(-angleLimit, Vector3.up) * GetSafeForward();
+            Vector3 right = Quaternion.AngleAxis(angleLimit, Vector3.up) * GetSafeForward();
             Gizmos.DrawRay(origin, left * 1.5f);
             Gizmos.DrawRay(origin, right * 1.5f);
         }

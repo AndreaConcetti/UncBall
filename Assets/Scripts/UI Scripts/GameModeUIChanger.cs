@@ -6,6 +6,7 @@ public class GameModeUIChanger : MonoBehaviour
     [Header("References")]
     public StartEndController startEndController;
     public TurnManager turnManager;
+    public BallLauncher launcher;
 
     [Header("Auto Apply")]
     public bool applyOnStart = true;
@@ -31,6 +32,13 @@ public class GameModeUIChanger : MonoBehaviour
     public GameObject player1TurnActiveObject;
     public GameObject player2TurnActiveObject;
 
+    [Header("Launcher Phase UI")]
+    [Tooltip("Attivo solo durante la fase di placement della ball")]
+    public GameObject placementPhaseObject;
+
+    [Tooltip("Attivo solo durante la fase di aim dopo il lock del placement")]
+    public GameObject aimReadyPhaseObject;
+
     [Header("End Game Winner Texts")]
     public TMP_Text[] winnerTexts;
     public string player1FallbackName = "Player 1";
@@ -45,15 +53,21 @@ public class GameModeUIChanger : MonoBehaviour
         if (turnManager == null)
             turnManager = FindFirstObjectByType<TurnManager>();
 
+        if (launcher == null)
+            launcher = FindFirstObjectByType<BallLauncher>();
+
         if (applyOnStart)
             ApplyCurrentMode();
 
         RefreshTurnActiveUI();
+        RefreshLauncherPhaseUI();
     }
 
     void Update()
     {
         RefreshTurnActiveUI();
+        RefreshLauncherPhaseUI();
+        RefreshTimerText();
     }
 
     public void ApplyCurrentMode()
@@ -70,6 +84,7 @@ public class GameModeUIChanger : MonoBehaviour
         RefreshTargetScoreTexts();
         RefreshTimerText();
         RefreshTurnActiveUI();
+        RefreshLauncherPhaseUI();
     }
 
     public void RefreshPlayerNameTexts()
@@ -126,6 +141,29 @@ public class GameModeUIChanger : MonoBehaviour
 
         if (player2TurnActiveObject != null)
             player2TurnActiveObject.SetActive(isPlayer2Turn);
+    }
+
+    public void RefreshLauncherPhaseUI()
+    {
+        if (launcher == null)
+        {
+            if (placementPhaseObject != null)
+                placementPhaseObject.SetActive(false);
+
+            if (aimReadyPhaseObject != null)
+                aimReadyPhaseObject.SetActive(false);
+
+            return;
+        }
+
+        bool showPlacement = launcher.CurrentPhase == BallLauncher.LaunchPhase.Placement;
+        bool showAimReady = launcher.CurrentPhase == BallLauncher.LaunchPhase.AimReady;
+
+        if (placementPhaseObject != null)
+            placementPhaseObject.SetActive(showPlacement);
+
+        if (aimReadyPhaseObject != null)
+            aimReadyPhaseObject.SetActive(showAimReady);
     }
 
     public void RefreshWinnerTexts(PlayerID winner)

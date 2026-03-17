@@ -9,9 +9,11 @@ using TMPro;
 /// - stuck ball check
 /// - stesso turno dopo punto
 ///
-/// Se StartEndController richiede una transizione di match
-/// (halftime o end match), il TurnManager non avanza al turno successivo
-/// finché la transizione non viene eseguita.
+/// Regola implementata:
+/// se durante il turno corrente entra almeno UNA pallina del player attivo,
+/// il turno rimane allo stesso player.
+/// Inoltre, se cade una pallina vecchia in DeathZone, non deve influenzare il turno.
+/// Solo la watchedBall (pallina del turno corrente) può chiudere il tiro.
 /// </summary>
 public class TurnManager : MonoBehaviour
 {
@@ -52,6 +54,9 @@ public class TurnManager : MonoBehaviour
     private bool hasBallBeenLaunched;
     private float stuckTimer;
     private Vector3 lastWatchedBallPosition;
+
+    // True se durante questo turno il player corrente ha fatto almeno un punto con una sua pallina
+    private bool currentPlayerScoredThisTurn = false;
 
     public bool IsPlayer1Turn => currentPlayer == player1;
     public bool IsPlayer2Turn => currentPlayer == player2;
@@ -133,7 +138,10 @@ public class TurnManager : MonoBehaviour
 
     /// <summary>
     /// Controllo stuck basato SOLO sulla posizione.
-    /// Parte solo dopo il lancio reale e non vale se la ball è ancora nella launch area.
+    /// Vale solo per la watchedBall del turno corrente.
+    /// Se la watchedBall si blocca:
+    /// - se il player corrente aveva già segnato in questo turno, rigioca
+    /// - altrimenti perde il turno
     /// </summary>
     void UpdateStuckBallCheck()
     {
@@ -166,8 +174,17 @@ public class TurnManager : MonoBehaviour
 
             if (stuckTimer >= stuckTimeout)
             {
-                Debug.Log("Palla bloccata troppo a lungo: fine risoluzione del tiro.");
-                ResolveShotWithoutScore();
+                Debug.Log("Palla del turno bloccata troppo a lungo.");
+
+                if (currentPlayerScoredThisTurn)
+                {
+                    HandleSuccessfulTurnResolution();
+                }
+                else
+                {
+                    ResolveShotWithoutScore();
+                }
+
                 return;
             }
         }
@@ -232,6 +249,7 @@ public class TurnManager : MonoBehaviour
         DestroyCurrentBallIfNotLaunched();
 
         ResetStuckBallWatch();
+        ResetTurnScoreState();
 
         if (currentPlayer == player1)
             StartTurn(player2);
@@ -239,10 +257,32 @@ public class TurnManager : MonoBehaviour
             StartTurn(player1);
     }
 
-    public void BallLost()
+    /// <summary>
+    /// Chiamato dalla DeathZone.
+    /// Solo la watchedBall del turno corrente può davvero chiudere il tiro.
+    /// Se cade una pallina vecchia, viene ignorata ai fini del turno.
+    /// </summary>
+    public void BallLost(BallPhysics lostBall)
     {
-        Debug.Log("Palla persa!");
-        ResolveShotWithoutScore();
+        if (lostBall == null)
+            return;
+
+        if (lostBall != watchedBall)
+        {
+            Debug.Log("DeathZone: è caduta una ball non tracciata dal turno corrente, ignorata per il cambio turno.");
+            return;
+        }
+
+        Debug.Log("DeathZone: è caduta la watchedBall del turno corrente.");
+
+        if (currentPlayerScoredThisTurn)
+        {
+            HandleSuccessfulTurnResolution();
+        }
+        else
+        {
+            ResolveShotWithoutScore();
+        }
     }
 
     /// <summary>
@@ -266,14 +306,13 @@ public class TurnManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Chiamato quando il tiro si conclude senza segnare:
-    /// death zone, ball bloccata, ecc.
-    /// Se il match deve entrare in halftime/end, non avanza al turno successivo.
+    /// Tiro fallito: nessun punto utile del player corrente.
     /// </summary>
     void ResolveShotWithoutScore()
     {
         PauseTimer();
         ResetStuckBallWatch();
+        ResetTurnScoreState();
 
         if (player1 != null) player1.ball = null;
         if (player2 != null) player2.ball = null;
@@ -285,6 +324,38 @@ public class TurnManager : MonoBehaviour
         }
 
         EndTurn();
+    }
+
+    /// <summary>
+    /// Tiro riuscito: durante questo turno il player corrente ha segnato almeno una volta.
+    /// Quindi rigioca.
+    /// </summary>
+    void HandleSuccessfulTurnResolution()
+    {
+        if (handlingSuccessfulScore)
+            return;
+
+        handlingSuccessfulScore = true;
+
+        PauseTimer();
+        ResetStuckBallWatch();
+        ResetTurnScoreState();
+
+        if (player1 != null) player1.ball = null;
+        if (player2 != null) player2.ball = null;
+
+        if (startEndController != null && startEndController.ShouldDelayProgressionAfterResolvedShot())
+        {
+            startEndController.HandleResolvedShotTransition();
+            handlingSuccessfulScore = false;
+            return;
+        }
+
+        ResetTimer();
+        ResumeTimer();
+        SpawnBallForCurrentTurn();
+
+        handlingSuccessfulScore = false;
     }
 
     public void ResetTimer()
@@ -311,17 +382,12 @@ public class TurnManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Dopo un punto il turno normalmente NON cambia:
-    /// stesso player, reset timer, nuova ball.
-    ///
-    /// Ma se il match deve entrare in halftime o finire,
-    /// non spawniamo la nuova ball e lasciamo la transizione allo StartEndController.
+    /// Se durante il turno corrente segna almeno una pallina del player attivo,
+    /// il turno diventa "riuscito".
+    /// La prima volta che accade, rigioca subito lo stesso player con nuova ball.
     /// </summary>
     void OnPointsScored(PlayerID playerWhoScored, int newTotal)
     {
-        if (handlingSuccessfulScore)
-            return;
-
         bool pointBelongsToCurrentTurn =
             (playerWhoScored == PlayerID.Player1 && IsPlayer1Turn) ||
             (playerWhoScored == PlayerID.Player2 && IsPlayer2Turn);
@@ -329,33 +395,19 @@ public class TurnManager : MonoBehaviour
         if (!pointBelongsToCurrentTurn)
             return;
 
-        handlingSuccessfulScore = true;
+        currentPlayerScoredThisTurn = true;
 
-        PauseTimer();
-        ResetStuckBallWatch();
-
-        if (startEndController != null && startEndController.ShouldDelayProgressionAfterResolvedShot())
-        {
-            startEndController.HandleResolvedShotTransition();
-            handlingSuccessfulScore = false;
+        if (handlingSuccessfulScore)
             return;
-        }
 
-        ResetTimer();
-        ResumeTimer();
-        SpawnBallForCurrentTurn();
-
-        handlingSuccessfulScore = false;
+        HandleSuccessfulTurnResolution();
     }
 
-    /// <summary>
-    /// Chiamato a halftime: ferma il turno corrente e pulisce i riferimenti runtime.
-    /// Non cambia il player corrente.
-    /// </summary>
     public void SuspendTurnForHalftime()
     {
         PauseTimer();
         ResetStuckBallWatch();
+        ResetTurnScoreState();
 
         if (player1 != null)
             player1.ball = null;
@@ -364,20 +416,13 @@ public class TurnManager : MonoBehaviour
             player2.ball = null;
     }
 
-    /// <summary>
-    /// Riparte il secondo tempo col player specificato.
-    /// Serve per far iniziare P2 nel secondo tempo.
-    /// </summary>
     public void StartSpecificTurn(PlayerController player)
     {
         ResetStuckBallWatch();
+        ResetTurnScoreState();
         StartTurn(player);
     }
 
-    /// <summary>
-    /// Se il turno finisce prima del lancio, elimina la ball corrente e pulisce i riferimenti.
-    /// Se invece la ball è già stata lanciata, non la tocca.
-    /// </summary>
     void DestroyCurrentBallIfNotLaunched()
     {
         if (hasBallBeenLaunched)
@@ -413,6 +458,8 @@ public class TurnManager : MonoBehaviour
         hasBallBeenLaunched = false;
         stuckTimer = 0f;
         lastWatchedBallPosition = ball != null ? ball.transform.position : Vector3.zero;
+
+        currentPlayerScoredThisTurn = false;
     }
 
     void ResetStuckBallWatch()
@@ -422,5 +469,10 @@ public class TurnManager : MonoBehaviour
         hasBallBeenLaunched = false;
         stuckTimer = 0f;
         lastWatchedBallPosition = Vector3.zero;
+    }
+
+    void ResetTurnScoreState()
+    {
+        currentPlayerScoredThisTurn = false;
     }
 }
