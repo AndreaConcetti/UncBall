@@ -3424,6 +3424,22 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 94034231}
     m_Modifications:
+    - target: {fileID: 806528537852395315, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
+      propertyPath: m_Size.x
+      value: 0.18258533
+      objectReference: {fileID: 0}
+    - target: {fileID: 806528537852395315, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
+      propertyPath: m_Size.z
+      value: 3.3566658
+      objectReference: {fileID: 0}
+    - target: {fileID: 806528537852395315, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
+      propertyPath: m_Center.x
+      value: 0.4087076
+      objectReference: {fileID: 0}
+    - target: {fileID: 806528537852395315, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
+      propertyPath: m_Center.z
+      value: -0.993786
+      objectReference: {fileID: 0}
     - target: {fileID: 5305801795648512889, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
       propertyPath: m_IsActive
       value: 0
@@ -9676,7 +9692,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 5.3514495
+  orthographic size: 4.492128
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
