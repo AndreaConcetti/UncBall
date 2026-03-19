@@ -4,7 +4,7 @@ using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Gestisce il flow globale del match:
-/// start, pausa, halftime, overtime, end match e timer globale.
+/// start, pausa, halftime, fine match e timer globale.
 /// </summary>
 public class StartEndController : MonoBehaviour
 {
@@ -41,10 +41,6 @@ public class StartEndController : MonoBehaviour
     public bool enableHalftime = true;
     public bool pauseAtHalftime = true;
 
-    [Header("Overtime")]
-    public bool enableOvertime = true;
-    public float overtimeDuration = 180f;
-
     [Header("Transition Delay")]
     [Tooltip("Attesa dopo la risoluzione dell'ultimo tiro prima di entrare in halftime o finire il match")]
     public float postShotTransitionDelay = 1f;
@@ -77,8 +73,13 @@ public class StartEndController : MonoBehaviour
         if (turnManager == null)
             turnManager = TurnManager.Instance;
 
+#if UNITY_2023_1_OR_NEWER
         if (gameModeUIChanger == null)
             gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
+#else
+        if (gameModeUIChanger == null)
+            gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
+#endif
 
         ApplyMenuSettings();
 
@@ -162,7 +163,7 @@ public class StartEndController : MonoBehaviour
                 gameModeUIChanger.RefreshTimerText();
         }
 
-        if (enableHalftime && !halftimeTriggered && !halftimePending && !scoreManager.IsOvertime)
+        if (enableHalftime && !halftimeTriggered && !halftimePending)
         {
             float halftimeThreshold = matchDuration * 0.5f;
             if (currentMatchTimer <= halftimeThreshold)
@@ -221,8 +222,13 @@ public class StartEndController : MonoBehaviour
         if (turnManager == null)
             turnManager = TurnManager.Instance;
 
+#if UNITY_2023_1_OR_NEWER
         if (gameModeUIChanger == null)
             gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
+#else
+        if (gameModeUIChanger == null)
+            gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
+#endif
 
         if (scoreManager == null)
         {
@@ -254,6 +260,9 @@ public class StartEndController : MonoBehaviour
 
         if (bottomBarOrderSwapper != null)
             bottomBarOrderSwapper.SetOrder(true);
+
+        if (turnManager != null)
+            turnManager.ResumeTimer();
     }
 
     bool ShouldEnterHalftimeNow()
@@ -265,9 +274,6 @@ public class StartEndController : MonoBehaviour
             return false;
 
         if (scoreManager == null)
-            return false;
-
-        if (scoreManager.IsOvertime)
             return false;
 
         if (matchMode != MatchMode.TimeLimit)
@@ -311,7 +317,15 @@ public class StartEndController : MonoBehaviour
     {
         transitionCoroutineRunning = true;
 
-        yield return new WaitForSecondsRealtime(postShotTransitionDelay);
+        float elapsed = 0f;
+
+        while (elapsed < postShotTransitionDelay)
+        {
+            if (!isPaused && !matchEnded)
+                elapsed += Time.unscaledDeltaTime;
+
+            yield return null;
+        }
 
         if (halftimePending)
         {
@@ -356,19 +370,6 @@ public class StartEndController : MonoBehaviour
     void ExecuteEndOfTimeRule()
     {
         endOfTimePending = false;
-
-        if (scoreManager.IsOvertime)
-        {
-            RequestEndMatch(GetWinnerOrNone());
-            return;
-        }
-
-        if (enableOvertime && scoreManager.ScoreP1 == scoreManager.ScoreP2)
-        {
-            StartOvertime();
-            return;
-        }
-
         RequestEndMatch(GetWinnerOrNone());
     }
 
@@ -426,25 +427,12 @@ public class StartEndController : MonoBehaviour
         Time.timeScale = 1f;
 
         if (turnManager != null)
+        {
+            turnManager.ResumeTimer();
             turnManager.StartSpecificTurn(turnManager.player2);
+        }
 
         RefreshModeUI();
-    }
-
-    public void StartOvertime()
-    {
-        if (scoreManager == null)
-            return;
-
-        currentMatchTimer = overtimeDuration;
-
-        if (gameModeUIChanger != null)
-            gameModeUIChanger.RefreshTimerText();
-
-        halftimePending = false;
-        endOfTimePending = false;
-
-        scoreManager.BeginOvertime();
     }
 
     public void PauseMatch()
@@ -452,7 +440,13 @@ public class StartEndController : MonoBehaviour
         if (!matchStarted || matchEnded || isPaused)
             return;
 
+        if (scoreManager != null && scoreManager.IsHalftime)
+            return;
+
         isPaused = true;
+
+        if (turnManager != null)
+            turnManager.PauseTimer();
 
         if (pausePanel != null)
             pausePanel.SetActive(true);
@@ -475,6 +469,9 @@ public class StartEndController : MonoBehaviour
             pausePanel.SetActive(false);
 
         Time.timeScale = 1f;
+
+        if (turnManager != null)
+            turnManager.ResumeTimer();
     }
 
     public void TogglePause()
@@ -520,6 +517,9 @@ public class StartEndController : MonoBehaviour
         halftimePending = false;
         endOfTimePending = false;
 
+        if (turnManager != null)
+            turnManager.PauseTimer();
+
         if (pausePanel != null) pausePanel.SetActive(false);
         if (halftimePanel != null) halftimePanel.SetActive(false);
         if (gameUIPanel != null) gameUIPanel.SetActive(false);
@@ -554,6 +554,9 @@ public class StartEndController : MonoBehaviour
 
         if (bottomBarOrderSwapper != null)
             bottomBarOrderSwapper.SetOrder(true);
+
+        if (turnManager != null)
+            turnManager.ResumeTimer();
     }
 
     public void ResetTimeScale()

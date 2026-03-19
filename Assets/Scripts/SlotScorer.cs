@@ -1,38 +1,41 @@
 using UnityEngine;
 
 /// <summary>
-/// Attached to each individual slot collider inside a Star Plate prefab.
-/// Detects when a ball enters and reports it up to the parent StarPlate.
+/// Da mettere su ogni slot trigger della board.
+/// Quando una ball entra nello slot, inoltra tutto alla StarPlate padre.
 /// </summary>
 [RequireComponent(typeof(Collider))]
 public class SlotScorer : MonoBehaviour
 {
     [Header("Identity")]
-    [Tooltip("The Star Plate this slot belongs to — assign the parent StarPlate component")]
+    [Tooltip("StarPlate padre di questo slot")]
     public StarPlate parentPlate;
 
-    [Tooltip("Unique index of this slot within the plate (0-based). Used to track which slots are filled.")]
+    [Tooltip("Indice univoco dello slot dentro la plate")]
     public int slotIndex;
 
-    private void Awake()
+    void Awake()
     {
-        // Ensure the collider is a trigger
-        GetComponent<Collider>().isTrigger = true;
+        Collider col = GetComponent<Collider>();
+        col.isTrigger = true;
 
-        // Auto-find parent StarPlate if not assigned
         if (parentPlate == null)
             parentPlate = GetComponentInParent<StarPlate>();
     }
 
-    private void OnTriggerEnter(Collider other)
+    void OnTriggerEnter(Collider other)
     {
-        // Check if what entered is a ball and belongs to a player
         BallPhysics ball = other.GetComponent<BallPhysics>();
-        if (ball == null) return;
+        if (ball == null)
+            return;
 
-        PlayerID owner = other.GetComponent<BallOwnership>()?.Owner ?? PlayerID.None;
-        if (owner == PlayerID.None) return;
+        BallOwnership ownership = other.GetComponent<BallOwnership>();
+        PlayerID owner = ownership != null ? ownership.Owner : PlayerID.None;
 
-        parentPlate?.OnBallEntered(slotIndex, owner, ball);
+        if (owner == PlayerID.None)
+            return;
+
+        if (parentPlate != null)
+            parentPlate.OnBallEntered(slotIndex, owner, ball, transform);
     }
 }

@@ -39,11 +39,27 @@ public class GameModeUIChanger : MonoBehaviour
     [Tooltip("Attivo solo durante la fase di aim dopo il lock del placement")]
     public GameObject aimReadyPhaseObject;
 
+    [Header("Tutorial Prompt Settings")]
+    [Tooltip("Se disattivato, i prompt Placement e Aim Ready non vengono mai mostrati")]
+    public bool tutorialPromptsEnabled = true;
+
+    [Tooltip("Salva ON/OFF tra una sessione e l'altra")]
+    public bool saveTutorialPromptPreference = true;
+
+    [Header("Tutorial Prompt Toggle UI")]
+    [Tooltip("Oggetto visibile quando il tutorial prompt è ON")]
+    public GameObject tutorialPromptOnButton;
+
+    [Tooltip("Oggetto visibile quando il tutorial prompt è OFF")]
+    public GameObject tutorialPromptOffButton;
+
     [Header("End Game Winner Texts")]
     public TMP_Text[] winnerTexts;
     public string player1FallbackName = "Player 1";
     public string player2FallbackName = "Player 2";
     public string winnerSuffix = " Wins!";
+
+    private const string TutorialPromptsPrefsKey = "TutorialPromptsEnabled";
 
     void Start()
     {
@@ -56,11 +72,15 @@ public class GameModeUIChanger : MonoBehaviour
         if (launcher == null)
             launcher = FindFirstObjectByType<BallLauncher>();
 
+        LoadTutorialPromptPreference();
+
         if (applyOnStart)
             ApplyCurrentMode();
 
         RefreshTurnActiveUI();
         RefreshLauncherPhaseUI();
+        RefreshTutorialPromptButtons();
+        RefreshTimerText();
     }
 
     void Update()
@@ -85,6 +105,7 @@ public class GameModeUIChanger : MonoBehaviour
         RefreshTimerText();
         RefreshTurnActiveUI();
         RefreshLauncherPhaseUI();
+        RefreshTutorialPromptButtons();
     }
 
     public void RefreshPlayerNameTexts()
@@ -145,6 +166,17 @@ public class GameModeUIChanger : MonoBehaviour
 
     public void RefreshLauncherPhaseUI()
     {
+        if (!tutorialPromptsEnabled)
+        {
+            if (placementPhaseObject != null)
+                placementPhaseObject.SetActive(false);
+
+            if (aimReadyPhaseObject != null)
+                aimReadyPhaseObject.SetActive(false);
+
+            return;
+        }
+
         if (launcher == null)
         {
             if (placementPhaseObject != null)
@@ -202,6 +234,66 @@ public class GameModeUIChanger : MonoBehaviour
     {
         SetObjectsActive(timeModeObjects, false);
         SetObjectsActive(scoreModeObjects, true);
+    }
+
+    public void ToggleTutorialPrompts()
+    {
+        SetTutorialPromptsEnabled(!tutorialPromptsEnabled);
+    }
+
+    public void EnableTutorialPrompts()
+    {
+        Debug.Log("[GameModeUIChanger] EnableTutorialPrompts");
+        SetTutorialPromptsEnabled(true);
+    }
+
+    public void DisableTutorialPrompts()
+    {
+        Debug.Log("[GameModeUIChanger] DisableTutorialPrompts");
+        SetTutorialPromptsEnabled(false);
+    }
+
+    public void SetTutorialPromptsEnabled(bool enabled)
+    {
+        tutorialPromptsEnabled = enabled;
+
+        Debug.Log("[GameModeUIChanger] tutorialPromptsEnabled = " + tutorialPromptsEnabled);
+
+        SaveTutorialPromptPreference();
+        RefreshTutorialPromptButtons();
+        RefreshLauncherPhaseUI();
+    }
+
+    public bool AreTutorialPromptsEnabled()
+    {
+        return tutorialPromptsEnabled;
+    }
+
+    public void RefreshTutorialPromptButtons()
+    {
+        if (tutorialPromptOnButton != null)
+            tutorialPromptOnButton.SetActive(tutorialPromptsEnabled);
+
+        if (tutorialPromptOffButton != null)
+            tutorialPromptOffButton.SetActive(!tutorialPromptsEnabled);
+    }
+
+    void LoadTutorialPromptPreference()
+    {
+        if (!saveTutorialPromptPreference)
+            return;
+
+        if (PlayerPrefs.HasKey(TutorialPromptsPrefsKey))
+            tutorialPromptsEnabled = PlayerPrefs.GetInt(TutorialPromptsPrefsKey, 1) == 1;
+    }
+
+    void SaveTutorialPromptPreference()
+    {
+        if (!saveTutorialPromptPreference)
+            return;
+
+        PlayerPrefs.SetInt(TutorialPromptsPrefsKey, tutorialPromptsEnabled ? 1 : 0);
+        PlayerPrefs.Save();
     }
 
     string GetPlayer1Name()

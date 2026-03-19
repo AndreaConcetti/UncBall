@@ -1,16 +1,27 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.Events;
 
-/// <summary>
-/// Gestisce solo punteggi ed eventi legati allo score.
-/// Non possiede più il clock del match.
-/// Lo stato globale del match è orchestrato da StartEndController.
-/// </summary>
+[Serializable]
+public class ShotScoreData
+{
+    public PlayerID owner;
+    public int shotPoints;
+    public int newTotalScore;
+    public int plateNumber;
+    public int comboStreak;
+    public bool isFullStar;
+    public Vector3 slotWorldPosition;
+}
+
+[Serializable]
+public class ShotScoreDataEvent : UnityEvent<ShotScoreData> { }
+
 public class ScoreManagerNew : MonoBehaviour
 {
     public static ScoreManagerNew Instance { get; private set; }
 
-    private void Awake()
+    void Awake()
     {
         if (Instance != null && Instance != this)
         {
@@ -21,11 +32,12 @@ public class ScoreManagerNew : MonoBehaviour
         Instance = this;
     }
 
-    [Header("Star Plates (assign all 3)")]
+    [Header("Star Plates")]
     public StarPlate[] starPlates = new StarPlate[3];
 
     [Header("Events")]
     public UnityEvent<PlayerID, int> onPointsScored;
+    public ShotScoreDataEvent onShotScoreDetailed;
     public UnityEvent onHalftime;
     public UnityEvent<PlayerID> onMatchEnd;
     public UnityEvent onOvertimeStart;
@@ -37,10 +49,6 @@ public class ScoreManagerNew : MonoBehaviour
     public bool IsOvertime { get; private set; }
     public bool MatchActive { get; private set; }
 
-    /// <summary>
-    /// Resetta i punteggi e lo stato score-related del match.
-    /// Il clock non viene gestito qui.
-    /// </summary>
     public void StartMatch()
     {
         ScoreP1 = 0;
@@ -50,15 +58,12 @@ public class ScoreManagerNew : MonoBehaviour
         IsOvertime = false;
         MatchActive = true;
 
-        foreach (var plate in starPlates)
+        foreach (StarPlate plate in starPlates)
             plate?.ResetPlate();
 
         Debug.Log("[ScoreManager] Match started.");
     }
 
-    /// <summary>
-    /// Entra in halftime. La gestione della pausa e della UI è esterna.
-    /// </summary>
     public void BeginHalftime()
     {
         if (!MatchActive || IsHalftime)
@@ -69,9 +74,6 @@ public class ScoreManagerNew : MonoBehaviour
         onHalftime?.Invoke();
     }
 
-    /// <summary>
-    /// Chiude l'halftime e resetta le board per il secondo tempo.
-    /// </summary>
     public void EndHalftime()
     {
         if (!MatchActive || !IsHalftime)
@@ -79,15 +81,12 @@ public class ScoreManagerNew : MonoBehaviour
 
         IsHalftime = false;
 
-        foreach (var plate in starPlates)
+        foreach (StarPlate plate in starPlates)
             plate?.ResetPlate();
 
         Debug.Log("[ScoreManager] Halftime ended.");
     }
 
-    /// <summary>
-    /// Entra in overtime. Da qui in poi il primo punto può chiudere il match.
-    /// </summary>
     public void BeginOvertime()
     {
         if (!MatchActive || IsOvertime)
@@ -98,9 +97,6 @@ public class ScoreManagerNew : MonoBehaviour
         onOvertimeStart?.Invoke();
     }
 
-    /// <summary>
-    /// Chiude ufficialmente il match e notifica il vincitore.
-    /// </summary>
     public void EndMatch(PlayerID winner)
     {
         if (!MatchActive)
@@ -108,14 +104,11 @@ public class ScoreManagerNew : MonoBehaviour
 
         MatchActive = false;
 
-        Debug.Log($"[ScoreManager] Match over. Winner: {winner} | P1: {ScoreP1}  P2: {ScoreP2}");
+        Debug.Log($"[ScoreManager] Match over. Winner: {winner} | P1: {ScoreP1} | P2: {ScoreP2}");
         onMatchEnd?.Invoke(winner);
     }
 
-    /// <summary>
-    /// Chiamato da StarPlate dopo il calcolo del tiro.
-    /// </summary>
-    public void AddPoints(PlayerID owner, int points, int plateNumber, int comboStreak, bool isFullStar)
+    public void AddPoints(PlayerID owner, int points, int plateNumber, int comboStreak, bool isFullStar, Vector3 slotWorldPosition)
     {
         if (!MatchActive)
             return;
@@ -124,16 +117,28 @@ public class ScoreManagerNew : MonoBehaviour
             ScoreP1 += points;
         else if (owner == PlayerID.Player2)
             ScoreP2 += points;
+        else
+            return;
 
         int newTotal = owner == PlayerID.Player1 ? ScoreP1 : ScoreP2;
 
-        Debug.Log($"[ScoreManager] {owner} +{points} pts (plate {plateNumber}, " +
-                  $"streak x{comboStreak}{(isFullStar ? ", FULL STAR" : "")}) " +
-                  $"→ total {newTotal}  |  P1:{ScoreP1}  P2:{ScoreP2}");
+        Debug.Log($"[ScoreManager] {owner} +{points} pts (plate {plateNumber}, streak x{comboStreak}{(isFullStar ? ", FULL STAR" : "")}) -> total {newTotal} | P1:{ScoreP1} | P2:{ScoreP2}");
 
         onPointsScored?.Invoke(owner, newTotal);
 
-        // Sudden death in overtime: il primo punto chiude il match.
+        ShotScoreData data = new ShotScoreData
+        {
+            owner = owner,
+            shotPoints = points,
+            newTotalScore = newTotal,
+            plateNumber = plateNumber,
+            comboStreak = comboStreak,
+            isFullStar = isFullStar,
+            slotWorldPosition = slotWorldPosition
+        };
+
+        onShotScoreDetailed?.Invoke(data);
+
         if (IsOvertime && points > 0)
             EndMatch(owner);
     }
