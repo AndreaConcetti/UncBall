@@ -6,11 +6,12 @@ public class DeathZone : MonoBehaviour
     {
         BallPhysics ball = other.GetComponent<BallPhysics>();
 
-        if (ball != null)
-        {
-            TurnManager.Instance.BallLost();
+        if (ball == null)
+            return;
 
-            Destroy(other.gameObject);
-        }
+        if (TurnManager.Instance != null)
+            TurnManager.Instance.BallLost(ball);
+
+        Destroy(other.gameObject);
     }
 }

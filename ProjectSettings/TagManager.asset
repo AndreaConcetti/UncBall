@@ -5,6 +5,8 @@ TagManager:
   serializedVersion: 3
   tags:
   - Ball
+  - CurrentScoreP1
+  - CurrentScoreP2
   layers:
   - Default
   - TransparentFX
