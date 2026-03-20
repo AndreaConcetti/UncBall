@@ -5840,7 +5840,7 @@ MonoBehaviour:
   doubleTapMaxInterval: 0.3
   minForce: 15
   maxForce: 36.5
-  maxSwipePixels: 420
+  maxSwipePixels: 550
   minLaunchSwipePixels: 30
   chargeCurveExponent: 1.45
   useForwardOnlyForPower: 1
