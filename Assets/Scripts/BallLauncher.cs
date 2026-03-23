@@ -17,6 +17,7 @@ public class BallLauncher : MonoBehaviour
     public BallPhysics ball;
     public BallCameraController cameraController;
     public Camera gameplayCamera;
+    public StartEndController startEndController;
 
     [Header("Placement")]
     [Tooltip("Area di placement valida per la ball corrente")]
@@ -65,6 +66,10 @@ public class BallLauncher : MonoBehaviour
     public bool enableTouchSimulationInEditor = true;
     public bool allowMouseInputInEditor = true;
 
+    [Header("Gameplay Input Lock")]
+    [Tooltip("Se attivo, blocca placement/aim/launch quando la partita è in pausa")]
+    public bool blockGameplayInputWhenPaused = true;
+
     [Header("Debug")]
     public bool debugLogs = false;
 
@@ -95,6 +100,20 @@ public class BallLauncher : MonoBehaviour
     private Vector3 placementDragStartWorldPoint;
     private Vector3 placementDragStartBallWorldPosition;
 
+    // Serve per rilevare il cambio stato verso pausa e pulire input in corso
+    private bool wasGameplayInputLockedLastFrame;
+
+    void Awake()
+    {
+#if UNITY_2023_1_OR_NEWER
+        if (startEndController == null)
+            startEndController = FindFirstObjectByType<StartEndController>();
+#else
+        if (startEndController == null)
+            startEndController = FindObjectOfType<StartEndController>();
+#endif
+    }
+
     void OnEnable()
     {
         EnhancedTouchSupport.Enable();
@@ -122,6 +141,21 @@ public class BallLauncher : MonoBehaviour
 
         if (gameplayCamera == null)
             gameplayCamera = Camera.main;
+
+        bool gameplayInputLocked = IsGameplayInputLocked();
+
+        if (gameplayInputLocked && !wasGameplayInputLockedLastFrame)
+        {
+            CancelAllCurrentInputState();
+
+            if (debugLogs)
+                Debug.Log("[BallLauncher] Gameplay input locked because match is paused.");
+        }
+
+        wasGameplayInputLockedLastFrame = gameplayInputLocked;
+
+        if (gameplayInputLocked)
+            return;
 
         HandleKeyboardConfirm();
         HandleTouchInput();
@@ -172,17 +206,25 @@ public class BallLauncher : MonoBehaviour
 
         cameraController?.SetAiming(false);
 
+        wasGameplayInputLockedLastFrame = IsGameplayInputLocked();
+
         if (debugLogs)
             Debug.Log("[BallLauncher] Reset -> Placement");
     }
 
     public void ConfirmPlacementFromUI()
     {
+        if (IsGameplayInputLocked())
+            return;
+
         ConfirmPlacement();
     }
 
     void HandleKeyboardConfirm()
     {
+        if (IsGameplayInputLocked())
+            return;
+
         if (!allowKeyboardConfirm || CurrentPhase != LaunchPhase.Placement || hasLaunched)
             return;
 
@@ -195,6 +237,9 @@ public class BallLauncher : MonoBehaviour
 
     void HandleTouchInput()
     {
+        if (IsGameplayInputLocked())
+            return;
+
         if (Touch.activeTouches.Count == 0)
             return;
 
@@ -264,6 +309,9 @@ public class BallLauncher : MonoBehaviour
     void HandleMouseInput()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
+        if (IsGameplayInputLocked())
+            return;
+
         if (!allowMouseInputInEditor)
             return;
 
@@ -504,6 +552,9 @@ public class BallLauncher : MonoBehaviour
 
     void ConfirmPlacement()
     {
+        if (IsGameplayInputLocked())
+            return;
+
         if (CurrentPhase != LaunchPhase.Placement)
             return;
 
@@ -519,6 +570,9 @@ public class BallLauncher : MonoBehaviour
 
     void BeginAimSwipe(Touch touch)
     {
+        if (IsGameplayInputLocked())
+            return;
+
         if (CurrentPhase != LaunchPhase.AimReady || hasLaunched)
             return;
 
@@ -573,6 +627,9 @@ public class BallLauncher : MonoBehaviour
 
     void DoLaunch()
     {
+        if (IsGameplayInputLocked())
+            return;
+
         if (hasLaunched || ball == null)
             return;
 
@@ -715,8 +772,53 @@ public class BallLauncher : MonoBehaviour
         activeFinger = null;
     }
 
+    void CancelAllCurrentInputState()
+    {
+        activeFinger = null;
+
+        isPlacementDragging = false;
+        isAimTracking = false;
+        hasPlacementDragStart = false;
+
+        mousePlacementDragging = false;
+        mouseAimDragging = false;
+
+        aimStartScreen = Vector2.zero;
+        mouseAimStartScreen = Vector2.zero;
+
+        ChargeRatio = 0f;
+
+        if (CurrentPhase == LaunchPhase.AimReady)
+            LaunchDirection = GetSafeForward();
+        else
+            LaunchDirection = Vector3.zero;
+    }
+
+    bool IsGameplayInputLocked()
+    {
+        if (!blockGameplayInputWhenPaused)
+            return false;
+
+        if (startEndController == null)
+        {
+#if UNITY_2023_1_OR_NEWER
+            startEndController = FindFirstObjectByType<StartEndController>();
+#else
+            startEndController = FindObjectOfType<StartEndController>();
+#endif
+        }
+
+        if (startEndController == null)
+            return false;
+
+        return startEndController.IsPaused() || startEndController.IsMatchEnded();
+    }
+
     public void Launch(Vector3 direction, float force)
     {
+        if (IsGameplayInputLocked())
+            return;
+
         if (ball == null)
             return;
 
