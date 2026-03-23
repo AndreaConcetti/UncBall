@@ -4,21 +4,45 @@ using TMPro;
 
 public class MainMenu : MonoBehaviour
 {
+    public enum GameMode
+    {
+        Versus = 0,
+        Bot = 1,
+        Multiplayer = 2
+    }
+
+    public static GameMode selectedGameMode = GameMode.Versus;
     public static StartEndController.MatchMode selectedMatchMode = StartEndController.MatchMode.ScoreTarget;
+
     public static int selectedPointsToWin = 16;
     public static float selectedMatchDuration = 180f;
 
     public static string selectedPlayer1Name = "Player 1";
     public static string selectedPlayer2Name = "Player 2";
 
-    [Header("Scene")]
-    public int gameplaySceneIndex = 1;
+    [Header("Scene References")]
+    [Tooltip("Scena gameplay della modalità Versus, usata sia per TimeLimit che per ScoreTarget")]
+    public string versusSceneName = "Gameplay";
+
+    [Tooltip("Scena placeholder futura per la modalità BOT")]
+    public string botSceneName = "BotMenu";
+
+    [Tooltip("Scena placeholder futura per la modalità Multiplayer")]
+    public string multiplayerSceneName = "MultiplayerMenu";
+
+    [Header("Time Mode Presets")]
+    [Tooltip("Durate selezionabili per la modalità a tempo, in secondi")]
+    public int[] timeModeDurationPresets = new int[] { 180, 300, 360 };
+
+    [Tooltip("Indice preset iniziale selezionato")]
+    public int defaultTimePresetIndex = 0;
+
+    [Tooltip("Testo che mostra la durata attualmente selezionata")]
+    public TMP_Text timeModeDurationText;
 
     [Header("Time Mode Inputs")]
-    public TMP_InputField timeModeMatchDurationInputField;
     public TMP_InputField timeModePlayer1NameInputField;
     public TMP_InputField timeModePlayer2NameInputField;
-    public float defaultMatchDuration = 180f;
 
     [Header("Score Mode Inputs")]
     public TMP_InputField scoreModePointsToWinInputField;
@@ -30,10 +54,14 @@ public class MainMenu : MonoBehaviour
     public string defaultPlayer1Name = "Player 1";
     public string defaultPlayer2Name = "Player 2";
 
+    private int currentTimePresetIndex;
+
     void Start()
     {
-        if (timeModeMatchDurationInputField != null)
-            timeModeMatchDurationInputField.text = Mathf.RoundToInt(defaultMatchDuration).ToString();
+        ValidateTimePresets();
+
+        currentTimePresetIndex = Mathf.Clamp(defaultTimePresetIndex, 0, timeModeDurationPresets.Length - 1);
+        selectedMatchDuration = timeModeDurationPresets[currentTimePresetIndex];
 
         if (scoreModePointsToWinInputField != null)
             scoreModePointsToWinInputField.text = defaultPointsToWin.ToString();
@@ -49,32 +77,96 @@ public class MainMenu : MonoBehaviour
 
         if (scoreModePlayer2NameInputField != null)
             scoreModePlayer2NameInputField.text = defaultPlayer2Name;
+
+        RefreshTimeDurationUI();
     }
 
-    public void PlayTimeMode()
+    void ValidateTimePresets()
     {
+        if (timeModeDurationPresets == null || timeModeDurationPresets.Length == 0)
+            timeModeDurationPresets = new int[] { 180, 300, 360 };
+
+        for (int i = 0; i < timeModeDurationPresets.Length; i++)
+        {
+            if (timeModeDurationPresets[i] < 1)
+                timeModeDurationPresets[i] = 1;
+        }
+    }
+
+    public void NextTimeDurationPreset()
+    {
+        ValidateTimePresets();
+
+        currentTimePresetIndex++;
+
+        if (currentTimePresetIndex >= timeModeDurationPresets.Length)
+            currentTimePresetIndex = 0;
+
+        selectedMatchDuration = timeModeDurationPresets[currentTimePresetIndex];
+        RefreshTimeDurationUI();
+    }
+
+    public void PreviousTimeDurationPreset()
+    {
+        ValidateTimePresets();
+
+        currentTimePresetIndex--;
+
+        if (currentTimePresetIndex < 0)
+            currentTimePresetIndex = timeModeDurationPresets.Length - 1;
+
+        selectedMatchDuration = timeModeDurationPresets[currentTimePresetIndex];
+        RefreshTimeDurationUI();
+    }
+
+    public void SetTimeDurationPresetByIndex(int presetIndex)
+    {
+        ValidateTimePresets();
+
+        currentTimePresetIndex = Mathf.Clamp(presetIndex, 0, timeModeDurationPresets.Length - 1);
+        selectedMatchDuration = timeModeDurationPresets[currentTimePresetIndex];
+        RefreshTimeDurationUI();
+    }
+
+    public void PlayVersusTimeMode()
+    {
+        ValidateTimePresets();
+
+        selectedGameMode = GameMode.Versus;
         selectedMatchMode = StartEndController.MatchMode.TimeLimit;
-        selectedMatchDuration = ReadTimeModeMatchDuration();
+
+        selectedMatchDuration = timeModeDurationPresets[currentTimePresetIndex];
         selectedPointsToWin = defaultPointsToWin;
 
         selectedPlayer1Name = ReadPlayerName(timeModePlayer1NameInputField, defaultPlayer1Name);
         selectedPlayer2Name = ReadPlayerName(timeModePlayer2NameInputField, defaultPlayer2Name);
 
-        Time.timeScale = 1f;
-        SceneManager.LoadScene(gameplaySceneIndex);
+        LoadSceneSafe(versusSceneName);
     }
 
-    public void PlayScoreMode()
+    public void PlayVersusScoreMode()
     {
+        selectedGameMode = GameMode.Versus;
         selectedMatchMode = StartEndController.MatchMode.ScoreTarget;
+
         selectedPointsToWin = ReadScoreModePointsToWin();
-        selectedMatchDuration = defaultMatchDuration;
 
         selectedPlayer1Name = ReadPlayerName(scoreModePlayer1NameInputField, defaultPlayer1Name);
         selectedPlayer2Name = ReadPlayerName(scoreModePlayer2NameInputField, defaultPlayer2Name);
 
-        Time.timeScale = 1f;
-        SceneManager.LoadScene(gameplaySceneIndex);
+        LoadSceneSafe(versusSceneName);
+    }
+
+    public void OpenBotMode()
+    {
+        selectedGameMode = GameMode.Bot;
+        LoadSceneSafe(botSceneName);
+    }
+
+    public void OpenMultiplayerMode()
+    {
+        selectedGameMode = GameMode.Multiplayer;
+        LoadSceneSafe(multiplayerSceneName);
     }
 
     public void BackToMenu()
@@ -83,24 +175,22 @@ public class MainMenu : MonoBehaviour
         SceneManager.LoadScene("MainMenu");
     }
 
-    float ReadTimeModeMatchDuration()
+    void LoadSceneSafe(string sceneName)
     {
-        if (timeModeMatchDurationInputField == null)
-            return defaultMatchDuration;
-
-        string rawValue = timeModeMatchDurationInputField.text;
-
-        if (float.TryParse(rawValue, out float parsedValue))
+        if (string.IsNullOrWhiteSpace(sceneName))
         {
-            if (parsedValue < 1f)
-                parsedValue = 1f;
-
-            timeModeMatchDurationInputField.text = Mathf.RoundToInt(parsedValue).ToString();
-            return parsedValue;
+            Debug.LogError("[MainMenu] Scene name is empty.");
+            return;
         }
 
-        timeModeMatchDurationInputField.text = Mathf.RoundToInt(defaultMatchDuration).ToString();
-        return defaultMatchDuration;
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(sceneName);
+    }
+
+    void RefreshTimeDurationUI()
+    {
+        if (timeModeDurationText != null)
+            timeModeDurationText.text = timeModeDurationPresets[currentTimePresetIndex].ToString();
     }
 
     int ReadScoreModePointsToWin()
@@ -137,5 +227,16 @@ public class MainMenu : MonoBehaviour
         }
 
         return value;
+    }
+
+    public int GetCurrentTimePresetIndex()
+    {
+        return currentTimePresetIndex;
+    }
+
+    public int GetCurrentTimePresetValue()
+    {
+        ValidateTimePresets();
+        return timeModeDurationPresets[currentTimePresetIndex];
     }
 }
