@@ -1,10 +1,10 @@
 ﻿using UnityEngine;
 
 /// <summary>
-/// Camera controller con:
-/// - overview strategica ortografica + AutoFit
-/// - aim lato sinistro/destro in perspective
-/// - ritorno dopo il lancio verso la posa overview salvata prima dell'aim
+/// Camera controller:
+/// - overview ortografica con viewport fisso e autofit
+/// - aim perspective sui due lati
+/// - ritorno alla overview dopo il lancio
 /// </summary>
 public class BallCameraController : MonoBehaviour
 {
@@ -16,13 +16,8 @@ public class BallCameraController : MonoBehaviour
     public CameraViewportFitter viewportFitter;
 
     [Header("Camera Positions")]
-    [Tooltip("Anchor base overview. Serve come punto iniziale per il fit strategic.")]
     public Transform overviewAnchor;
-
-    [Tooltip("Anchor aim per il lato sinistro del tavolo")]
     public Transform leftSideAimAnchor;
-
-    [Tooltip("Anchor aim per il lato destro del tavolo")]
     public Transform rightSideAimAnchor;
 
     [Header("Transition")]
@@ -30,27 +25,24 @@ public class BallCameraController : MonoBehaviour
     public float transitionSpeed = 5f;
 
     [Header("Overview Orthographic")]
-    [Tooltip("Fallback se AutoFitOrthographicCamera non è assegnato")]
     public float overviewOrthoSizeFallback = 4f;
 
     [Header("Aim Perspective")]
-    [Tooltip("Se true, in aim la camera passa a perspective")]
     public bool usePerspectiveInAim = true;
 
-    [Tooltip("FOV usato in aim quando il player di turno è sul lato sinistro")]
     [Range(10f, 90f)]
     public float leftAimFieldOfView = 35f;
 
-    [Tooltip("FOV usato in aim quando il player di turno è sul lato destro")]
     [Range(10f, 90f)]
     public float rightAimFieldOfView = 35f;
 
-    [Tooltip("Se false, in aim resta orthographic e usa aimOrthoSize")]
     public float aimOrthoSize = 3f;
 
     [Header("Aim Viewport")]
-    [Tooltip("Se true, anche durante l'aim mantiene il viewport ristretto dalla UI")]
     public bool keepViewportInAim = true;
+
+    [Header("Debug")]
+    public bool debugLogs = false;
 
     private bool isAiming;
 
@@ -119,10 +111,6 @@ public class BallCameraController : MonoBehaviour
         cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, targetRotation, t);
     }
 
-    /// <summary>
-    /// aiming = true  -> entra in aim e salva prima la posa overview attuale
-    /// aiming = false -> torna in overview ricalcolando il fit e aggiornando la cache
-    /// </summary>
     public void SetAiming(bool aiming)
     {
         if (cam == null)
@@ -152,12 +140,11 @@ public class BallCameraController : MonoBehaviour
 
         targetPosition = aimAnchor.position;
         targetRotation = aimAnchor.rotation;
+
+        if (debugLogs)
+            Debug.Log("[BallCameraController] Enter aim.");
     }
 
-    /// <summary>
-    /// Da chiamare nel momento esatto in cui la ball parte.
-    /// Ritorna alla posa overview salvata prima dell'aim.
-    /// </summary>
     public void OnBallLaunched()
     {
         if (cam == null)
@@ -177,12 +164,11 @@ public class BallCameraController : MonoBehaviour
 
         targetPosition = cachedOverviewPosition;
         targetRotation = cachedOverviewRotation;
+
+        if (debugLogs)
+            Debug.Log("[BallCameraController] Return to overview after launch.");
     }
 
-    /// <summary>
-    /// Da richiamare se cambia layout UI / safe area / risoluzione
-    /// mentre sei già in overview.
-    /// </summary>
     public void RefreshOverviewIfNeeded()
     {
         if (!isAiming)
@@ -218,13 +204,14 @@ public class BallCameraController : MonoBehaviour
         {
             cam.transform.position = cachedOverviewPosition;
             cam.transform.rotation = cachedOverviewRotation;
-            targetPosition = cachedOverviewPosition;
-            targetRotation = cachedOverviewRotation;
         }
-        else
+
+        targetPosition = cachedOverviewPosition;
+        targetRotation = cachedOverviewRotation;
+
+        if (debugLogs)
         {
-            targetPosition = cachedOverviewPosition;
-            targetRotation = cachedOverviewRotation;
+            Debug.Log($"[BallCameraController] Overview applied. Rect={cam.rect}, OrthoSize={cam.orthographicSize}");
         }
     }
 

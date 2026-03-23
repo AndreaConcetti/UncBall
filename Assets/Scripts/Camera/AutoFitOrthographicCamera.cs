@@ -4,6 +4,13 @@ using UnityEngine;
 [RequireComponent(typeof(Camera))]
 public class AutoFitOrthographicCamera : MonoBehaviour
 {
+    public enum FitMode
+    {
+        FitEntireBounds = 0,
+        MaximizeWidth = 1,
+        WidthOnlyUnsafe = 2
+    }
+
     [Header("References")]
     public Camera targetCamera;
     public Transform targetRoot;
@@ -13,7 +20,11 @@ public class AutoFitOrthographicCamera : MonoBehaviour
     public Collider[] collidersToFit;
 
     [Header("Fit Settings")]
-    [Min(0f)] public float worldMargin = 0.15f;
+    public FitMode fitMode = FitMode.MaximizeWidth;
+
+    [Min(0f)] public float worldMarginHorizontal = 0.02f;
+    [Min(0f)] public float worldMarginVertical = 0.02f;
+
     public bool fitOnStart = true;
     public bool fitContinuously = true;
     public bool recenterCamera = false;
@@ -21,8 +32,12 @@ public class AutoFitOrthographicCamera : MonoBehaviour
     [Header("Center Offset")]
     public Vector3 worldCenterOffset = Vector3.zero;
 
-    private int lastScreenWidth;
-    private int lastScreenHeight;
+    [Header("Debug")]
+    public bool debugLogs = false;
+
+    private int lastScreenWidth = -1;
+    private int lastScreenHeight = -1;
+    private Rect lastCameraRect = new Rect(-1f, -1f, -1f, -1f);
 
     void Reset()
     {
@@ -40,7 +55,7 @@ public class AutoFitOrthographicCamera : MonoBehaviour
         if (fitOnStart)
             FitNow();
 
-        CacheScreenSize();
+        CacheState();
     }
 
     void LateUpdate()
@@ -48,7 +63,7 @@ public class AutoFitOrthographicCamera : MonoBehaviour
         if (!fitContinuously)
             return;
 
-        if (ScreenSizeChanged())
+        if (NeedsRefit())
             FitNow();
     }
 
@@ -71,11 +86,8 @@ public class AutoFitOrthographicCamera : MonoBehaviour
         if (targetCamera == null || !targetCamera.orthographic)
             return;
 
-        Bounds bounds;
-        if (!TryGetTargetBounds(out bounds))
+        if (!TryGetTargetBounds(out Bounds bounds))
             return;
-
-        bounds.Expand(worldMargin * 2f);
 
         Vector3[] corners = GetBoundsCorners(bounds);
 
@@ -94,14 +106,45 @@ public class AutoFitOrthographicCamera : MonoBehaviour
             if (local.y > maxY) maxY = local.y;
         }
 
-        float halfWidth = Mathf.Max(Mathf.Abs(minX), Mathf.Abs(maxX));
-        float halfHeight = Mathf.Max(Mathf.Abs(minY), Mathf.Abs(maxY));
+        float contentWidth = (maxX - minX) + (worldMarginHorizontal * 2f);
+        float contentHeight = (maxY - minY) + (worldMarginVertical * 2f);
 
-        float requiredSizeByHeight = halfHeight;
-        float requiredSizeByWidth = halfWidth / targetCamera.aspect;
+        float halfWidth = contentWidth * 0.5f;
+        float halfHeight = contentHeight * 0.5f;
 
-        float requiredSize = Mathf.Max(requiredSizeByHeight, requiredSizeByWidth);
-        targetCamera.orthographicSize = requiredSize;
+        float effectiveAspect = GetEffectiveCameraAspect(targetCamera);
+        if (effectiveAspect <= 0f)
+            effectiveAspect = 1f;
+
+        float sizeByWidth = halfWidth / effectiveAspect;
+        float sizeByHeight = halfHeight;
+
+        float finalSize = sizeByHeight;
+
+        switch (fitMode)
+        {
+            case FitMode.FitEntireBounds:
+                finalSize = Mathf.Max(sizeByWidth, sizeByHeight);
+                break;
+
+            case FitMode.MaximizeWidth:
+                {
+                    float widthPreferredSize = sizeByWidth;
+
+                    if (widthPreferredSize >= sizeByHeight)
+                        finalSize = widthPreferredSize;
+                    else
+                        finalSize = sizeByHeight;
+
+                    break;
+                }
+
+            case FitMode.WidthOnlyUnsafe:
+                finalSize = sizeByWidth;
+                break;
+        }
+
+        targetCamera.orthographicSize = finalSize;
 
         if (recenterCamera)
         {
@@ -114,7 +157,28 @@ public class AutoFitOrthographicCamera : MonoBehaviour
             targetCamera.transform.position = targetCenter + camForward * distanceAlongForward;
         }
 
-        CacheScreenSize();
+        CacheState();
+
+        if (debugLogs)
+        {
+            Debug.Log(
+                $"[AutoFitOrthographicCamera] FitNow -> mode={fitMode}, orthoSize={finalSize:F3}, " +
+                $"contentWidth={contentWidth:F3}, contentHeight={contentHeight:F3}, aspect={effectiveAspect:F3}"
+            );
+        }
+    }
+
+    private float GetEffectiveCameraAspect(Camera cam)
+    {
+        if (cam == null)
+            return 1f;
+
+        Rect rect = cam.rect;
+
+        float pixelWidth = Mathf.Max(1f, Screen.width * rect.width);
+        float pixelHeight = Mathf.Max(1f, Screen.height * rect.height);
+
+        return pixelWidth / pixelHeight;
     }
 
     private bool TryGetTargetBounds(out Bounds bounds)
@@ -218,14 +282,31 @@ public class AutoFitOrthographicCamera : MonoBehaviour
         };
     }
 
-    private bool ScreenSizeChanged()
+    private bool NeedsRefit()
     {
-        return Screen.width != lastScreenWidth || Screen.height != lastScreenHeight;
+        if (Screen.width != lastScreenWidth || Screen.height != lastScreenHeight)
+            return true;
+
+        if (!ApproximatelyRect(targetCamera.rect, lastCameraRect))
+            return true;
+
+        return false;
     }
 
-    private void CacheScreenSize()
+    private void CacheState()
     {
         lastScreenWidth = Screen.width;
         lastScreenHeight = Screen.height;
+        lastCameraRect = targetCamera != null ? targetCamera.rect : new Rect(0f, 0f, 1f, 1f);
+    }
+
+    private bool ApproximatelyRect(Rect a, Rect b)
+    {
+        const float eps = 0.0001f;
+
+        return Mathf.Abs(a.x - b.x) < eps &&
+               Mathf.Abs(a.y - b.y) < eps &&
+               Mathf.Abs(a.width - b.width) < eps &&
+               Mathf.Abs(a.height - b.height) < eps;
     }
 }
