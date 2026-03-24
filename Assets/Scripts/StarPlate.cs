@@ -120,11 +120,11 @@ public class StarPlate : MonoBehaviour
             Debug.LogWarning($"[StarPlate {plateNumber}] ScoreManagerNew.Instance nullo.");
         }
 
-        Debug.Log(
+       /* Debug.Log(
             $"[StarPlate {plateNumber}] {owner} scored slot {slotIndex} | " +
             $"base={basePoints} chainLength={chainLength} shotPoints={shotPoints} " +
             $"fullStarExtra={fullStarExtra} shotTotal={totalThisShot}"
-        );
+        ); */
     }
 
     int GetContiguousChainLength(int slotIndex, PlayerID owner)

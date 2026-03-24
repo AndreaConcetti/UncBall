@@ -61,7 +61,7 @@ public class ScoreManagerNew : MonoBehaviour
         foreach (StarPlate plate in starPlates)
             plate?.ResetPlate();
 
-        Debug.Log("[ScoreManager] Match started.");
+       // Debug.Log("[ScoreManager] Match started.");
     }
 
     public void BeginHalftime()
@@ -70,7 +70,7 @@ public class ScoreManagerNew : MonoBehaviour
             return;
 
         IsHalftime = true;
-        Debug.Log("[ScoreManager] Halftime started.");
+       // Debug.Log("[ScoreManager] Halftime started.");
         onHalftime?.Invoke();
     }
 
@@ -84,7 +84,7 @@ public class ScoreManagerNew : MonoBehaviour
         foreach (StarPlate plate in starPlates)
             plate?.ResetPlate();
 
-        Debug.Log("[ScoreManager] Halftime ended.");
+      //  Debug.Log("[ScoreManager] Halftime ended.");
     }
 
     public void BeginOvertime()
@@ -93,7 +93,7 @@ public class ScoreManagerNew : MonoBehaviour
             return;
 
         IsOvertime = true;
-        Debug.Log("[ScoreManager] Overtime started.");
+      //  Debug.Log("[ScoreManager] Overtime started.");
         onOvertimeStart?.Invoke();
     }
 
@@ -104,7 +104,7 @@ public class ScoreManagerNew : MonoBehaviour
 
         MatchActive = false;
 
-        Debug.Log($"[ScoreManager] Match over. Winner: {winner} | P1: {ScoreP1} | P2: {ScoreP2}");
+      //  Debug.Log($"[ScoreManager] Match over. Winner: {winner} | P1: {ScoreP1} | P2: {ScoreP2}");
         onMatchEnd?.Invoke(winner);
     }
 
@@ -122,7 +122,7 @@ public class ScoreManagerNew : MonoBehaviour
 
         int newTotal = owner == PlayerID.Player1 ? ScoreP1 : ScoreP2;
 
-        Debug.Log($"[ScoreManager] {owner} +{points} pts (plate {plateNumber}, streak x{comboStreak}{(isFullStar ? ", FULL STAR" : "")}) -> total {newTotal} | P1:{ScoreP1} | P2:{ScoreP2}");
+      //  Debug.Log($"[ScoreManager] {owner} +{points} pts (plate {plateNumber}, streak x{comboStreak}{(isFullStar ? ", FULL STAR" : "")}) -> total {newTotal} | P1:{ScoreP1} | P2:{ScoreP2}");
 
         onPointsScored?.Invoke(owner, newTotal);
 

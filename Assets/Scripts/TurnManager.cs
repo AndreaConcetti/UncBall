@@ -212,7 +212,7 @@ public class TurnManager : MonoBehaviour
         UpdateTurnText();
         SpawnBallForCurrentTurn();
 
-        Debug.Log("Turno di: " + currentPlayer.name);
+       // Debug.Log("Turno di: " + currentPlayer.name);
     }
 
     void UpdateTurnText()
@@ -273,7 +273,7 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        Debug.Log("DeathZone: è caduta la watchedBall del turno corrente.");
+       // Debug.Log("DeathZone: è caduta la watchedBall del turno corrente.");
 
         if (currentPlayerScoredThisTurn)
         {
