@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 7080319331920419150}
   - component: {fileID: 4371384122712813380}
   - component: {fileID: 3237805873120848331}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: SpriteChild
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -100,13 +100,9 @@ GameObject:
   m_Component:
   - component: {fileID: 1083912485503218811}
   - component: {fileID: 8865434082916180867}
-  - component: {fileID: 5796894742378599577}
-  - component: {fileID: -6866850667370311098}
-  - component: {fileID: 7463225376529486810}
-  - component: {fileID: 4500738214376203590}
-  - component: {fileID: 6232224979371898845}
-  m_Layer: 0
-  m_Name: BallPrefabPlayer1
+  - component: {fileID: 3972837048848682828}
+  m_Layer: 8
+  m_Name: PreviewBall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -148,7 +144,7 @@ MonoBehaviour:
   patternIntensityProperty: _PatternIntensity
   patternScaleProperty: _PatternScale
   logDebug: 0
---- !u!114 &5796894742378599577
+--- !u!114 &3972837048848682828
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -157,93 +153,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 7932768176900474815}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d3014f132a5a2db4480b65098b11e9f8, type: 3}
+  m_Script: {fileID: 11500000, guid: 75d28f2347683ec48a68edf3f97eb9e7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallPhysics
-  gravityStrength: 2.5
-  gravityDirection: {x: 0, y: 0, z: -1}
-  linearDrag: 0.4
-  maxSpeed: 60
---- !u!114 &-6866850667370311098
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8b8b0d5709cce104dbb475538c6c8403, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallOwnership
-  Owner: 1
---- !u!114 &7463225376529486810
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c0034d938ba8ac64cbec155bc24b7d78, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallVisualRoll
-  targetRigidbody: {fileID: 4500738214376203590}
-  visualTransform: {fileID: 7080319331920419150}
-  ballRadius: 0.5
-  planeNormal: {x: 0, y: 1, z: 0}
-  minSpeedToRotate: 0.02
-  projectVelocityOnPlane: 1
-  visualRotationMultiplier: 1
-  smoothRotationAxis: 1
-  axisSmoothingSpeed: 18
-  initialLocalEulerAngles: {x: 0, y: 0, z: 0}
---- !u!54 &4500738214376203590
-Rigidbody:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  serializedVersion: 5
-  m_Mass: 5
-  m_LinearDamping: 0
-  m_AngularDamping: 0
-  m_CenterOfMass: {x: 0, y: 0, z: 0}
-  m_InertiaTensor: {x: 1, y: 1, z: 1}
-  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ImplicitCom: 1
-  m_ImplicitTensor: 1
-  m_UseGravity: 1
-  m_IsKinematic: 0
-  m_Interpolate: 1
-  m_Constraints: 0
-  m_CollisionDetection: 1
---- !u!135 &6232224979371898845
-SphereCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  m_Material: {fileID: 13400000, guid: 7c303d0cc72a2b5448a02d37312d2b34, type: 2}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Radius: 0.5
-  m_Center: {x: 0, y: 0, z: 0}
+  m_EditorClassIdentifier: Assembly-CSharp::PreviewBallSpinner
+  rotationAxis: {x: 0, y: 1, z: 0}
+  rotationSpeed: 35
+  useUnscaledTime: 1

@@ -18,6 +18,7 @@ public class BallLauncher : MonoBehaviour
     public BallCameraController cameraController;
     public Camera gameplayCamera;
     public StartEndController startEndController;
+    public BallVisualRoll ballVisualRoll;
 
     [Header("Placement")]
     [Tooltip("Area di placement valida per la ball corrente")]
@@ -112,6 +113,8 @@ public class BallLauncher : MonoBehaviour
         if (startEndController == null)
             startEndController = FindObjectOfType<StartEndController>();
 #endif
+
+        RefreshBallVisualRollReference();
     }
 
     void OnEnable()
@@ -186,6 +189,8 @@ public class BallLauncher : MonoBehaviour
 
         CurrentPhase = LaunchPhase.Placement;
 
+        RefreshBallVisualRollReference();
+
         if (ball != null)
         {
             CachePlacementLineFromCurrentBall();
@@ -200,6 +205,9 @@ public class BallLauncher : MonoBehaviour
                 rb.isKinematic = true;
             }
         }
+
+        if (ballVisualRoll != null)
+            ballVisualRoll.ResetVisualRotation();
 
         lastPlacementTapTime = -999f;
         lastPlacementTapScreenPos = Vector2.zero;
@@ -636,6 +644,8 @@ public class BallLauncher : MonoBehaviour
         hasLaunched = true;
         CurrentPhase = LaunchPhase.Launched;
 
+        RefreshBallVisualRollReference();
+
         Rigidbody rb = ball.GetComponent<Rigidbody>();
         if (rb != null)
         {
@@ -814,6 +824,17 @@ public class BallLauncher : MonoBehaviour
         return startEndController.IsPaused() || startEndController.IsMatchEnded();
     }
 
+    void RefreshBallVisualRollReference()
+    {
+        if (ball == null)
+        {
+            ballVisualRoll = null;
+            return;
+        }
+
+        ballVisualRoll = ball.GetComponent<BallVisualRoll>();
+    }
+
     public void Launch(Vector3 direction, float force)
     {
         if (IsGameplayInputLocked())
@@ -821,6 +842,8 @@ public class BallLauncher : MonoBehaviour
 
         if (ball == null)
             return;
+
+        RefreshBallVisualRollReference();
 
         Rigidbody rb = ball.GetComponent<Rigidbody>();
         if (rb != null)

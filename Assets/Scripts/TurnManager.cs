@@ -174,7 +174,7 @@ public class TurnManager : MonoBehaviour
 
             if (stuckTimer >= stuckTimeout)
             {
-                Debug.Log("Palla del turno bloccata troppo a lungo.");
+               // Debug.Log("Palla del turno bloccata troppo a lungo.");
 
                 if (currentPlayerScoredThisTurn)
                 {

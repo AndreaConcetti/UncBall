@@ -24,7 +24,10 @@ public class BallTurnSpawner : MonoBehaviour
     public BoxCollider player1PlacementArea;
     public BoxCollider player2PlacementArea;
 
-    [Header("Optional Material Override")]
+    [Header("Skin System")]
+    public bool applyEquippedSkins = true;
+
+    [Header("Legacy Material Override")]
     public bool overrideBallMaterial = false;
     public Material player1Material;
     public Material player2Material;
@@ -59,12 +62,7 @@ public class BallTurnSpawner : MonoBehaviour
 
         GameObject ballObject = Instantiate(prefabToSpawn, spawnPoint.position, spawnPoint.rotation);
 
-        if (overrideBallMaterial)
-        {
-            MeshRenderer renderer = ballObject.GetComponent<MeshRenderer>();
-            if (renderer != null)
-                renderer.material = player == player1 ? player1Material : player2Material;
-        }
+        ApplyBallVisuals(ballObject, player, player1, player2);
 
         BallPhysics ballPhysics = ballObject.GetComponent<BallPhysics>();
         if (ballPhysics == null)
@@ -95,6 +93,41 @@ public class BallTurnSpawner : MonoBehaviour
         }
 
         return ballPhysics;
+    }
+
+    private void ApplyBallVisuals(GameObject ballObject, PlayerController player, PlayerController player1, PlayerController player2)
+    {
+        if (ballObject == null)
+            return;
+
+        if (applyEquippedSkins)
+        {
+            BallSkinApplier skinApplier = ballObject.GetComponent<BallSkinApplier>();
+
+            if (skinApplier != null && PlayerSkinLoadout.Instance != null && PlayerSkinLoadout.Instance.Database != null)
+            {
+                BallSkinData equippedSkin = null;
+
+                if (player == player1)
+                    equippedSkin = PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer1();
+                else if (player == player2)
+                    equippedSkin = PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer2();
+
+                if (equippedSkin != null)
+                    skinApplier.ApplySkinData(PlayerSkinLoadout.Instance.Database, equippedSkin);
+            }
+        }
+
+        if (overrideBallMaterial)
+        {
+            MeshRenderer renderer = ballObject.GetComponent<MeshRenderer>();
+
+            if (renderer == null)
+                renderer = ballObject.GetComponentInChildren<MeshRenderer>(true);
+
+            if (renderer != null)
+                renderer.material = player == player1 ? player1Material : player2Material;
+        }
     }
 
     public void SwapPlayerSides()

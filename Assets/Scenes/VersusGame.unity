@@ -3733,6 +3733,102 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!1 &472537351
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 472537352}
+  - component: {fileID: 472537354}
+  - component: {fileID: 472537353}
+  m_Layer: 0
+  m_Name: ManagerBall
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &472537352
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 472537351}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1106984856}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &472537353
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 472537351}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c26692e2eb57204da6010d722cdb135, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallLauncher
+  ball: {fileID: 0}
+  cameraController: {fileID: 2130389378}
+  gameplayCamera: {fileID: 2130389375}
+  startEndController: {fileID: 880244594}
+  ballVisualRoll: {fileID: 0}
+  activePlacementArea: {fileID: 0}
+  placementYOffset: 0
+  placementPickRadiusScreen: 60
+  smoothPlacement: 0
+  placementSmoothSpeed: 20
+  allowKeyboardConfirm: 1
+  allowDoubleTapConfirm: 1
+  doubleTapMaxInterval: 0.3
+  minForce: 15
+  maxForce: 38
+  maxSwipePixels: 800
+  minLaunchSwipePixels: 150
+  chargeCurveExponent: 1.45
+  useForwardOnlyForPower: 1
+  constrainAngle: 1
+  angleLimit: 25
+  forwardAxis: {x: 0, y: 0, z: 1}
+  enableTouchSimulationInEditor: 1
+  allowMouseInputInEditor: 1
+  blockGameplayInputWhenPaused: 1
+  debugLogs: 0
+--- !u!114 &472537354
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 472537351}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 120cc009a380c8340a29f392f6c78dc2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallTurnSpawner
+  launcher: {fileID: 472537353}
+  player1BallPrefab: {fileID: 7932768176900474815, guid: de8842929cac98e45a093a177fba0259, type: 3}
+  player2BallPrefab: {fileID: 7932768176900474815, guid: 05f167ac151f36747a7fd00befc96fbe, type: 3}
+  fallbackBallPrefab: {fileID: 0}
+  player1SpawnPoint: {fileID: 2093540578}
+  player2SpawnPoint: {fileID: 325646137}
+  player1PlacementArea: {fileID: 2132896912}
+  player2PlacementArea: {fileID: 1904214544}
+  applyEquippedSkins: 1
+  overrideBallMaterial: 0
+  player1Material: {fileID: 2100000, guid: ed3c86f7e6816de4a8b68e03bc6f4cc9, type: 2}
+  player2Material: {fileID: 2100000, guid: 20198e1d7e38cc34babe061228fc8b6f, type: 2}
+  player1IsOnLeft: 1
 --- !u!1 &484650807
 GameObject:
   m_ObjectHideFlags: 0
@@ -4498,7 +4594,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 596191360}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 184ccb41e14aedf4a944292b9987c126, type: 3}
   m_Name: 
@@ -4692,7 +4788,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &612082182
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4707,10 +4803,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1756442001}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 867.5, y: -90}
+  m_SizeDelta: {x: 265, y: 180}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &612082183
 MonoBehaviour:
@@ -5819,6 +5915,76 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 849960448}
   m_CullTransparentMesh: 1
+--- !u!1 &851893570
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 851893571}
+  - component: {fileID: 851893572}
+  m_Layer: 0
+  m_Name: SkinSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &851893571
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 851893570}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &851893572
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 851893570}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad0b00045344b93408d4a3527c394e77, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerSkinLoadout
+  database: {fileID: 11400000, guid: 0171e50e3b3f2d74ea664272acc97b1d, type: 2}
+  loadTestDefaultsOnAwake: 1
+  testP1BaseColorId: nero
+  testP1PatternId: prova
+  testP1PatternColorId: verde
+  testP1PatternIntensity: 1
+  testP1PatternScale: 1
+  testP2BaseColorId: blu
+  testP2PatternId: prova
+  testP2PatternColorId: viola
+  testP2PatternIntensity: 1
+  testP2PatternScale: 1
+  equippedSkinPlayer1:
+    skinUniqueId: 
+    baseColorId: 
+    patternId: 
+    patternColorId: 
+    patternIntensity: 1
+    patternScale: 1
+  equippedSkinPlayer2:
+    skinUniqueId: 
+    baseColorId: 
+    patternId: 
+    patternColorId: 
+    patternIntensity: 1
+    patternScale: 1
 --- !u!1 &858606335
 GameObject:
   m_ObjectHideFlags: 0
@@ -5986,11 +6152,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 880244589}
-  - component: {fileID: 880244597}
   - component: {fileID: 880244594}
   - component: {fileID: 880244588}
   - component: {fileID: 880244595}
-  - component: {fileID: 880244596}
   - component: {fileID: 880244593}
   m_Layer: 0
   m_Name: ManagerSupremo
@@ -6015,13 +6179,13 @@ MonoBehaviour:
   player2: {fileID: 1138589479}
   currentPlayer: {fileID: 0}
   scoreManager: {fileID: 880244595}
-  ballTurnSpawner: {fileID: 880244596}
+  ballTurnSpawner: {fileID: 472537354}
   startEndController: {fileID: 880244594}
   timerText: {fileID: 371874522}
   turnOwnerText: {fileID: 823328991}
   player1TurnLabel: 
   player2TurnLabel: 
-  turnDuration: 15
+  turnDuration: 12
   enableStuckBallCheck: 1
   stuckTimeout: 2
   stuckPositionDeltaThreshold: 0.0002
@@ -6080,7 +6244,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MatchEndController
   scoreManager: {fileID: 880244595}
   turnManager: {fileID: 880244588}
-  ballTurnSpawner: {fileID: 880244596}
+  ballTurnSpawner: {fileID: 472537354}
   simpleCurrentScoreDisplay: {fileID: 596191362}
   bottomBarOrderSwapper: {fileID: 357837724}
   gameModeUIChanger: {fileID: 596191365}
@@ -6128,67 +6292,6 @@ MonoBehaviour:
   onOvertimeStart:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &880244596
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 880244587}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 120cc009a380c8340a29f392f6c78dc2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallTurnSpawner
-  launcher: {fileID: 880244597}
-  player1BallPrefab: {fileID: 7932768176900474815, guid: de8842929cac98e45a093a177fba0259, type: 3}
-  player2BallPrefab: {fileID: 7932768176900474815, guid: 05f167ac151f36747a7fd00befc96fbe, type: 3}
-  fallbackBallPrefab: {fileID: 0}
-  player1SpawnPoint: {fileID: 2093540578}
-  player2SpawnPoint: {fileID: 325646137}
-  player1PlacementArea: {fileID: 2132896912}
-  player2PlacementArea: {fileID: 1904214544}
-  overrideBallMaterial: 1
-  player1Material: {fileID: 2100000, guid: ed3c86f7e6816de4a8b68e03bc6f4cc9, type: 2}
-  player2Material: {fileID: 2100000, guid: 20198e1d7e38cc34babe061228fc8b6f, type: 2}
-  player1IsOnLeft: 1
---- !u!114 &880244597
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 880244587}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3c26692e2eb57204da6010d722cdb135, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallLauncher
-  ball: {fileID: 0}
-  cameraController: {fileID: 2130389378}
-  gameplayCamera: {fileID: 2130389375}
-  startEndController: {fileID: 0}
-  activePlacementArea: {fileID: 0}
-  placementYOffset: 0
-  placementPickRadiusScreen: 60
-  smoothPlacement: 0
-  placementSmoothSpeed: 20
-  allowKeyboardConfirm: 1
-  allowDoubleTapConfirm: 1
-  doubleTapMaxInterval: 0.3
-  minForce: 15
-  maxForce: 38
-  maxSwipePixels: 800
-  minLaunchSwipePixels: 150
-  chargeCurveExponent: 1.45
-  useForwardOnlyForPower: 1
-  constrainAngle: 1
-  angleLimit: 25
-  forwardAxis: {x: 0, y: 0, z: 1}
-  enableTouchSimulationInEditor: 1
-  allowMouseInputInEditor: 1
-  blockGameplayInputWhenPaused: 1
-  debugLogs: 0
 --- !u!1 &891123374
 GameObject:
   m_ObjectHideFlags: 0
@@ -7279,6 +7382,7 @@ Transform:
   m_Children:
   - {fileID: 880244589}
   - {fileID: 596191364}
+  - {fileID: 472537352}
   - {fileID: 891123376}
   - {fileID: 1138589480}
   - {fileID: 157508892}
@@ -13790,10 +13894,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BallCameraController
   cam: {fileID: 2130389375}
   turnManager: {fileID: 880244588}
-  ballTurnSpawner: {fileID: 880244596}
+  ballTurnSpawner: {fileID: 0}
   autoFit: {fileID: 2130389379}
   viewportFitter: {fileID: 2130389380}
-  ballLauncher: {fileID: 880244597}
+  ballLauncher: {fileID: 0}
   overviewAnchor: {fileID: 973354175}
   leftSideAimAnchor: {fileID: 435041597}
   rightSideAimAnchor: {fileID: 1787802269}
@@ -13863,6 +13967,7 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 1216962684}
+  - {fileID: 851893571}
   - {fileID: 358734364}
   - {fileID: 1106984856}
   - {fileID: 2100959708}
