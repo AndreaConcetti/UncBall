@@ -2,8 +2,9 @@
 
 /// <summary>
 /// Camera controller:
-/// - overview ortografica con viewport fisso e autofit
-/// - aim perspective sui due lati
+/// - overview ortografica con viewport + autofit
+/// - aim principalmente basata su CameraAimP1 / CameraAimP2
+/// - piccola compensazione opzionale per viewport stretti
 /// - ritorno alla overview dopo il lancio
 /// </summary>
 public class BallCameraController : MonoBehaviour
@@ -14,6 +15,7 @@ public class BallCameraController : MonoBehaviour
     public BallTurnSpawner ballTurnSpawner;
     public AutoFitOrthographicCamera autoFit;
     public CameraViewportFitter viewportFitter;
+    public BallLauncher ballLauncher;
 
     [Header("Camera Positions")]
     public Transform overviewAnchor;
@@ -22,7 +24,7 @@ public class BallCameraController : MonoBehaviour
 
     [Header("Transition")]
     [Range(1f, 20f)]
-    public float transitionSpeed = 5f;
+    public float transitionSpeed = 4.9f;
 
     [Header("Overview Orthographic")]
     public float overviewOrthoSizeFallback = 4f;
@@ -31,15 +33,35 @@ public class BallCameraController : MonoBehaviour
     public bool usePerspectiveInAim = true;
 
     [Range(10f, 90f)]
-    public float leftAimFieldOfView = 35f;
+    public float leftAimFieldOfView = 90f;
 
     [Range(10f, 90f)]
-    public float rightAimFieldOfView = 35f;
+    public float rightAimFieldOfView = 90f;
 
     public float aimOrthoSize = 3f;
 
     [Header("Aim Viewport")]
     public bool keepViewportInAim = true;
+
+    [Header("Aim Anchor Framing")]
+    [Tooltip("Se attivo, usa direttamente CameraAimP1 / CameraAimP2 come base della posa aim.")]
+    public bool useAimAnchorsAsPrimaryPose = true;
+
+    [Tooltip("Offset locale applicato all'anchor aim sinistro. X = destra/sinistra, Y = alto/basso, Z = avanti/indietro locale.")]
+    public Vector3 leftAimLocalOffset = Vector3.zero;
+
+    [Tooltip("Offset locale applicato all'anchor aim destro. X = destra/sinistra, Y = alto/basso, Z = avanti/indietro locale.")]
+    public Vector3 rightAimLocalOffset = Vector3.zero;
+
+    [Header("Aim Viewport Compensation")]
+    [Tooltip("Aspetto di riferimento per cui gli anchor sono stati calibrati.")]
+    public float referenceAimAspect = 0.5625f;
+
+    [Tooltip("Quanto arretrare localmente l'aim camera quando il viewport utile è più stretto del riferimento.")]
+    public float aimLocalZCompensation = 0f;
+
+    [Tooltip("Quanto alzare localmente l'aim camera quando il viewport utile è più stretto del riferimento.")]
+    public float aimLocalYCompensation = 0f;
 
     [Header("Debug")]
     public bool debugLogs = false;
@@ -86,6 +108,9 @@ public class BallCameraController : MonoBehaviour
 
         if (viewportFitter == null)
             viewportFitter = FindFirstObjectByType<CameraViewportFitter>();
+
+        if (ballLauncher == null)
+            ballLauncher = FindFirstObjectByType<BallLauncher>();
 #else
         if (ballTurnSpawner == null)
             ballTurnSpawner = FindObjectOfType<BallTurnSpawner>();
@@ -95,6 +120,9 @@ public class BallCameraController : MonoBehaviour
 
         if (viewportFitter == null)
             viewportFitter = FindObjectOfType<CameraViewportFitter>();
+
+        if (ballLauncher == null)
+            ballLauncher = FindObjectOfType<BallLauncher>();
 #endif
 
         ApplyOverviewAndCache(true);
@@ -126,9 +154,6 @@ public class BallCameraController : MonoBehaviour
 
         SaveCurrentOverviewPose();
 
-        if (turnManager == null)
-            turnManager = TurnManager.Instance;
-
         Transform aimAnchor = GetCurrentAimAnchor(out bool playerIsOnLeft);
         if (aimAnchor == null)
         {
@@ -138,11 +163,23 @@ public class BallCameraController : MonoBehaviour
 
         ApplyAimProjectionAndViewport(playerIsOnLeft);
 
-        targetPosition = aimAnchor.position;
-        targetRotation = aimAnchor.rotation;
+        if (useAimAnchorsAsPrimaryPose)
+        {
+            BuildAimPoseFromAnchor(aimAnchor, playerIsOnLeft, out Vector3 aimPos, out Quaternion aimRot);
+            targetPosition = aimPos;
+            targetRotation = aimRot;
 
-        if (debugLogs)
-            Debug.Log("[BallCameraController] Enter aim.");
+            if (debugLogs)
+                Debug.Log($"[BallCameraController] Aim pose from anchor. Pos={aimPos}, Rot={aimRot.eulerAngles}");
+        }
+        else
+        {
+            targetPosition = aimAnchor.position;
+            targetRotation = aimAnchor.rotation;
+
+            if (debugLogs)
+                Debug.Log("[BallCameraController] Aim pose using raw anchor transform.");
+        }
     }
 
     public void OnBallLaunched()
@@ -164,9 +201,6 @@ public class BallCameraController : MonoBehaviour
 
         targetPosition = cachedOverviewPosition;
         targetRotation = cachedOverviewRotation;
-
-        if (debugLogs)
-            Debug.Log("[BallCameraController] Return to overview after launch.");
     }
 
     public void RefreshOverviewIfNeeded()
@@ -204,14 +238,13 @@ public class BallCameraController : MonoBehaviour
         {
             cam.transform.position = cachedOverviewPosition;
             cam.transform.rotation = cachedOverviewRotation;
+            targetPosition = cachedOverviewPosition;
+            targetRotation = cachedOverviewRotation;
         }
-
-        targetPosition = cachedOverviewPosition;
-        targetRotation = cachedOverviewRotation;
-
-        if (debugLogs)
+        else
         {
-            Debug.Log($"[BallCameraController] Overview applied. Rect={cam.rect}, OrthoSize={cam.orthographicSize}");
+            targetPosition = cachedOverviewPosition;
+            targetRotation = cachedOverviewRotation;
         }
     }
 
@@ -256,6 +289,46 @@ public class BallCameraController : MonoBehaviour
         }
     }
 
+    private void BuildAimPoseFromAnchor(Transform aimAnchor, bool playerIsOnLeft, out Vector3 builtPosition, out Quaternion builtRotation)
+    {
+        Vector3 localOffset = playerIsOnLeft ? leftAimLocalOffset : rightAimLocalOffset;
+        Vector3 compensatedLocalOffset = localOffset + GetViewportCompensationLocalOffset();
+
+        builtPosition = aimAnchor.TransformPoint(compensatedLocalOffset);
+        builtRotation = aimAnchor.rotation;
+    }
+
+    private Vector3 GetViewportCompensationLocalOffset()
+    {
+        float currentAspect = GetEffectiveCameraAspect();
+
+        if (currentAspect <= 0.0001f || referenceAimAspect <= 0.0001f)
+            return Vector3.zero;
+
+        if (currentAspect >= referenceAimAspect)
+            return Vector3.zero;
+
+        float t = Mathf.Clamp01((referenceAimAspect - currentAspect) / referenceAimAspect);
+
+        return new Vector3(
+            0f,
+            aimLocalYCompensation * t,
+            -aimLocalZCompensation * t
+        );
+    }
+
+    private float GetEffectiveCameraAspect()
+    {
+        if (cam == null)
+            return 1f;
+
+        Rect rect = cam.rect;
+        float pixelWidth = Mathf.Max(1f, Screen.width * rect.width);
+        float pixelHeight = Mathf.Max(1f, Screen.height * rect.height);
+
+        return pixelWidth / pixelHeight;
+    }
+
     private Transform GetCurrentAimAnchor(out bool playerIsOnLeft)
     {
         playerIsOnLeft = true;
@@ -290,6 +363,9 @@ public class BallCameraController : MonoBehaviour
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(leftSideAimAnchor.position, 0.2f);
             Gizmos.DrawRay(leftSideAimAnchor.position, leftSideAimAnchor.forward * 1.5f);
+
+            Vector3 leftPos = leftSideAimAnchor.TransformPoint(leftAimLocalOffset);
+            Gizmos.DrawWireSphere(leftPos, 0.12f);
         }
 
         if (rightSideAimAnchor != null)
@@ -297,6 +373,9 @@ public class BallCameraController : MonoBehaviour
             Gizmos.color = Color.magenta;
             Gizmos.DrawWireSphere(rightSideAimAnchor.position, 0.2f);
             Gizmos.DrawRay(rightSideAimAnchor.position, rightSideAimAnchor.forward * 1.5f);
+
+            Vector3 rightPos = rightSideAimAnchor.TransformPoint(rightAimLocalOffset);
+            Gizmos.DrawWireSphere(rightPos, 0.12f);
         }
     }
 #endif

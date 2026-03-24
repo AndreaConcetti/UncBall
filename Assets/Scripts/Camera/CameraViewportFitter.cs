@@ -3,28 +3,14 @@ using UnityEngine;
 [RequireComponent(typeof(Camera))]
 public class CameraViewportFitter : MonoBehaviour
 {
-    [Header("Camera")]
+    [Header("References")]
     public Camera targetCamera;
 
-    [Header("Reference Resolution")]
-    public Vector2 referenceResolution = new Vector2(1080f, 1920f);
+    [Tooltip("RectTransform che definisce esattamente la finestra gameplay visibile")]
+    public RectTransform gameplayViewportFrame;
 
-    [Header("Reserved Design Space (pixels on reference resolution)")]
-    [Tooltip("Spazio riservato in alto nel layout di riferimento")]
-    public float topReservedPixels = 180f;
-
-    [Tooltip("Spazio riservato in basso nel layout di riferimento")]
-    public float bottomReservedPixels = 270f;
-
-    [Tooltip("Spazio riservato a sinistra nel layout di riferimento")]
-    public float leftReservedPixels = 0f;
-
-    [Tooltip("Spazio riservato a destra nel layout di riferimento")]
-    public float rightReservedPixels = 0f;
-
-    [Header("Safe Area")]
-    [Tooltip("Se attivo, interseca anche la viewport con la safe area reale del device")]
-    public bool respectSafeArea = true;
+    [Tooltip("Canvas root a cui appartiene il frame gameplay")]
+    public Canvas referenceCanvas;
 
     [Header("Refresh")]
     public bool applyOnStart = true;
@@ -36,7 +22,6 @@ public class CameraViewportFitter : MonoBehaviour
     private Rect lastAppliedRect = new Rect(-1f, -1f, -1f, -1f);
     private int lastScreenWidth = -1;
     private int lastScreenHeight = -1;
-    private Rect lastSafeArea = new Rect(-1f, -1f, -1f, -1f);
 
     void Reset()
     {
@@ -47,6 +32,9 @@ public class CameraViewportFitter : MonoBehaviour
     {
         if (targetCamera == null)
             targetCamera = GetComponent<Camera>();
+
+        if (referenceCanvas == null && gameplayViewportFrame != null)
+            referenceCanvas = gameplayViewportFrame.GetComponentInParent<Canvas>();
     }
 
     void Start()
@@ -69,7 +57,8 @@ public class CameraViewportFitter : MonoBehaviour
         if (targetCamera == null)
             targetCamera = GetComponent<Camera>();
 
-        ClampValues();
+        if (referenceCanvas == null && gameplayViewportFrame != null)
+            referenceCanvas = gameplayViewportFrame.GetComponentInParent<Canvas>();
 
         if (!Application.isPlaying)
             ApplyViewport(true);
@@ -83,106 +72,82 @@ public class CameraViewportFitter : MonoBehaviour
 
     private void ApplyViewport(bool force)
     {
-        if (targetCamera == null)
+        if (targetCamera == null || gameplayViewportFrame == null)
             return;
 
-        ClampValues();
-
-        float refWidth = Mathf.Max(1f, referenceResolution.x);
-        float refHeight = Mathf.Max(1f, referenceResolution.y);
-
-        float designX = leftReservedPixels / refWidth;
-        float designY = bottomReservedPixels / refHeight;
-        float designWidth = 1f - ((leftReservedPixels + rightReservedPixels) / refWidth);
-        float designHeight = 1f - ((topReservedPixels + bottomReservedPixels) / refHeight);
-
-        Rect designRect = new Rect(
-            Mathf.Clamp01(designX),
-            Mathf.Clamp01(designY),
-            Mathf.Clamp01(designWidth),
-            Mathf.Clamp01(designHeight)
-        );
-
-        Rect finalRect = designRect;
-
-        if (respectSafeArea)
-        {
-            Rect safeArea = Screen.safeArea;
-            Rect safeAreaNormalized = new Rect(
-                safeArea.x / Mathf.Max(1f, Screen.width),
-                safeArea.y / Mathf.Max(1f, Screen.height),
-                safeArea.width / Mathf.Max(1f, Screen.width),
-                safeArea.height / Mathf.Max(1f, Screen.height)
-            );
-
-            finalRect = IntersectRects(designRect, safeAreaNormalized);
-        }
+        if (!TryGetNormalizedScreenRect(gameplayViewportFrame, out Rect normalizedRect))
+            return;
 
         bool changed =
             force ||
             Screen.width != lastScreenWidth ||
             Screen.height != lastScreenHeight ||
-            Screen.safeArea != lastSafeArea ||
-            !ApproximatelyRect(lastAppliedRect, finalRect);
+            !ApproximatelyRect(lastAppliedRect, normalizedRect);
 
         if (!changed)
             return;
 
-        targetCamera.rect = finalRect;
+        targetCamera.rect = normalizedRect;
 
-        lastAppliedRect = finalRect;
+        lastAppliedRect = normalizedRect;
         lastScreenWidth = Screen.width;
         lastScreenHeight = Screen.height;
-        lastSafeArea = Screen.safeArea;
 
         if (debugLogs)
         {
-            Debug.Log(
-                $"[CameraViewportFitter] Applied viewport rect = {finalRect} | " +
-                $"Screen = {Screen.width}x{Screen.height} | SafeArea = {Screen.safeArea}"
-            );
+            Debug.Log($"[CameraViewportFitter] Applied viewport rect = {normalizedRect}");
         }
     }
 
-    private void ClampValues()
+    private bool TryGetNormalizedScreenRect(RectTransform rectTransform, out Rect normalizedRect)
     {
-        referenceResolution.x = Mathf.Max(1f, referenceResolution.x);
-        referenceResolution.y = Mathf.Max(1f, referenceResolution.y);
+        normalizedRect = default;
 
-        topReservedPixels = Mathf.Max(0f, topReservedPixels);
-        bottomReservedPixels = Mathf.Max(0f, bottomReservedPixels);
-        leftReservedPixels = Mathf.Max(0f, leftReservedPixels);
-        rightReservedPixels = Mathf.Max(0f, rightReservedPixels);
+        if (rectTransform == null || !rectTransform.gameObject.activeInHierarchy)
+            return false;
 
-        float maxVertical = referenceResolution.y - 1f;
-        float maxHorizontal = referenceResolution.x - 1f;
+        Vector3[] corners = new Vector3[4];
+        rectTransform.GetWorldCorners(corners);
 
-        if (topReservedPixels + bottomReservedPixels >= referenceResolution.y)
+        Camera uiCamera = GetCanvasEventCamera();
+
+        Vector2 min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+        Vector2 max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+
+        for (int i = 0; i < 4; i++)
         {
-            float scale = maxVertical / Mathf.Max(1f, topReservedPixels + bottomReservedPixels);
-            topReservedPixels *= scale;
-            bottomReservedPixels *= scale;
+            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(uiCamera, corners[i]);
+
+            if (screenPoint.x < min.x) min.x = screenPoint.x;
+            if (screenPoint.y < min.y) min.y = screenPoint.y;
+            if (screenPoint.x > max.x) max.x = screenPoint.x;
+            if (screenPoint.y > max.y) max.y = screenPoint.y;
         }
 
-        if (leftReservedPixels + rightReservedPixels >= referenceResolution.x)
-        {
-            float scale = maxHorizontal / Mathf.Max(1f, leftReservedPixels + rightReservedPixels);
-            leftReservedPixels *= scale;
-            rightReservedPixels *= scale;
-        }
+        float screenWidth = Mathf.Max(1f, Screen.width);
+        float screenHeight = Mathf.Max(1f, Screen.height);
+
+        float xMin = Mathf.Clamp01(min.x / screenWidth);
+        float yMin = Mathf.Clamp01(min.y / screenHeight);
+        float xMax = Mathf.Clamp01(max.x / screenWidth);
+        float yMax = Mathf.Clamp01(max.y / screenHeight);
+
+        normalizedRect = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        return true;
     }
 
-    private Rect IntersectRects(Rect a, Rect b)
+    private Camera GetCanvasEventCamera()
     {
-        float xMin = Mathf.Max(a.xMin, b.xMin);
-        float yMin = Mathf.Max(a.yMin, b.yMin);
-        float xMax = Mathf.Min(a.xMax, b.xMax);
-        float yMax = Mathf.Min(a.yMax, b.yMax);
+        if (referenceCanvas == null)
+            return null;
 
-        if (xMax < xMin || yMax < yMin)
-            return new Rect(0f, 0f, 1f, 1f);
+        if (referenceCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            return null;
 
-        return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        if (referenceCanvas.worldCamera != null)
+            return referenceCanvas.worldCamera;
+
+        return Camera.main;
     }
 
     private bool ApproximatelyRect(Rect a, Rect b)
