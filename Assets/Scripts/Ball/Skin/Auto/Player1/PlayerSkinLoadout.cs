@@ -8,7 +8,8 @@ public class PlayerSkinLoadout : MonoBehaviour
     [SerializeField] private BallSkinDatabase database;
 
     [Header("Use Inspector Test Defaults")]
-    [SerializeField] private bool loadTestDefaultsOnAwake = true;
+    [SerializeField] private bool loadTestDefaultsForPlayer1OnAwake = false;
+    [SerializeField] private bool loadTestDefaultsForPlayer2OnAwake = true;
 
     [Header("Test Default P1")]
     [SerializeField] private string testP1BaseColorId = "blue";
@@ -45,7 +46,7 @@ public class PlayerSkinLoadout : MonoBehaviour
         if (transform.parent == null)
             DontDestroyOnLoad(gameObject);
 
-        if (loadTestDefaultsOnAwake)
+        if (loadTestDefaultsForPlayer1OnAwake)
         {
             equippedSkinPlayer1 = BallSkinFactory.CreateSkin(
                 testP1BaseColorId,
@@ -55,7 +56,10 @@ public class PlayerSkinLoadout : MonoBehaviour
                 testP1PatternScale,
                 testP1Rarity
             );
+        }
 
+        if (loadTestDefaultsForPlayer2OnAwake)
+        {
             equippedSkinPlayer2 = BallSkinFactory.CreateSkin(
                 testP2BaseColorId,
                 testP2PatternId,
