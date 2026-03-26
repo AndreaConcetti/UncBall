@@ -44,14 +44,11 @@ public class Player1SkinInventory : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
         Instance = this;
-
-        if (transform.parent == null)
-            DontDestroyOnLoad(gameObject);
 
         if (playerSkinLoadout == null)
             playerSkinLoadout = PlayerSkinLoadout.Instance;

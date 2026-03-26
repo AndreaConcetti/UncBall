@@ -13,18 +13,48 @@ MonoBehaviour:
   m_Name: BallColorLibrary
   m_EditorClassIdentifier: Assembly-CSharp::BallColorLibrary
   colors:
-  - id: nero
-    color: {r: 0, g: 0, b: 0, a: 1}
-    rarity: 3
-  - id: bianco
-    color: {r: 1, g: 1, b: 1, a: 1}
+  - id: arancione
+    color: {r: 1, g: 0.570091, b: 0, a: 1}
+    rarity: 0
+  - id: grigio_scuro
+    color: {r: 0.3490566, g: 0.3490566, b: 0.3490566, a: 1}
     rarity: 0
   - id: rosso
     color: {r: 1, g: 0, b: 0, a: 1}
-    rarity: 2
+    rarity: 0
   - id: blu
     color: {r: 0, g: 0.099416494, b: 1, a: 1}
     rarity: 0
+  - id: bianco
+    color: {r: 1, g: 1, b: 1, a: 1}
+    rarity: 1
+  - id: viola_scuro
+    color: {r: 0.16470589, g: 0, b: 0.11280789, a: 1}
+    rarity: 1
   - id: giallo
     color: {r: 1, g: 0.9577489, b: 0, a: 1}
     rarity: 1
+  - id: verde_chiaro
+    color: {r: 0.0029230118, g: 1, b: 0, a: 1}
+    rarity: 1
+  - id: ciano
+    color: {r: 0, g: 0.44169098, b: 0.49056602, a: 1}
+    rarity: 1
+  - id: verde_scuro
+    color: {r: 0.0013319141, g: 0.33962262, b: 0, a: 1}
+    rarity: 2
+  - id: nero
+    color: {r: 0, g: 0, b: 0, a: 1}
+    rarity: 2
+  - id: gold
+    color: {r: 0.8396226, g: 0.6624853, b: 0, a: 1}
+    rarity: 2
+  - id: cristallo
+    color: {r: 0.4764151, g: 1, b: 0.9621589, a: 1}
+    rarity: 3
+  - id: viola
+    color: {r: 0.6300553, g: 0, b: 0.7075472, a: 1}
+    rarity: 3
+  - id: navy
+    color: {r: 0, g: 0, b: 0.16470589, a: 1}
+    rarity: 3

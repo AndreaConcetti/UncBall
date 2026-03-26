@@ -2,10 +2,6 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// Gestisce il flow globale del match:
-/// start, pausa, halftime, fine match e timer globale.
-/// </summary>
 public class StartEndController : MonoBehaviour
 {
     public enum MatchMode
@@ -21,6 +17,7 @@ public class StartEndController : MonoBehaviour
     public SimpleCurrentScoreDisplay simpleCurrentScoreDisplay;
     public BottomBarOrderSwapper bottomBarOrderSwapper;
     public GameModeUIChanger gameModeUIChanger;
+    public RewardManager rewardManager;
 
     [Header("UI Panels")]
     public GameObject gameUIPanel;
@@ -42,7 +39,6 @@ public class StartEndController : MonoBehaviour
     public bool pauseAtHalftime = true;
 
     [Header("Transition Delay")]
-    [Tooltip("Attesa dopo la risoluzione dell'ultimo tiro prima di entrare in halftime o finire il match")]
     public float postShotTransitionDelay = 1f;
 
     [Header("Start Options")]
@@ -63,6 +59,9 @@ public class StartEndController : MonoBehaviour
     private bool halftimePending = false;
     private bool endOfTimePending = false;
 
+    private PlayerID resolvedWinner = PlayerID.None;
+    private bool matchRewardProcessed = false;
+
     public float CurrentMatchTimer => currentMatchTimer;
 
     void Start()
@@ -81,6 +80,9 @@ public class StartEndController : MonoBehaviour
             gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
 #endif
 
+        if (rewardManager == null)
+            rewardManager = RewardManager.Instance;
+
         ApplyMenuSettings();
 
         Time.timeScale = 1f;
@@ -97,6 +99,8 @@ public class StartEndController : MonoBehaviour
         transitionCoroutineRunning = false;
         halftimePending = false;
         endOfTimePending = false;
+        resolvedWinner = PlayerID.None;
+        matchRewardProcessed = false;
 
         currentMatchTimer = matchDuration;
         RefreshModeUI();
@@ -230,6 +234,9 @@ public class StartEndController : MonoBehaviour
             gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
 #endif
 
+        if (rewardManager == null)
+            rewardManager = RewardManager.Instance;
+
         if (scoreManager == null)
         {
             Debug.LogError("[StartEndController] ScoreManagerNew non trovato.", this);
@@ -252,9 +259,14 @@ public class StartEndController : MonoBehaviour
         transitionCoroutineRunning = false;
         halftimePending = false;
         endOfTimePending = false;
+        resolvedWinner = PlayerID.None;
+        matchRewardProcessed = false;
 
         currentMatchTimer = matchDuration;
         RefreshModeUI();
+
+        if (rewardManager != null)
+            rewardManager.BeginNewMatchRewardCycle();
 
         scoreManager.StartMatch();
 
@@ -485,6 +497,7 @@ public class StartEndController : MonoBehaviour
     public void RequestEndMatch(PlayerID winner)
     {
         endOfTimePending = false;
+        resolvedWinner = winner;
 
         if (scoreManager != null && scoreManager.MatchActive)
         {
@@ -501,6 +514,8 @@ public class StartEndController : MonoBehaviour
 
     void OnScoreManagerMatchEnd(PlayerID winner)
     {
+        resolvedWinner = winner;
+
         if (gameModeUIChanger != null)
             gameModeUIChanger.RefreshWinnerTexts(winner);
 
@@ -511,6 +526,17 @@ public class StartEndController : MonoBehaviour
     {
         if (matchEnded)
             return;
+
+        if (!matchRewardProcessed)
+        {
+            if (rewardManager == null)
+                rewardManager = RewardManager.Instance;
+
+            if (rewardManager != null)
+                rewardManager.TryGrantMatchWinReward(resolvedWinner);
+
+            matchRewardProcessed = true;
+        }
 
         matchEnded = true;
         isPaused = false;
@@ -541,6 +567,8 @@ public class StartEndController : MonoBehaviour
         transitionCoroutineRunning = false;
         halftimePending = false;
         endOfTimePending = false;
+        resolvedWinner = PlayerID.None;
+        matchRewardProcessed = false;
 
         if (pausePanel != null) pausePanel.SetActive(false);
         if (halftimePanel != null) halftimePanel.SetActive(false);
@@ -557,6 +585,12 @@ public class StartEndController : MonoBehaviour
 
         if (turnManager != null)
             turnManager.ResumeTimer();
+
+        if (rewardManager == null)
+            rewardManager = RewardManager.Instance;
+
+        if (rewardManager != null)
+            rewardManager.BeginNewMatchRewardCycle();
     }
 
     public void ResetTimeScale()

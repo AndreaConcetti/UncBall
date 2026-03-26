@@ -37,14 +37,11 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
         Instance = this;
-
-        if (transform.parent == null)
-            DontDestroyOnLoad(gameObject);
 
         if (loadTestDefaultsForPlayer1OnAwake)
         {

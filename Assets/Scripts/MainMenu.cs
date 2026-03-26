@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using TMPro;
@@ -54,9 +55,39 @@ public class MainMenu : MonoBehaviour
     public string defaultPlayer1Name = "Player 1";
     public string defaultPlayer2Name = "Player 2";
 
-    private int currentTimePresetIndex;
+    [Header("Chest UI Refresh")]
+    [SerializeField] private ChestSlotUI[] chestSlotUIs;
+    [SerializeField] private bool refreshChestSlotsOnStart = true;
+    [SerializeField] private bool refreshChestSlotsOnEnable = true;
+    [SerializeField] private bool refreshChestSlotsNextFrameToo = true;
+    [SerializeField] private bool refreshChestSlotsAfterShortDelay = true;
+    [SerializeField] private float delayedChestRefreshSeconds = 0.15f;
+    [SerializeField] private int extraRefreshFrames = 3;
+    [SerializeField] private bool logChestRefreshDebug = false;
 
-    void Start()
+    private int currentTimePresetIndex;
+    private Coroutine chestRefreshRoutine;
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+
+        if (refreshChestSlotsOnEnable)
+            StartChestRefreshRoutine();
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+
+        if (chestRefreshRoutine != null)
+        {
+            StopCoroutine(chestRefreshRoutine);
+            chestRefreshRoutine = null;
+        }
+    }
+
+    private void Start()
     {
         ValidateTimePresets();
 
@@ -79,9 +110,23 @@ public class MainMenu : MonoBehaviour
             scoreModePlayer2NameInputField.text = defaultPlayer2Name;
 
         RefreshTimeDurationUI();
+
+        if (refreshChestSlotsOnStart)
+            StartChestRefreshRoutine();
     }
 
-    void ValidateTimePresets()
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus)
+            return;
+
+        if (!isActiveAndEnabled)
+            return;
+
+        StartChestRefreshRoutine();
+    }
+
+    private void ValidateTimePresets()
     {
         if (timeModeDurationPresets == null || timeModeDurationPresets.Length == 0)
             timeModeDurationPresets = new int[] { 180, 300, 360 };
@@ -175,7 +220,7 @@ public class MainMenu : MonoBehaviour
         SceneManager.LoadScene("MainMenu");
     }
 
-    void LoadSceneSafe(string sceneName)
+    private void LoadSceneSafe(string sceneName)
     {
         if (string.IsNullOrWhiteSpace(sceneName))
         {
@@ -187,13 +232,13 @@ public class MainMenu : MonoBehaviour
         SceneManager.LoadScene(sceneName);
     }
 
-    void RefreshTimeDurationUI()
+    private void RefreshTimeDurationUI()
     {
         if (timeModeDurationText != null)
             timeModeDurationText.text = timeModeDurationPresets[currentTimePresetIndex].ToString();
     }
 
-    int ReadScoreModePointsToWin()
+    private int ReadScoreModePointsToWin()
     {
         if (scoreModePointsToWinInputField == null)
             return defaultPointsToWin;
@@ -213,7 +258,7 @@ public class MainMenu : MonoBehaviour
         return defaultPointsToWin;
     }
 
-    string ReadPlayerName(TMP_InputField inputField, string fallbackValue)
+    private string ReadPlayerName(TMP_InputField inputField, string fallbackValue)
     {
         if (inputField == null)
             return fallbackValue;
@@ -238,5 +283,80 @@ public class MainMenu : MonoBehaviour
     {
         ValidateTimePresets();
         return timeModeDurationPresets[currentTimePresetIndex];
+    }
+
+    public void ForceRefreshChestSlotsUI()
+    {
+        StartChestRefreshRoutine();
+    }
+
+    public void RefreshChestSlotsUI()
+    {
+        if (chestSlotUIs == null || chestSlotUIs.Length == 0)
+        {
+            if (logChestRefreshDebug)
+                Debug.Log("[MainMenu] No ChestSlotUI references assigned.", this);
+
+            return;
+        }
+
+        for (int i = 0; i < chestSlotUIs.Length; i++)
+        {
+            if (chestSlotUIs[i] == null)
+                continue;
+
+            chestSlotUIs[i].RefreshUI();
+        }
+
+        if (logChestRefreshDebug)
+            Debug.Log("[MainMenu] Chest slots refreshed.", this);
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (!isActiveAndEnabled)
+            return;
+
+        if (scene.name != "MainMenu")
+            return;
+
+        StartChestRefreshRoutine();
+    }
+
+    private void StartChestRefreshRoutine()
+    {
+        if (!isActiveAndEnabled)
+            return;
+
+        if (chestRefreshRoutine != null)
+            StopCoroutine(chestRefreshRoutine);
+
+        chestRefreshRoutine = StartCoroutine(RefreshChestSlotsRoutine());
+    }
+
+    private IEnumerator RefreshChestSlotsRoutine()
+    {
+        RefreshChestSlotsUI();
+
+        if (refreshChestSlotsNextFrameToo)
+        {
+            yield return null;
+            RefreshChestSlotsUI();
+        }
+
+        int frameCount = Mathf.Max(0, extraRefreshFrames);
+        for (int i = 0; i < frameCount; i++)
+        {
+            yield return null;
+            RefreshChestSlotsUI();
+        }
+
+        if (refreshChestSlotsAfterShortDelay && delayedChestRefreshSeconds > 0f)
+        {
+            yield return new WaitForSecondsRealtime(delayedChestRefreshSeconds);
+            RefreshChestSlotsUI();
+        }
+
+        chestRefreshRoutine = null;
     }
 }

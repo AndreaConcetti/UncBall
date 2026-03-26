@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -8,6 +9,11 @@ public class ObtainNewSkin : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private BallSkinRandomGenerator skinRandomGenerator;
     [SerializeField] private Player1SkinInventory player1SkinInventory;
+    [SerializeField] private PlayerChestSlotInventory playerChestSlotInventory;
+
+    [Header("Generation")]
+    [SerializeField] private int maxUniqueRollAttempts = 50;
+    [SerializeField] private int maxExactRarityRollAttempts = 100;
 
     [Header("New Skin Preview Section")]
     [SerializeField] private GameObject newSkinPreviewSection;
@@ -50,33 +56,52 @@ public class ObtainNewSkin : MonoBehaviour
         SetHiddenObjectsVisible(true);
     }
 
-    public void RollRandom()
+    public void OpenChestFromSlot(int slotIndex)
     {
         if (!ValidateDependencies())
             return;
 
-        currentRolledSkin = skinRandomGenerator.GenerateRandomSkin();
-        OnSkinRolled("Random");
-    }
+        if (!playerChestSlotInventory.HasChestInSlot(slotIndex))
+        {
+            if (logDebug)
+                Debug.LogWarning("[ObtainNewSkin] Slot has no chest. Slot=" + slotIndex, this);
 
-    public void RollCommonGuaranteed()
-    {
-        RollWithMinimumRarity(SkinRarity.Common, "Common Guaranteed");
-    }
+            return;
+        }
 
-    public void RollRareGuaranteed()
-    {
-        RollWithMinimumRarity(SkinRarity.Rare, "Rare Guaranteed");
-    }
+        if (!playerChestSlotInventory.IsChestReadyToOpen(slotIndex))
+        {
+            if (logDebug)
+                Debug.LogWarning("[ObtainNewSkin] Chest not ready to open yet. Slot=" + slotIndex, this);
 
-    public void RollEpicGuaranteed()
-    {
-        RollWithMinimumRarity(SkinRarity.Epic, "Epic Guaranteed");
-    }
+            return;
+        }
 
-    public void RollLegendaryGuaranteed()
-    {
-        RollWithMinimumRarity(SkinRarity.Legendary, "Legendary Guaranteed");
+        ChestType chestType = playerChestSlotInventory.GetChestTypeInSlot(slotIndex);
+
+        bool granted = TryGrantUniqueSkinForChestType(chestType, "Chest Slot " + slotIndex);
+
+        if (!granted)
+        {
+            Debug.LogWarning(
+                "[ObtainNewSkin] Failed to grant skin from chest slot " + slotIndex +
+                ". Chest remains in slot.",
+                this
+            );
+            return;
+        }
+
+        bool consumed = playerChestSlotInventory.ConsumeOpenedChestInSlot(slotIndex);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[ObtainNewSkin] OpenChestFromSlot completed. Slot=" + slotIndex +
+                " | Type=" + chestType +
+                " | Consumed=" + consumed,
+                this
+            );
+        }
     }
 
     public void EquipCurrentRolledSkin()
@@ -122,16 +147,101 @@ public class ObtainNewSkin : MonoBehaviour
         SetHiddenObjectsVisible(true);
     }
 
-    private void RollWithMinimumRarity(SkinRarity rarity, string label)
+    private bool TryGrantUniqueSkinForChestType(ChestType chestType, string sourceLabel)
     {
-        if (!ValidateDependencies())
-            return;
+        BallSkinData grantedSkin = null;
+        bool added = false;
 
-        currentRolledSkin = skinRandomGenerator.GenerateRandomSkinWithMinimumRarity(rarity);
-        OnSkinRolled(label);
+        for (int attempt = 0; attempt < maxUniqueRollAttempts; attempt++)
+        {
+            BallSkinData candidate = GenerateCandidateForChestType(chestType);
+
+            if (candidate == null)
+                continue;
+
+            bool wasAdded = player1SkinInventory.AddUnlockedSkin(candidate);
+
+            if (!wasAdded)
+            {
+                if (logDebug)
+                {
+                    Debug.Log(
+                        "[ObtainNewSkin] Duplicate skin rolled, retrying... Attempt " +
+                        (attempt + 1) + "/" + maxUniqueRollAttempts +
+                        " | Skin ID: " + candidate.skinUniqueId,
+                        this
+                    );
+                }
+
+                continue;
+            }
+
+            grantedSkin = candidate;
+            added = true;
+            break;
+        }
+
+        if (!added || grantedSkin == null)
+        {
+            Debug.LogWarning(
+                "[ObtainNewSkin] Failed to grant a unique skin after " +
+                maxUniqueRollAttempts +
+                " attempts from source: " + sourceLabel,
+                this
+            );
+
+            return false;
+        }
+
+        currentRolledSkin = grantedSkin;
+        OnSkinRolled(sourceLabel, true);
+        return true;
     }
 
-    private void OnSkinRolled(string sourceLabel)
+    private BallSkinData GenerateCandidateForChestType(ChestType chestType)
+    {
+        switch (chestType)
+        {
+            case ChestType.Random:
+                return skinRandomGenerator.GenerateRandomSkin();
+
+            case ChestType.GuaranteedCommon:
+                return GenerateRandomSkinOfExactRarity(SkinRarity.Common);
+
+            case ChestType.GuaranteedRare:
+                return GenerateRandomSkinOfExactRarity(SkinRarity.Rare);
+
+            case ChestType.GuaranteedEpic:
+                return GenerateRandomSkinOfExactRarity(SkinRarity.Epic);
+
+            case ChestType.GuaranteedLegendary:
+                return GenerateRandomSkinOfExactRarity(SkinRarity.Legendary);
+
+            default:
+                return skinRandomGenerator.GenerateRandomSkin();
+        }
+    }
+
+    private BallSkinData GenerateRandomSkinOfExactRarity(SkinRarity targetRarity)
+    {
+        for (int i = 0; i < maxExactRarityRollAttempts; i++)
+        {
+            BallSkinData candidate = skinRandomGenerator.GenerateRandomSkin();
+            if (candidate != null && candidate.rarity == targetRarity)
+                return candidate;
+        }
+
+        Debug.LogWarning(
+            "[ObtainNewSkin] Failed to generate exact rarity skin after " +
+            maxExactRarityRollAttempts +
+            " attempts. TargetRarity=" + targetRarity,
+            this
+        );
+
+        return null;
+    }
+
+    private void OnSkinRolled(string sourceLabel, bool alreadyAddedToInventory)
     {
         if (currentRolledSkin == null)
         {
@@ -139,15 +249,13 @@ public class ObtainNewSkin : MonoBehaviour
             return;
         }
 
-        bool added = player1SkinInventory.AddUnlockedSkin(currentRolledSkin);
-
         if (logDebug)
         {
             Debug.Log(
                 "[ObtainNewSkin] Rolled skin from " + sourceLabel +
                 " -> ID: " + currentRolledSkin.skinUniqueId +
                 " | rarity: " + currentRolledSkin.rarity +
-                " | added to inventory: " + added,
+                " | already added to inventory: " + alreadyAddedToInventory,
                 this
             );
         }
@@ -237,6 +345,15 @@ public class ObtainNewSkin : MonoBehaviour
         if (player1SkinInventory.Database == null)
         {
             Debug.LogError("[ObtainNewSkin] Player1SkinInventory database missing.", this);
+            return false;
+        }
+
+        if (playerChestSlotInventory == null)
+            playerChestSlotInventory = PlayerChestSlotInventory.Instance;
+
+        if (playerChestSlotInventory == null)
+        {
+            Debug.LogError("[ObtainNewSkin] PlayerChestSlotInventory missing.", this);
             return false;
         }
 

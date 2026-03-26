@@ -16,11 +16,11 @@ MonoBehaviour:
   - id: vuoto
     texture: {fileID: 2800000, guid: 2258d78c0fa82544cbd13f63c73817f7, type: 3}
     rarity: 0
-  - id: prova_legendary
-    texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
+  - id: bigstar
+    texture: {fileID: 2800000, guid: fad234796255c88439c0f7526136b904, type: 3}
     rarity: 3
-  - id: prova_epic
-    texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
+  - id: 1E
+    texture: {fileID: 2800000, guid: eb4b2b33917c51f40ae21882a54be622, type: 3}
     rarity: 2
   - id: prova_rare
     texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
