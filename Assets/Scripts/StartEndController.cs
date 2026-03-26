@@ -48,6 +48,13 @@ public class StartEndController : MonoBehaviour
     public bool stopTimeOnPause = true;
     public bool stopTimeOnEnd = true;
 
+    [Header("Early Finish Rules")]
+    [Tooltip("In TimeLimit, dopo che il reset di halftime è già avvenuto, termina subito se un player è matematicamente irraggiungibile.")]
+    public bool enableMathematicalWinInTimeMode = true;
+
+    [Tooltip("Se tutte le board sono piene: in prima metà della modalità TimeLimit avvia subito l'halftime; altrimenti chiude la partita.")]
+    public bool endOrAdvanceWhenAllBoardsFull = true;
+
     private float currentMatchTimer;
 
     private bool matchStarted = false;
@@ -134,6 +141,8 @@ public class StartEndController : MonoBehaviour
 
         if (matchMode == MatchMode.ScoreTarget)
             UpdateScoreTargetMode();
+
+        UpdateUniversalBoardAndMathRules();
     }
 
     void ApplyMenuSettings()
@@ -215,6 +224,35 @@ public class StartEndController : MonoBehaviour
                 return;
 
             RequestEndMatch(GetWinnerOrNone());
+            return;
+        }
+
+        if (endOrAdvanceWhenAllBoardsFull && scoreManager.AreAllBoardsFull())
+        {
+            if (turnManager != null && turnManager.IsLaunchInProgress())
+                return;
+
+            RequestEndMatch(GetWinnerOrNone());
+        }
+    }
+
+    void UpdateUniversalBoardAndMathRules()
+    {
+        if (scoreManager == null || matchEnded || isPaused)
+            return;
+
+        if (turnManager != null && turnManager.IsLaunchInProgress())
+            return;
+
+        if (endOrAdvanceWhenAllBoardsFull && scoreManager.AreAllBoardsFull())
+        {
+            ResolveAllBoardsFullCondition();
+            return;
+        }
+
+        if (TryGetMathematicalWinnerInTimeMode(out PlayerID mathematicalWinner))
+        {
+            RequestEndMatch(mathematicalWinner);
         }
     }
 
@@ -311,6 +349,15 @@ public class StartEndController : MonoBehaviour
         if (halftimePending || endOfTimePending)
             return true;
 
+        if (scoreManager != null)
+        {
+            if (endOrAdvanceWhenAllBoardsFull && scoreManager.AreAllBoardsFull())
+                return true;
+
+            if (TryGetMathematicalWinnerInTimeMode(out _))
+                return true;
+        }
+
         if (ShouldEnterHalftimeNow())
             return true;
 
@@ -337,6 +384,20 @@ public class StartEndController : MonoBehaviour
                 elapsed += Time.unscaledDeltaTime;
 
             yield return null;
+        }
+
+        if (scoreManager != null && endOrAdvanceWhenAllBoardsFull && scoreManager.AreAllBoardsFull())
+        {
+            ResolveAllBoardsFullCondition();
+            transitionCoroutineRunning = false;
+            yield break;
+        }
+
+        if (TryGetMathematicalWinnerInTimeMode(out PlayerID mathematicalWinner))
+        {
+            RequestEndMatch(mathematicalWinner);
+            transitionCoroutineRunning = false;
+            yield break;
         }
 
         if (halftimePending)
@@ -383,6 +444,72 @@ public class StartEndController : MonoBehaviour
     {
         endOfTimePending = false;
         RequestEndMatch(GetWinnerOrNone());
+    }
+
+    void ResolveAllBoardsFullCondition()
+    {
+        if (scoreManager == null)
+            return;
+
+        bool shouldForceImmediateHalftime =
+            matchMode == MatchMode.TimeLimit &&
+            enableHalftime &&
+            !halftimeTriggered &&
+            !scoreManager.IsHalftime;
+
+        if (shouldForceImmediateHalftime)
+        {
+            halftimePending = false;
+            StartHalftime();
+            return;
+        }
+
+        RequestEndMatch(GetWinnerOrNone());
+    }
+
+    bool TryGetMathematicalWinnerInTimeMode(out PlayerID winner)
+    {
+        winner = PlayerID.None;
+
+        if (!enableMathematicalWinInTimeMode)
+            return false;
+
+        if (scoreManager == null)
+            return false;
+
+        if (matchMode != MatchMode.TimeLimit)
+            return false;
+
+        if (!matchStarted || matchEnded || isPaused)
+            return false;
+
+        if (scoreManager.IsHalftime)
+            return false;
+
+        // Con halftime attivo, NON permettere vittoria matematica nella prima metà.
+        // La valutazione parte solo dopo che il reset di halftime è già avvenuto.
+        if (enableHalftime && !halftimeTriggered)
+            return false;
+
+        int maxAdditionalP1 = scoreManager.GetMaxAdditionalPointsAvailable(PlayerID.Player1);
+        int maxAdditionalP2 = scoreManager.GetMaxAdditionalPointsAvailable(PlayerID.Player2);
+
+        int absoluteMaxP1 = scoreManager.ScoreP1 + maxAdditionalP1;
+        int absoluteMaxP2 = scoreManager.ScoreP2 + maxAdditionalP2;
+
+        if (scoreManager.ScoreP1 > absoluteMaxP2)
+        {
+            winner = PlayerID.Player1;
+            return true;
+        }
+
+        if (scoreManager.ScoreP2 > absoluteMaxP1)
+        {
+            winner = PlayerID.Player2;
+            return true;
+        }
+
+        return false;
     }
 
     public void StartHalftime()

@@ -21,17 +21,6 @@ public class ScoreManagerNew : MonoBehaviour
 {
     public static ScoreManagerNew Instance { get; private set; }
 
-    void Awake()
-    {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        Instance = this;
-    }
-
     [Header("Star Plates")]
     public StarPlate[] starPlates = new StarPlate[3];
 
@@ -49,6 +38,17 @@ public class ScoreManagerNew : MonoBehaviour
     public bool IsOvertime { get; private set; }
     public bool MatchActive { get; private set; }
 
+    void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
+    }
+
     public void StartMatch()
     {
         ScoreP1 = 0;
@@ -60,8 +60,6 @@ public class ScoreManagerNew : MonoBehaviour
 
         foreach (StarPlate plate in starPlates)
             plate?.ResetPlate();
-
-       // Debug.Log("[ScoreManager] Match started.");
     }
 
     public void BeginHalftime()
@@ -70,7 +68,6 @@ public class ScoreManagerNew : MonoBehaviour
             return;
 
         IsHalftime = true;
-       // Debug.Log("[ScoreManager] Halftime started.");
         onHalftime?.Invoke();
     }
 
@@ -83,8 +80,6 @@ public class ScoreManagerNew : MonoBehaviour
 
         foreach (StarPlate plate in starPlates)
             plate?.ResetPlate();
-
-      //  Debug.Log("[ScoreManager] Halftime ended.");
     }
 
     public void BeginOvertime()
@@ -93,7 +88,6 @@ public class ScoreManagerNew : MonoBehaviour
             return;
 
         IsOvertime = true;
-      //  Debug.Log("[ScoreManager] Overtime started.");
         onOvertimeStart?.Invoke();
     }
 
@@ -103,8 +97,6 @@ public class ScoreManagerNew : MonoBehaviour
             return;
 
         MatchActive = false;
-
-      //  Debug.Log($"[ScoreManager] Match over. Winner: {winner} | P1: {ScoreP1} | P2: {ScoreP2}");
         onMatchEnd?.Invoke(winner);
     }
 
@@ -121,8 +113,6 @@ public class ScoreManagerNew : MonoBehaviour
             return;
 
         int newTotal = owner == PlayerID.Player1 ? ScoreP1 : ScoreP2;
-
-      //  Debug.Log($"[ScoreManager] {owner} +{points} pts (plate {plateNumber}, streak x{comboStreak}{(isFullStar ? ", FULL STAR" : "")}) -> total {newTotal} | P1:{ScoreP1} | P2:{ScoreP2}");
 
         onPointsScored?.Invoke(owner, newTotal);
 
@@ -141,5 +131,67 @@ public class ScoreManagerNew : MonoBehaviour
 
         if (IsOvertime && points > 0)
             EndMatch(owner);
+    }
+
+    public bool AreAllBoardsFull()
+    {
+        if (starPlates == null || starPlates.Length == 0)
+            return false;
+
+        for (int i = 0; i < starPlates.Length; i++)
+        {
+            if (starPlates[i] == null)
+                return false;
+
+            if (!starPlates[i].IsPlateFull())
+                return false;
+        }
+
+        return true;
+    }
+
+    public int GetMaxAdditionalPointsAvailable(PlayerID player)
+    {
+        if (player == PlayerID.None)
+            return 0;
+
+        if (starPlates == null || starPlates.Length == 0)
+            return 0;
+
+        int total = 0;
+
+        for (int i = 0; i < starPlates.Length; i++)
+        {
+            if (starPlates[i] == null)
+                continue;
+
+            total += starPlates[i].GetMaxAdditionalPointsForPlayer(player);
+        }
+
+        return total;
+    }
+
+    public int GetCurrentScore(PlayerID player)
+    {
+        switch (player)
+        {
+            case PlayerID.Player1:
+                return ScoreP1;
+            case PlayerID.Player2:
+                return ScoreP2;
+            default:
+                return 0;
+        }
+    }
+
+    public PlayerID GetWinnerOrNone()
+    {
+        if (ScoreP1 > ScoreP2)
+            return PlayerID.Player1;
+
+        if (ScoreP2 > ScoreP1)
+            return PlayerID.Player2;
+
+        return PlayerID.None;
     }
 }

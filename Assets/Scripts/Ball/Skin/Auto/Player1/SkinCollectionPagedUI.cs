@@ -28,6 +28,7 @@ public class SkinCollectionPagedUI : MonoBehaviour
     [Header("Optional Selected Info UI")]
     [SerializeField] private TMP_Text selectedRarityText;
     [SerializeField] private TMP_Text selectedSkinIdText;
+    [SerializeField] private string noSelectionText = "NO SELECTION";
 
     [Header("Hide When Preview Open")]
     [SerializeField] private List<GameObject> objectsToHideWhenPreviewOpen = new List<GameObject>();
@@ -39,6 +40,9 @@ public class SkinCollectionPagedUI : MonoBehaviour
     [Header("State")]
     [SerializeField] private CollectionFilterType currentFilter = CollectionFilterType.All;
     [SerializeField] private int currentPageIndex = 0;
+
+    [Header("Debug")]
+    [SerializeField] private bool logDebug = true;
 
     private readonly List<Texture2D> generatedTextures = new List<Texture2D>();
     private readonly List<BallSkinData> filteredSkins = new List<BallSkinData>();
@@ -63,6 +67,7 @@ public class SkinCollectionPagedUI : MonoBehaviour
             selectedPreviewSectionRoot.SetActive(false);
 
         SetHiddenObjectsVisible(true);
+        ClearSelectedPreviewVisuals();
     }
 
     private void OnEnable()
@@ -126,7 +131,8 @@ public class SkinCollectionPagedUI : MonoBehaviour
 
         selectedSkin = skin;
 
-        Debug.Log("[SkinCollectionPagedUI] Selected skin: " + selectedSkin.skinUniqueId, this);
+        if (logDebug)
+            Debug.Log("[SkinCollectionPagedUI] Selected skin: " + selectedSkin.skinUniqueId, this);
 
         OpenSelectedPreview();
         RefreshSelectedPreview();
@@ -137,14 +143,27 @@ public class SkinCollectionPagedUI : MonoBehaviour
         if (player1SkinInventory == null)
             player1SkinInventory = Player1SkinInventory.Instance;
 
-        if (player1SkinInventory == null || selectedSkin == null)
+        if (player1SkinInventory == null)
+        {
+            Debug.LogError("[SkinCollectionPagedUI] Player1SkinInventory missing.", this);
             return;
+        }
+
+        if (selectedSkin == null)
+        {
+            Debug.LogWarning("[SkinCollectionPagedUI] No selected skin to equip.", this);
+            return;
+        }
 
         bool success = player1SkinInventory.EquipSkin(selectedSkin.skinUniqueId);
         if (!success)
             return;
 
-        Debug.Log("[SkinCollectionPagedUI] Equipped Player1 skin: " + selectedSkin.skinUniqueId, this);
+        if (logDebug)
+            Debug.Log("[SkinCollectionPagedUI] Equipped Player1 skin: " + selectedSkin.skinUniqueId, this);
+
+        Rebuild();
+        CloseSelectedPreview();
     }
 
     public void OpenSelectedPreview()
@@ -322,15 +341,7 @@ public class SkinCollectionPagedUI : MonoBehaviour
     {
         if (selectedSkin == null)
         {
-            if (selectedRarityText != null)
-                selectedRarityText.text = string.Empty;
-
-            if (selectedSkinIdText != null)
-                selectedSkinIdText.text = string.Empty;
-
-            if (selectedRarityBar != null)
-                selectedRarityBar.color = Color.clear;
-
+            ClearSelectedPreviewVisuals();
             return;
         }
 
@@ -354,6 +365,18 @@ public class SkinCollectionPagedUI : MonoBehaviour
         {
             Debug.LogWarning("[SkinCollectionPagedUI] Selected preview references missing.", this);
         }
+    }
+
+    private void ClearSelectedPreviewVisuals()
+    {
+        if (selectedRarityText != null)
+            selectedRarityText.text = noSelectionText;
+
+        if (selectedSkinIdText != null)
+            selectedSkinIdText.text = string.Empty;
+
+        if (selectedRarityBar != null)
+            selectedRarityBar.color = Color.clear;
     }
 
     private void SetHiddenObjectsVisible(bool visible)
