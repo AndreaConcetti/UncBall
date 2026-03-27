@@ -9,22 +9,19 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2741c8252cc52ec40b691dded62eac1a, type: 3}
+  m_Script: {fileID: 11500000, guid: 40ea3fa2603e64b41b2dd4624601f2e6, type: 3}
   m_Name: BallPatternLibrary
   m_EditorClassIdentifier: Assembly-CSharp::BallPatternLibrary
   patterns:
-  - id: vuoto
-    texture: {fileID: 2800000, guid: 2258d78c0fa82544cbd13f63c73817f7, type: 3}
-    rarity: 0
-  - id: bigstar
-    texture: {fileID: 2800000, guid: fad234796255c88439c0f7526136b904, type: 3}
-    rarity: 3
-  - id: 1E
+  - id: onda
     texture: {fileID: 2800000, guid: eb4b2b33917c51f40ae21882a54be622, type: 3}
-    rarity: 2
-  - id: prova_rare
-    texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
+    rarity: 0
+  - id: stella
+    texture: {fileID: 2800000, guid: fad234796255c88439c0f7526136b904, type: 3}
     rarity: 1
   - id: prova
     texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
-    rarity: 0
+    rarity: 2
+  - id: onda1
+    texture: {fileID: 2800000, guid: eb4b2b33917c51f40ae21882a54be622, type: 3}
+    rarity: 3

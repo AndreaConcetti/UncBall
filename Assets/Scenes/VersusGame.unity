@@ -1548,7 +1548,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 880244596}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: SceneNavigation, Assembly-CSharp
         m_MethodName: BackToMainMenu
         m_Mode: 1
@@ -2116,6 +2116,11 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 288261623}
   m_CullTransparentMesh: 1
+--- !u!65 &293551620 stripped
+BoxCollider:
+  m_CorrespondingSourceObject: {fileID: 4179097771330672992, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
+  m_PrefabInstance: {fileID: 678366997}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &325646137 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4246787328724081912, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
@@ -4594,13 +4599,13 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 596191360}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 184ccb41e14aedf4a944292b9987c126, type: 3}
+  m_Script: {fileID: 11500000, guid: fddbc32e6066d414e983522f51c98080, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FPSDebugDisplay
-  fpsText: {fileID: 612082184}
-  updateInterval: 1
+  fpsText: {fileID: 0}
+  updateInterval: 0.25
   useSmoothedDeltaTime: 1
   smoothingSpeed: 10
   useColorFeedback: 1
@@ -6152,6 +6157,7 @@ MonoBehaviour:
   simpleCurrentScoreDisplay: {fileID: 596191362}
   bottomBarOrderSwapper: {fileID: 357837724}
   gameModeUIChanger: {fileID: 596191365}
+  rewardManager: {fileID: 0}
   gameUIPanel: {fileID: 1940017666}
   pausePanel: {fileID: 644168621}
   halftimePanel: {fileID: 95879643}
@@ -6165,6 +6171,8 @@ MonoBehaviour:
   startMatchOnStart: 1
   stopTimeOnPause: 1
   stopTimeOnEnd: 0
+  enableMathematicalWinInTimeMode: 1
+  endOrAdvanceWhenAllBoardsFull: 1
 --- !u!114 &880244595
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6205,7 +6213,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 880244587}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 984a2d1f30ff36443a83a88e61906211, type: 3}
+  m_Script: {fileID: 11500000, guid: eb00b956f4fea784fb9ae1e1fd75c53a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SceneNavigation
   mainMenuSceneName: MainMenu
@@ -10275,7 +10283,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 880244596}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: SceneNavigation, Assembly-CSharp
         m_MethodName: BackToMainMenu
         m_Mode: 1
@@ -10722,11 +10730,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1216962684}
   m_LocalEulerAnglesHint: {x: 160, y: 30, z: 0}
---- !u!4 &1735689008 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 3194383503777289756, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
-  m_PrefabInstance: {fileID: 678366997}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1742286988
 GameObject:
   m_ObjectHideFlags: 0
@@ -10962,6 +10965,11 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1745382597}
   m_CullTransparentMesh: 1
+--- !u!65 &1745738843 stripped
+BoxCollider:
+  m_CorrespondingSourceObject: {fileID: 4997368195857654580, guid: fda18edd4d9e85d43a15ae5e193c5986, type: 3}
+  m_PrefabInstance: {fileID: 678366997}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1756442000
 GameObject:
   m_ObjectHideFlags: 0
@@ -13666,9 +13674,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2130389376}
-  - component: {fileID: 2130389375}
   - component: {fileID: 2130389380}
   - component: {fileID: 2130389379}
+  - component: {fileID: 2130389375}
   - component: {fileID: 2130389378}
   - component: {fileID: 2130389374}
   - component: {fileID: 2130389377}
@@ -13722,7 +13730,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 4.6597824
+  orthographic size: 4.568859
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
@@ -13811,10 +13819,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BallCameraController
   cam: {fileID: 2130389375}
   turnManager: {fileID: 880244588}
-  ballTurnSpawner: {fileID: 0}
+  ballTurnSpawner: {fileID: 472537354}
   autoFit: {fileID: 2130389379}
   viewportFitter: {fileID: 2130389380}
-  ballLauncher: {fileID: 0}
+  ballLauncher: {fileID: 472537353}
   overviewAnchor: {fileID: 973354175}
   leftSideAimAnchor: {fileID: 435041597}
   rightSideAimAnchor: {fileID: 1787802269}
@@ -13841,16 +13849,18 @@ MonoBehaviour:
   m_GameObject: {fileID: 2130389373}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9a26273a2b327e14fbeacd10a054f040, type: 3}
+  m_Script: {fileID: 11500000, guid: 9cda1763298b5054497ea06f79613b02, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AutoFitOrthographicCamera
   targetCamera: {fileID: 2130389375}
-  targetRoot: {fileID: 1735689008}
+  targetRoot: {fileID: 0}
   renderersToFit: []
-  collidersToFit: []
-  fitMode: 0
-  worldMarginHorizontal: 0.1
-  worldMarginVertical: 0
+  collidersToFit:
+  - {fileID: 293551620}
+  - {fileID: 1745738843}
+  fitMode: 1
+  worldMarginHorizontal: 0.02
+  worldMarginVertical: 0.02
   fitOnStart: 1
   fitContinuously: 1
   recenterCamera: 0
@@ -13865,12 +13875,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 2130389373}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8b14f582ffd0fd744a3e27fe5962bdd5, type: 3}
+  m_Script: {fileID: 11500000, guid: 26d3ef5db6eeb804c847f10506c92e1f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraViewportFitter
   targetCamera: {fileID: 2130389375}
-  gameplayViewportFrame: {fileID: 1187159598}
-  referenceCanvas: {fileID: 1187159601}
+  gameplayViewportFrame: {fileID: 0}
+  referenceCanvas: {fileID: 0}
   applyOnStart: 1
   applyContinuously: 1
   debugLogs: 0

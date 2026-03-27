@@ -99,8 +99,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1083912485503218811}
-  - component: {fileID: 8865434082916180867}
-  - component: {fileID: 3972837048848682828}
+  - component: {fileID: 1175574460653733722}
+  - component: {fileID: 2139334396199330867}
   m_Layer: 8
   m_Name: PreviewBall
   m_TagString: Untagged
@@ -124,7 +124,7 @@ Transform:
   - {fileID: 7080319331920419150}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &8865434082916180867
+--- !u!114 &1175574460653733722
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -133,7 +133,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7932768176900474815}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d93ee8e0909f10444a4e5a047a83fa6e, type: 3}
+  m_Script: {fileID: 11500000, guid: 71953435a08cb60439e95ac047d3d37c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallSkinApplier
   targetRenderer: {fileID: 4371384122712813380}
@@ -144,7 +144,7 @@ MonoBehaviour:
   patternIntensityProperty: _PatternIntensity
   patternScaleProperty: _PatternScale
   logDebug: 0
---- !u!114 &3972837048848682828
+--- !u!114 &2139334396199330867
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -153,9 +153,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 7932768176900474815}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 75d28f2347683ec48a68edf3f97eb9e7, type: 3}
+  m_Script: {fileID: 11500000, guid: c660ec369872ab14497eccccc5861752, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PreviewBallSpinner
-  rotationAxis: {x: 0, y: 1, z: 0}
-  rotationSpeed: 35
+  rotationAxis: {x: 1, y: 0, z: 0}
+  rotationSpeed: 50
   useUnscaledTime: 1
