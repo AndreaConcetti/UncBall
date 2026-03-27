@@ -7,6 +7,8 @@ public class GameModeUIChanger : MonoBehaviour
     public StartEndController startEndController;
     public TurnManager turnManager;
     public BallLauncher launcher;
+    public MatchRuntimeConfig matchRuntimeConfig;
+    public TutorialPromptSettings tutorialPromptSettings;
 
     [Header("Auto Apply")]
     public bool applyOnStart = true;
@@ -39,13 +41,6 @@ public class GameModeUIChanger : MonoBehaviour
     [Tooltip("Attivo solo durante la fase di aim dopo il lock del placement")]
     public GameObject aimReadyPhaseObject;
 
-    [Header("Tutorial Prompt Settings")]
-    [Tooltip("Se disattivato, i prompt Placement e Aim Ready non vengono mai mostrati")]
-    public bool tutorialPromptsEnabled = true;
-
-    [Tooltip("Salva ON/OFF tra una sessione e l'altra")]
-    public bool saveTutorialPromptPreference = true;
-
     [Header("Tutorial Prompt Toggle UI")]
     [Tooltip("Oggetto visibile quando il tutorial prompt è ON")]
     public GameObject tutorialPromptOnButton;
@@ -59,10 +54,9 @@ public class GameModeUIChanger : MonoBehaviour
     public string player2FallbackName = "Player 2";
     public string winnerSuffix = " Wins!";
 
-    private const string TutorialPromptsPrefsKey = "TutorialPromptsEnabled";
-
     void Start()
     {
+#if UNITY_2023_1_OR_NEWER
         if (startEndController == null)
             startEndController = FindFirstObjectByType<StartEndController>();
 
@@ -72,7 +66,27 @@ public class GameModeUIChanger : MonoBehaviour
         if (launcher == null)
             launcher = FindFirstObjectByType<BallLauncher>();
 
-        LoadTutorialPromptPreference();
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
+
+        if (tutorialPromptSettings == null)
+            tutorialPromptSettings = FindFirstObjectByType<TutorialPromptSettings>();
+#else
+        if (startEndController == null)
+            startEndController = FindObjectOfType<StartEndController>();
+
+        if (turnManager == null)
+            turnManager = FindObjectOfType<TurnManager>();
+
+        if (launcher == null)
+            launcher = FindObjectOfType<BallLauncher>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
+
+        if (tutorialPromptSettings == null)
+            tutorialPromptSettings = FindObjectOfType<TutorialPromptSettings>();
+#endif
 
         if (applyOnStart)
             ApplyCurrentMode();
@@ -92,7 +106,7 @@ public class GameModeUIChanger : MonoBehaviour
 
     public void ApplyCurrentMode()
     {
-        StartEndController.MatchMode currentMode = MainMenu.selectedMatchMode;
+        StartEndController.MatchMode currentMode = GetCurrentMatchMode();
 
         bool isTimeMode = currentMode == StartEndController.MatchMode.TimeLimit;
         bool isScoreMode = currentMode == StartEndController.MatchMode.ScoreTarget;
@@ -166,7 +180,9 @@ public class GameModeUIChanger : MonoBehaviour
 
     public void RefreshLauncherPhaseUI()
     {
-        if (!tutorialPromptsEnabled)
+        bool promptsEnabled = AreTutorialPromptsEnabled();
+
+        if (!promptsEnabled)
         {
             if (placementPhaseObject != null)
                 placementPhaseObject.SetActive(false);
@@ -238,76 +254,75 @@ public class GameModeUIChanger : MonoBehaviour
 
     public void ToggleTutorialPrompts()
     {
-        SetTutorialPromptsEnabled(!tutorialPromptsEnabled);
+        if (tutorialPromptSettings == null)
+            return;
+
+        tutorialPromptSettings.Toggle();
+        RefreshTutorialPromptButtons();
+        RefreshLauncherPhaseUI();
     }
 
     public void EnableTutorialPrompts()
     {
-        Debug.Log("[GameModeUIChanger] EnableTutorialPrompts");
-        SetTutorialPromptsEnabled(true);
+        if (tutorialPromptSettings == null)
+            return;
+
+        tutorialPromptSettings.SetEnabled(true);
+        RefreshTutorialPromptButtons();
+        RefreshLauncherPhaseUI();
     }
 
     public void DisableTutorialPrompts()
     {
-        Debug.Log("[GameModeUIChanger] DisableTutorialPrompts");
-        SetTutorialPromptsEnabled(false);
-    }
+        if (tutorialPromptSettings == null)
+            return;
 
-    public void SetTutorialPromptsEnabled(bool enabled)
-    {
-        tutorialPromptsEnabled = enabled;
-
-        Debug.Log("[GameModeUIChanger] tutorialPromptsEnabled = " + tutorialPromptsEnabled);
-
-        SaveTutorialPromptPreference();
+        tutorialPromptSettings.SetEnabled(false);
         RefreshTutorialPromptButtons();
         RefreshLauncherPhaseUI();
     }
 
     public bool AreTutorialPromptsEnabled()
     {
-        return tutorialPromptsEnabled;
+        if (tutorialPromptSettings == null)
+            return true;
+
+        return tutorialPromptSettings.TutorialPromptsEnabled;
     }
 
     public void RefreshTutorialPromptButtons()
     {
+        bool promptsEnabled = AreTutorialPromptsEnabled();
+
         if (tutorialPromptOnButton != null)
-            tutorialPromptOnButton.SetActive(tutorialPromptsEnabled);
+            tutorialPromptOnButton.SetActive(promptsEnabled);
 
         if (tutorialPromptOffButton != null)
-            tutorialPromptOffButton.SetActive(!tutorialPromptsEnabled);
-    }
-
-    void LoadTutorialPromptPreference()
-    {
-        if (!saveTutorialPromptPreference)
-            return;
-
-        if (PlayerPrefs.HasKey(TutorialPromptsPrefsKey))
-            tutorialPromptsEnabled = PlayerPrefs.GetInt(TutorialPromptsPrefsKey, 1) == 1;
-    }
-
-    void SaveTutorialPromptPreference()
-    {
-        if (!saveTutorialPromptPreference)
-            return;
-
-        PlayerPrefs.SetInt(TutorialPromptsPrefsKey, tutorialPromptsEnabled ? 1 : 0);
-        PlayerPrefs.Save();
+            tutorialPromptOffButton.SetActive(!promptsEnabled);
     }
 
     string GetPlayer1Name()
     {
-        return string.IsNullOrWhiteSpace(MainMenu.selectedPlayer1Name)
-            ? player1FallbackName
-            : MainMenu.selectedPlayer1Name;
+        if (matchRuntimeConfig == null || string.IsNullOrWhiteSpace(matchRuntimeConfig.SelectedPlayer1Name))
+            return player1FallbackName;
+
+        return matchRuntimeConfig.SelectedPlayer1Name;
     }
 
     string GetPlayer2Name()
     {
-        return string.IsNullOrWhiteSpace(MainMenu.selectedPlayer2Name)
-            ? player2FallbackName
-            : MainMenu.selectedPlayer2Name;
+        if (matchRuntimeConfig == null || string.IsNullOrWhiteSpace(matchRuntimeConfig.SelectedPlayer2Name))
+            return player2FallbackName;
+
+        return matchRuntimeConfig.SelectedPlayer2Name;
+    }
+
+    StartEndController.MatchMode GetCurrentMatchMode()
+    {
+        if (matchRuntimeConfig != null)
+            return matchRuntimeConfig.SelectedMatchMode;
+
+        return StartEndController.MatchMode.ScoreTarget;
     }
 
     void SetObjectsActive(GameObject[] objectsToSet, bool activeState)

@@ -18,6 +18,7 @@ public class StartEndController : MonoBehaviour
     public BottomBarOrderSwapper bottomBarOrderSwapper;
     public GameModeUIChanger gameModeUIChanger;
     public RewardManager rewardManager;
+    public MatchRuntimeConfig matchRuntimeConfig;
 
     [Header("UI Panels")]
     public GameObject gameUIPanel;
@@ -82,15 +83,21 @@ public class StartEndController : MonoBehaviour
 #if UNITY_2023_1_OR_NEWER
         if (gameModeUIChanger == null)
             gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
 #else
         if (gameModeUIChanger == null)
             gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
 #endif
 
         if (rewardManager == null)
             rewardManager = RewardManager.Instance;
 
-        ApplyMenuSettings();
+        ApplyRuntimeConfig();
 
         Time.timeScale = 1f;
 
@@ -145,11 +152,14 @@ public class StartEndController : MonoBehaviour
         UpdateUniversalBoardAndMathRules();
     }
 
-    void ApplyMenuSettings()
+    void ApplyRuntimeConfig()
     {
-        matchMode = MainMenu.selectedMatchMode;
-        targetScore = Mathf.Max(1, MainMenu.selectedPointsToWin);
-        matchDuration = Mathf.Max(1f, MainMenu.selectedMatchDuration);
+        if (matchRuntimeConfig == null)
+            return;
+
+        matchMode = matchRuntimeConfig.SelectedMatchMode;
+        targetScore = Mathf.Max(1, matchRuntimeConfig.SelectedPointsToWin);
+        matchDuration = Mathf.Max(1f, matchRuntimeConfig.SelectedMatchDuration);
     }
 
     void RefreshModeUI()
@@ -267,9 +277,15 @@ public class StartEndController : MonoBehaviour
 #if UNITY_2023_1_OR_NEWER
         if (gameModeUIChanger == null)
             gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
 #else
         if (gameModeUIChanger == null)
             gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
 #endif
 
         if (rewardManager == null)
@@ -281,7 +297,7 @@ public class StartEndController : MonoBehaviour
             return;
         }
 
-        ApplyMenuSettings();
+        ApplyRuntimeConfig();
 
         Time.timeScale = 1f;
 
@@ -486,8 +502,6 @@ public class StartEndController : MonoBehaviour
         if (scoreManager.IsHalftime)
             return false;
 
-        // Con halftime attivo, NON permettere vittoria matematica nella prima metà.
-        // La valutazione parte solo dopo che il reset di halftime è già avvenuto.
         if (enableHalftime && !halftimeTriggered)
             return false;
 

@@ -1,24 +1,34 @@
+using System;
 using UnityEngine;
+
+[Serializable]
+public class MatchRewardResult
+{
+    public bool grantedReward;
+    public ChestType grantedChestType = ChestType.Random;
+    public string source = "";
+    public string reason = "";
+    public PlayerID winner = PlayerID.None;
+}
 
 public class RewardManager : MonoBehaviour
 {
     public static RewardManager Instance { get; private set; }
 
-    [Header("Persistence")]
-    [SerializeField] private bool dontDestroyOnLoad = true;
-
     [Header("Dependencies")]
     [SerializeField] private PlayerChestSlotInventory playerChestSlotInventory;
 
     [Header("Reward Rules")]
-    [SerializeField] private bool rewardPlayer1OnWin = true;
-    [SerializeField] private ChestType defaultWinRewardChestType = ChestType.Random;
-    [SerializeField] private int defaultWinRewardChestAmount = 1;
+    [SerializeField] private bool enableMatchWinChestReward = true;
+    [SerializeField] private bool onlyGrantForPlayer1Wins = true;
+    [SerializeField] private ChestType defaultWinChestType = ChestType.Random;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
-    private bool rewardGrantedForCurrentMatch = false;
+    private bool matchRewardAlreadyGranted = false;
+
+    public event Action<MatchRewardResult> OnMatchRewardGranted;
 
     private void Awake()
     {
@@ -29,17 +39,12 @@ public class RewardManager : MonoBehaviour
         }
 
         Instance = this;
-
-        if (dontDestroyOnLoad)
-            DontDestroyOnLoad(gameObject);
-
-        if (playerChestSlotInventory == null)
-            playerChestSlotInventory = PlayerChestSlotInventory.Instance;
+        ResolveDependencies();
     }
 
     public void BeginNewMatchRewardCycle()
     {
-        rewardGrantedForCurrentMatch = false;
+        matchRewardAlreadyGranted = false;
 
         if (logDebug)
             Debug.Log("[RewardManager] New match reward cycle started.", this);
@@ -47,63 +52,75 @@ public class RewardManager : MonoBehaviour
 
     public bool TryGrantMatchWinReward(PlayerID winner)
     {
-        if (rewardGrantedForCurrentMatch)
+        MatchRewardResult result = EvaluateMatchWinReward(winner);
+
+        if (!result.grantedReward)
         {
             if (logDebug)
-                Debug.Log("[RewardManager] Reward already granted for this match, skipping.", this);
+            {
+                Debug.Log(
+                    "[RewardManager] No match reward granted. " +
+                    "Winner=" + winner +
+                    " | Reason=" + result.reason,
+                    this
+                );
+            }
 
             return false;
         }
 
-        if (!rewardPlayer1OnWin)
-        {
-            if (logDebug)
-                Debug.Log("[RewardManager] RewardPlayer1OnWin disabled, skipping reward.", this);
+        bool granted = GrantChestReward(result.grantedChestType, result.source, result.reason, result.winner);
 
-            return false;
-        }
+        if (granted)
+            matchRewardAlreadyGranted = true;
 
-        if (winner != PlayerID.Player1)
-        {
-            if (logDebug)
-                Debug.Log("[RewardManager] Winner is not Player1, no reward granted.", this);
-
-            return false;
-        }
-
-        if (!ValidateDependencies())
-            return false;
-
-        ChestType chestTypeToGrant = ResolveRewardChestTypeForCurrentContext();
-        int amountToGrant = Mathf.Max(1, defaultWinRewardChestAmount);
-
-        for (int i = 0; i < amountToGrant; i++)
-            playerChestSlotInventory.AwardChest(chestTypeToGrant);
-
-        rewardGrantedForCurrentMatch = true;
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[RewardManager] Granted chest reward to Player1 -> " +
-                chestTypeToGrant +
-                " x" + amountToGrant,
-                this
-            );
-        }
-
-        return true;
+        return granted;
     }
 
-    private ChestType ResolveRewardChestTypeForCurrentContext()
+    public MatchRewardResult EvaluateMatchWinReward(PlayerID winner)
     {
-        return defaultWinRewardChestType;
+        MatchRewardResult result = new MatchRewardResult
+        {
+            grantedReward = false,
+            grantedChestType = defaultWinChestType,
+            source = "match_win",
+            reason = "",
+            winner = winner
+        };
+
+        if (!enableMatchWinChestReward)
+        {
+            result.reason = "match_win_reward_disabled";
+            return result;
+        }
+
+        if (matchRewardAlreadyGranted)
+        {
+            result.reason = "match_reward_already_granted";
+            return result;
+        }
+
+        if (winner == PlayerID.None)
+        {
+            result.reason = "no_winner";
+            return result;
+        }
+
+        if (onlyGrantForPlayer1Wins && winner != PlayerID.Player1)
+        {
+            result.reason = "winner_not_local_reward_target";
+            return result;
+        }
+
+        result.grantedReward = true;
+        result.reason = "granted";
+
+        return result;
     }
 
-    private bool ValidateDependencies()
+    public bool GrantChestReward(ChestType chestType, string source, string reason, PlayerID winner = PlayerID.None)
     {
-        if (playerChestSlotInventory == null)
-            playerChestSlotInventory = PlayerChestSlotInventory.Instance;
+        ResolveDependencies();
 
         if (playerChestSlotInventory == null)
         {
@@ -111,22 +128,49 @@ public class RewardManager : MonoBehaviour
             return false;
         }
 
+        bool awarded = playerChestSlotInventory.AwardChest(chestType);
+
+        if (!awarded)
+        {
+            Debug.LogWarning(
+                "[RewardManager] Failed to award chest. " +
+                "Type=" + chestType +
+                " | Source=" + source +
+                " | Reason=" + reason,
+                this
+            );
+            return false;
+        }
+
+        MatchRewardResult grantedResult = new MatchRewardResult
+        {
+            grantedReward = true,
+            grantedChestType = chestType,
+            source = source,
+            reason = reason,
+            winner = winner
+        };
+
+        OnMatchRewardGranted?.Invoke(grantedResult);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[RewardManager] Chest reward granted. " +
+                "Type=" + chestType +
+                " | Source=" + source +
+                " | Reason=" + reason +
+                " | Winner=" + winner,
+                this
+            );
+        }
+
         return true;
     }
 
-    [ContextMenu("DEBUG - Grant Default Reward Chest")]
-    public void DebugGrantDefaultRewardChest()
+    private void ResolveDependencies()
     {
-        if (!ValidateDependencies())
-            return;
-
-        for (int i = 0; i < Mathf.Max(1, defaultWinRewardChestAmount); i++)
-            playerChestSlotInventory.AwardChest(defaultWinRewardChestType);
-    }
-
-    [ContextMenu("DEBUG - Reset Match Reward Cycle")]
-    public void DebugResetMatchRewardCycle()
-    {
-        BeginNewMatchRewardCycle();
+        if (playerChestSlotInventory == null)
+            playerChestSlotInventory = PlayerChestSlotInventory.Instance;
     }
 }

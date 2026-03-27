@@ -7,7 +7,7 @@ using UnityEngine.UI;
 public class SkinCollectionPagedUI : MonoBehaviour
 {
     [Header("Dependencies")]
-    [SerializeField] private Player1SkinInventory player1SkinInventory;
+    [SerializeField] private PlayerSkinInventory playerSkinInventory;
     [SerializeField] private BallSkinThumbnailRenderer thumbnailRenderer;
 
     [Header("Grid UI")]
@@ -48,6 +48,7 @@ public class SkinCollectionPagedUI : MonoBehaviour
     private readonly List<BallSkinData> filteredSkins = new List<BallSkinData>();
 
     private BallSkinData selectedSkin;
+    private Coroutine rebuildRoutine;
 
     private void Awake()
     {
@@ -72,14 +73,32 @@ public class SkinCollectionPagedUI : MonoBehaviour
 
     private void OnEnable()
     {
+        ResolveDependencies();
+        SubscribeInventory();
+
         if (rebuildOnEnable)
             Rebuild();
     }
 
+    private void OnDisable()
+    {
+        UnsubscribeInventory();
+
+        if (rebuildRoutine != null)
+        {
+            StopCoroutine(rebuildRoutine);
+            rebuildRoutine = null;
+        }
+    }
+
     public void Rebuild()
     {
-        StopAllCoroutines();
-        StartCoroutine(RebuildCoroutine());
+        ResolveDependencies();
+
+        if (rebuildRoutine != null)
+            StopCoroutine(rebuildRoutine);
+
+        rebuildRoutine = StartCoroutine(RebuildCoroutine());
     }
 
     public void NextFilter()
@@ -140,12 +159,11 @@ public class SkinCollectionPagedUI : MonoBehaviour
 
     public void EquipSelectedSkin()
     {
-        if (player1SkinInventory == null)
-            player1SkinInventory = Player1SkinInventory.Instance;
+        ResolveDependencies();
 
-        if (player1SkinInventory == null)
+        if (playerSkinInventory == null)
         {
-            Debug.LogError("[SkinCollectionPagedUI] Player1SkinInventory missing.", this);
+            Debug.LogError("[SkinCollectionPagedUI] PlayerSkinInventory missing.", this);
             return;
         }
 
@@ -155,12 +173,12 @@ public class SkinCollectionPagedUI : MonoBehaviour
             return;
         }
 
-        bool success = player1SkinInventory.EquipSkin(selectedSkin.skinUniqueId);
+        bool success = playerSkinInventory.EquipSkin(selectedSkin.skinUniqueId);
         if (!success)
             return;
 
         if (logDebug)
-            Debug.Log("[SkinCollectionPagedUI] Equipped Player1 skin: " + selectedSkin.skinUniqueId, this);
+            Debug.Log("[SkinCollectionPagedUI] Equipped skin: " + selectedSkin.skinUniqueId, this);
 
         Rebuild();
         CloseSelectedPreview();
@@ -184,12 +202,14 @@ public class SkinCollectionPagedUI : MonoBehaviour
 
     private IEnumerator RebuildCoroutine()
     {
-        if (player1SkinInventory == null)
-            player1SkinInventory = Player1SkinInventory.Instance;
+        yield return null;
 
-        if (player1SkinInventory == null)
+        if (playerSkinInventory == null)
+            playerSkinInventory = PlayerSkinInventory.Instance;
+
+        if (playerSkinInventory == null)
         {
-            Debug.LogError("[SkinCollectionPagedUI] Player1SkinInventory not found.", this);
+            Debug.LogError("[SkinCollectionPagedUI] PlayerSkinInventory not found.", this);
             yield break;
         }
 
@@ -213,7 +233,6 @@ public class SkinCollectionPagedUI : MonoBehaviour
 
         CleanupGeneratedTextures();
         ClearGrid();
-
         BuildFilteredList();
 
         int totalPages = GetTotalPages();
@@ -224,10 +243,23 @@ public class SkinCollectionPagedUI : MonoBehaviour
 
         RefreshHeaderTexts(totalPages);
 
+        if (logDebug)
+        {
+            Debug.Log(
+                "[SkinCollectionPagedUI] Rebuild -> " +
+                "Unlocked=" + playerSkinInventory.UnlockedSkins.Count +
+                " | Filtered=" + filteredSkins.Count +
+                " | Filter=" + currentFilter +
+                " | Page=" + (totalPages <= 0 ? 0 : currentPageIndex + 1) + "/" + totalPages,
+                this
+            );
+        }
+
         if (filteredSkins.Count == 0)
         {
             selectedSkin = null;
             RefreshSelectedPreview();
+            rebuildRoutine = null;
             yield break;
         }
 
@@ -244,7 +276,7 @@ public class SkinCollectionPagedUI : MonoBehaviour
 
             yield return StartCoroutine(
                 thumbnailRenderer.RenderThumbnailCoroutine(
-                    player1SkinInventory.Database,
+                    playerSkinInventory.Database,
                     skin,
                     tex => thumbnail = tex
                 )
@@ -274,13 +306,14 @@ public class SkinCollectionPagedUI : MonoBehaviour
             selectedSkin = null;
 
         RefreshSelectedPreview();
+        rebuildRoutine = null;
     }
 
     private void BuildFilteredList()
     {
         filteredSkins.Clear();
 
-        IReadOnlyList<BallSkinData> allSkins = player1SkinInventory.UnlockedSkins;
+        IReadOnlyList<BallSkinData> allSkins = playerSkinInventory.UnlockedSkins;
 
         for (int i = 0; i < allSkins.Count; i++)
         {
@@ -354,9 +387,9 @@ public class SkinCollectionPagedUI : MonoBehaviour
         if (selectedRarityBar != null)
             selectedRarityBar.color = GetRarityColor(selectedSkin.rarity);
 
-        if (selectedPreviewSkinApplier != null && player1SkinInventory != null)
+        if (selectedPreviewSkinApplier != null && playerSkinInventory != null)
         {
-            bool applied = selectedPreviewSkinApplier.ApplySkinData(player1SkinInventory.Database, selectedSkin);
+            bool applied = selectedPreviewSkinApplier.ApplySkinData(playerSkinInventory.Database, selectedSkin);
 
             if (!applied)
                 Debug.LogError("[SkinCollectionPagedUI] Failed to apply selected preview skin: " + selectedSkin.skinUniqueId, this);
@@ -406,6 +439,34 @@ public class SkinCollectionPagedUI : MonoBehaviour
         }
 
         generatedTextures.Clear();
+    }
+
+    private void ResolveDependencies()
+    {
+        if (playerSkinInventory == null)
+            playerSkinInventory = PlayerSkinInventory.Instance;
+    }
+
+    private void SubscribeInventory()
+    {
+        if (playerSkinInventory == null)
+            return;
+
+        playerSkinInventory.OnInventoryChanged -= HandleInventoryChanged;
+        playerSkinInventory.OnInventoryChanged += HandleInventoryChanged;
+    }
+
+    private void UnsubscribeInventory()
+    {
+        if (playerSkinInventory == null)
+            return;
+
+        playerSkinInventory.OnInventoryChanged -= HandleInventoryChanged;
+    }
+
+    private void HandleInventoryChanged()
+    {
+        Rebuild();
     }
 
     private Color GetRarityColor(SkinRarity rarity)

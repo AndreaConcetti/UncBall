@@ -4,24 +4,31 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+[Serializable]
+public class ChestOpenRewardResult
+{
+    public bool success;
+    public int slotIndex = -1;
+    public ChestType chestType = ChestType.Random;
+    public BallSkinData grantedSkin;
+    public string source = "";
+    public string reason = "";
+}
+
 public class ObtainNewSkin : MonoBehaviour
 {
     [Header("Dependencies")]
     [SerializeField] private BallSkinRandomGenerator skinRandomGenerator;
-    [SerializeField] private Player1SkinInventory player1SkinInventory;
+    [SerializeField] private PlayerSkinInventory playerSkinInventory;
     [SerializeField] private PlayerChestSlotInventory playerChestSlotInventory;
 
-    [Header("Generation")]
-    [SerializeField] private int maxUniqueRollAttempts = 50;
-    [SerializeField] private int maxExactRarityRollAttempts = 100;
-
-    [Header("New Skin Preview Section")]
+    [Header("Popup UI")]
     [SerializeField] private GameObject newSkinPreviewSection;
     [SerializeField] private BallSkinApplier previewSkinApplier;
     [SerializeField] private Button equipButton;
     [SerializeField] private Button closeButton;
 
-    [Header("Optional Info UI")]
+    [Header("Texts")]
     [SerializeField] private TMP_Text rarityText;
     [SerializeField] private TMP_Text skinIdText;
 
@@ -31,10 +38,16 @@ public class ObtainNewSkin : MonoBehaviour
     [Header("Optional Refresh Targets")]
     [SerializeField] private SkinCollectionPagedUI collectionPagedUI;
 
+    [Header("Generation Limits")]
+    [SerializeField] private int maxUniqueRollAttempts = 50;
+    [SerializeField] private int maxExactRarityRollAttempts = 200;
+
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
     private BallSkinData currentRolledSkin;
+
+    public event Action<ChestOpenRewardResult> OnChestOpenedAndRewardGranted;
 
     private void Awake()
     {
@@ -58,50 +71,92 @@ public class ObtainNewSkin : MonoBehaviour
 
     public void OpenChestFromSlot(int slotIndex)
     {
-        if (!ValidateDependencies())
-            return;
+        ChestOpenRewardResult result = TryOpenChestFromSlot(slotIndex);
 
-        if (!playerChestSlotInventory.HasChestInSlot(slotIndex))
+        if (!result.success)
         {
             if (logDebug)
-                Debug.LogWarning("[ObtainNewSkin] Slot has no chest. Slot=" + slotIndex, this);
+            {
+                Debug.LogWarning(
+                    "[ObtainNewSkin] OpenChestFromSlot failed. " +
+                    "Slot=" + slotIndex +
+                    " | Reason=" + result.reason,
+                    this
+                );
+            }
 
             return;
         }
 
-        if (!playerChestSlotInventory.IsChestReadyToOpen(slotIndex))
-        {
-            if (logDebug)
-                Debug.LogWarning("[ObtainNewSkin] Chest not ready to open yet. Slot=" + slotIndex, this);
+        currentRolledSkin = result.grantedSkin;
+        RefreshNewSkinPreviewSection();
+        OpenNewSkinPreviewSection();
+        RefreshCollectionIfVisible();
 
-            return;
-        }
-
-        ChestType chestType = playerChestSlotInventory.GetChestTypeInSlot(slotIndex);
-
-        bool granted = TryGrantUniqueSkinForChestType(chestType, "Chest Slot " + slotIndex);
-
-        if (!granted)
-        {
-            Debug.LogWarning(
-                "[ObtainNewSkin] Failed to grant skin from chest slot " + slotIndex +
-                ". Chest remains in slot.",
-                this
-            );
-            return;
-        }
-
-        bool consumed = playerChestSlotInventory.ConsumeOpenedChestInSlot(slotIndex);
+        OnChestOpenedAndRewardGranted?.Invoke(result);
 
         if (logDebug)
         {
             Debug.Log(
-                "[ObtainNewSkin] OpenChestFromSlot completed. Slot=" + slotIndex +
-                " | Type=" + chestType +
-                " | Consumed=" + consumed,
+                "[ObtainNewSkin] Chest opened successfully. " +
+                "Slot=" + result.slotIndex +
+                " | Type=" + result.chestType +
+                " | SkinId=" + (result.grantedSkin != null ? result.grantedSkin.skinUniqueId : "null"),
                 this
             );
         }
+    }
+
+    public ChestOpenRewardResult TryOpenChestFromSlot(int slotIndex)
+    {
+        ChestOpenRewardResult result = new ChestOpenRewardResult
+        {
+            success = false,
+            slotIndex = slotIndex,
+            source = "chest_slot_open",
+            reason = ""
+        };
+
+        if (!ValidateDependencies())
+        {
+            result.reason = "missing_dependencies";
+            return result;
+        }
+
+        if (!playerChestSlotInventory.HasChestInSlot(slotIndex))
+        {
+            result.reason = "slot_has_no_chest";
+            return result;
+        }
+
+        if (!playerChestSlotInventory.IsChestReadyToOpen(slotIndex))
+        {
+            result.reason = "chest_not_ready";
+            return result;
+        }
+
+        ChestType chestType = playerChestSlotInventory.GetChestTypeInSlot(slotIndex);
+        result.chestType = chestType;
+
+        BallSkinData grantedSkin = TryGenerateAndGrantChestReward(chestType, "Chest Slot " + slotIndex);
+        if (grantedSkin == null)
+        {
+            result.reason = "failed_to_generate_unique_skin";
+            return result;
+        }
+
+        bool consumed = playerChestSlotInventory.ConsumeOpenedChestInSlot(slotIndex);
+        if (!consumed)
+        {
+            result.reason = "failed_to_consume_chest_after_reward";
+            return result;
+        }
+
+        result.success = true;
+        result.grantedSkin = grantedSkin;
+        result.reason = "granted";
+
+        return result;
     }
 
     public void EquipCurrentRolledSkin()
@@ -115,14 +170,14 @@ public class ObtainNewSkin : MonoBehaviour
             return;
         }
 
-        bool equipped = player1SkinInventory.EquipSkin(currentRolledSkin.skinUniqueId);
+        bool equipped = playerSkinInventory.EquipSkin(currentRolledSkin.skinUniqueId);
 
         if (logDebug)
         {
             Debug.Log(
                 "[ObtainNewSkin] Equip current rolled skin -> " +
                 currentRolledSkin.skinUniqueId +
-                " | equipped: " + equipped,
+                " | Equipped=" + equipped,
                 this
             );
         }
@@ -147,10 +202,9 @@ public class ObtainNewSkin : MonoBehaviour
         SetHiddenObjectsVisible(true);
     }
 
-    private bool TryGrantUniqueSkinForChestType(ChestType chestType, string sourceLabel)
+    private BallSkinData TryGenerateAndGrantChestReward(ChestType chestType, string sourceLabel)
     {
         BallSkinData grantedSkin = null;
-        bool added = false;
 
         for (int attempt = 0; attempt < maxUniqueRollAttempts; attempt++)
         {
@@ -159,7 +213,7 @@ public class ObtainNewSkin : MonoBehaviour
             if (candidate == null)
                 continue;
 
-            bool wasAdded = player1SkinInventory.AddUnlockedSkin(candidate);
+            bool wasAdded = playerSkinInventory.AddUnlockedSkin(candidate);
 
             if (!wasAdded)
             {
@@ -177,11 +231,10 @@ public class ObtainNewSkin : MonoBehaviour
             }
 
             grantedSkin = candidate;
-            added = true;
             break;
         }
 
-        if (!added || grantedSkin == null)
+        if (grantedSkin == null)
         {
             Debug.LogWarning(
                 "[ObtainNewSkin] Failed to grant a unique skin after " +
@@ -189,13 +242,9 @@ public class ObtainNewSkin : MonoBehaviour
                 " attempts from source: " + sourceLabel,
                 this
             );
-
-            return false;
         }
 
-        currentRolledSkin = grantedSkin;
-        OnSkinRolled(sourceLabel, true);
-        return true;
+        return grantedSkin;
     }
 
     private BallSkinData GenerateCandidateForChestType(ChestType chestType)
@@ -241,30 +290,6 @@ public class ObtainNewSkin : MonoBehaviour
         return null;
     }
 
-    private void OnSkinRolled(string sourceLabel, bool alreadyAddedToInventory)
-    {
-        if (currentRolledSkin == null)
-        {
-            Debug.LogError("[ObtainNewSkin] Skin generation failed from source: " + sourceLabel, this);
-            return;
-        }
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[ObtainNewSkin] Rolled skin from " + sourceLabel +
-                " -> ID: " + currentRolledSkin.skinUniqueId +
-                " | rarity: " + currentRolledSkin.rarity +
-                " | already added to inventory: " + alreadyAddedToInventory,
-                this
-            );
-        }
-
-        OpenNewSkinPreviewSection();
-        RefreshNewSkinPreviewSection();
-        RefreshCollectionIfVisible();
-    }
-
     private void RefreshNewSkinPreviewSection()
     {
         if (currentRolledSkin == null)
@@ -284,12 +309,17 @@ public class ObtainNewSkin : MonoBehaviour
         if (skinIdText != null)
             skinIdText.text = currentRolledSkin.skinUniqueId;
 
-        if (previewSkinApplier != null && player1SkinInventory != null)
+        if (previewSkinApplier != null && playerSkinInventory != null)
         {
-            bool applied = previewSkinApplier.ApplySkinData(player1SkinInventory.Database, currentRolledSkin);
+            bool applied = previewSkinApplier.ApplySkinData(playerSkinInventory.Database, currentRolledSkin);
 
             if (!applied)
-                Debug.LogError("[ObtainNewSkin] Failed to apply popup preview skin: " + currentRolledSkin.skinUniqueId, this);
+            {
+                Debug.LogError(
+                    "[ObtainNewSkin] Failed to apply popup preview skin: " + currentRolledSkin.skinUniqueId,
+                    this
+                );
+            }
         }
         else
         {
@@ -333,18 +363,18 @@ public class ObtainNewSkin : MonoBehaviour
             return false;
         }
 
-        if (player1SkinInventory == null)
-            player1SkinInventory = Player1SkinInventory.Instance;
+        if (playerSkinInventory == null)
+            playerSkinInventory = PlayerSkinInventory.Instance;
 
-        if (player1SkinInventory == null)
+        if (playerSkinInventory == null)
         {
-            Debug.LogError("[ObtainNewSkin] Player1SkinInventory missing.", this);
+            Debug.LogError("[ObtainNewSkin] PlayerSkinInventory missing.", this);
             return false;
         }
 
-        if (player1SkinInventory.Database == null)
+        if (playerSkinInventory.Database == null)
         {
-            Debug.LogError("[ObtainNewSkin] Player1SkinInventory database missing.", this);
+            Debug.LogError("[ObtainNewSkin] PlayerSkinInventory database missing.", this);
             return false;
         }
 

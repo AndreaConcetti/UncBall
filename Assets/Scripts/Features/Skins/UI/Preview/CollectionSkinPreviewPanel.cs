@@ -6,7 +6,7 @@ using UnityEngine.UI;
 public class CollectionSkinPreviewPanel : MonoBehaviour
 {
     [Header("Dependencies")]
-    [SerializeField] private Player1SkinInventory player1SkinInventory;
+    [SerializeField] private PlayerSkinInventory playerSkinInventory;
     [SerializeField] private BallSkinApplier previewSkinApplier;
 
     [Header("Panel")]
@@ -64,7 +64,7 @@ public class CollectionSkinPreviewPanel : MonoBehaviour
 
         currentSelectedSkin = skinData;
 
-        bool applied = previewSkinApplier.ApplySkinData(player1SkinInventory.Database, skinData);
+        bool applied = previewSkinApplier.ApplySkinData(playerSkinInventory.Database, skinData);
         if (!applied)
         {
             Debug.LogError(
@@ -103,7 +103,7 @@ public class CollectionSkinPreviewPanel : MonoBehaviour
             return;
         }
 
-        BallSkinData skinData = player1SkinInventory.GetUnlockedSkinById(skinUniqueId);
+        BallSkinData skinData = playerSkinInventory.GetUnlockedSkinById(skinUniqueId);
         if (skinData == null)
         {
             Debug.LogWarning(
@@ -154,7 +154,7 @@ public class CollectionSkinPreviewPanel : MonoBehaviour
             return;
         }
 
-        bool equipped = player1SkinInventory.EquipSkin(currentSelectedSkin.skinUniqueId);
+        bool equipped = playerSkinInventory.EquipSkin(currentSelectedSkin.skinUniqueId);
 
         if (logDebug)
         {
@@ -212,18 +212,18 @@ public class CollectionSkinPreviewPanel : MonoBehaviour
 
     private bool ValidateDependencies()
     {
-        if (player1SkinInventory == null)
-            player1SkinInventory = Player1SkinInventory.Instance;
+        if (playerSkinInventory == null)
+            playerSkinInventory = PlayerSkinInventory.Instance;
 
-        if (player1SkinInventory == null)
+        if (playerSkinInventory == null)
         {
-            Debug.LogError("[CollectionSkinPreviewPanel] Player1SkinInventory missing.", this);
+            Debug.LogError("[CollectionSkinPreviewPanel] PlayerSkinInventory missing.", this);
             return false;
         }
 
-        if (player1SkinInventory.Database == null)
+        if (playerSkinInventory.Database == null)
         {
-            Debug.LogError("[CollectionSkinPreviewPanel] Player1SkinInventory.Database missing.", this);
+            Debug.LogError("[CollectionSkinPreviewPanel] PlayerSkinInventory.Database missing.", this);
             return false;
         }
 

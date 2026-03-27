@@ -140,7 +140,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 71953435a08cb60439e95ac047d3d37c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallSkinApplier
-  targetRenderer: {fileID: 5219028863530366534}
+  targetRenderer: {fileID: 4371384122712813380, guid: de8842929cac98e45a093a177fba0259, type: 3}
   runtimeMaterialTemplate: {fileID: 2100000, guid: 72a913e70a43ce04095e0c48c7272d81, type: 2}
   baseColorProperty: _BaseColor
   patternTextureProperty: _PatternTex
