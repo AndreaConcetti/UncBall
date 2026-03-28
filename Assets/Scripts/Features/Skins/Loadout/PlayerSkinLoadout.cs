@@ -14,6 +14,7 @@ public class PlayerSkinLoadout : MonoBehaviour
 
     [Header("Dependencies")]
     [SerializeField] private BallSkinDatabase database;
+    [SerializeField] private PlayerProfileManager profileManager;
 
     [Header("Persistence")]
     [SerializeField] private bool dontDestroyOnLoad = true;
@@ -52,6 +53,9 @@ public class PlayerSkinLoadout : MonoBehaviour
         EnsureRuntimeStructure();
         SanitizeRuntimeData();
 
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            player1Slot.profileId = profileManager.ActiveProfileId;
+
         if (logDebug)
         {
             Debug.Log(
@@ -64,6 +68,31 @@ public class PlayerSkinLoadout : MonoBehaviour
                 this
             );
         }
+    }
+
+    private void OnEnable()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null)
+        {
+            profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+            profileManager.OnActiveProfileChanged += HandleActiveProfileChanged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (profileManager != null)
+            profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+    }
+
+    private void Start()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            SetPlayer1ProfileId(profileManager.ActiveProfileId);
     }
 
     public void SetPlayer1ProfileId(string profileId)
@@ -332,8 +361,19 @@ public class PlayerSkinLoadout : MonoBehaviour
         }
     }
 
+    private void HandleActiveProfileChanged(PlayerProfileRuntimeData profileData)
+    {
+        if (profileData == null)
+            return;
+
+        SetPlayer1ProfileId(profileData.profileId);
+    }
+
     private void ResolveDependencies()
     {
+        if (profileManager == null)
+            profileManager = PlayerProfileManager.Instance;
+
 #if UNITY_2023_1_OR_NEWER
         if (database == null)
             database = FindFirstObjectByType<BallSkinDatabase>();

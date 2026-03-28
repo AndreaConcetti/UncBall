@@ -40,7 +40,6 @@ public class ObtainNewSkin : MonoBehaviour
 
     [Header("Generation Limits")]
     [SerializeField] private int maxUniqueRollAttempts = 50;
-    [SerializeField] private int maxExactRarityRollAttempts = 200;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
@@ -114,7 +113,7 @@ public class ObtainNewSkin : MonoBehaviour
             success = false,
             slotIndex = slotIndex,
             source = "chest_slot_open",
-            reason = ""
+            reason = string.Empty
         };
 
         if (!ValidateDependencies())
@@ -211,7 +210,19 @@ public class ObtainNewSkin : MonoBehaviour
             BallSkinData candidate = GenerateCandidateForChestType(chestType);
 
             if (candidate == null)
+            {
+                if (logDebug)
+                {
+                    Debug.LogWarning(
+                        "[ObtainNewSkin] Null candidate generated. " +
+                        "Attempt=" + (attempt + 1) + "/" + maxUniqueRollAttempts +
+                        " | ChestType=" + chestType,
+                        this
+                    );
+                }
+
                 continue;
+            }
 
             bool wasAdded = playerSkinInventory.AddUnlockedSkin(candidate);
 
@@ -220,9 +231,10 @@ public class ObtainNewSkin : MonoBehaviour
                 if (logDebug)
                 {
                     Debug.Log(
-                        "[ObtainNewSkin] Duplicate skin rolled, retrying... Attempt " +
-                        (attempt + 1) + "/" + maxUniqueRollAttempts +
-                        " | Skin ID: " + candidate.skinUniqueId,
+                        "[ObtainNewSkin] Duplicate skin rolled, retrying... " +
+                        "Attempt=" + (attempt + 1) + "/" + maxUniqueRollAttempts +
+                        " | SkinId=" + candidate.skinUniqueId +
+                        " | ChestType=" + chestType,
                         this
                     );
                 }
@@ -239,7 +251,8 @@ public class ObtainNewSkin : MonoBehaviour
             Debug.LogWarning(
                 "[ObtainNewSkin] Failed to grant a unique skin after " +
                 maxUniqueRollAttempts +
-                " attempts from source: " + sourceLabel,
+                " attempts. Source=" + sourceLabel +
+                " | ChestType=" + chestType,
                 this
             );
         }
@@ -249,45 +262,29 @@ public class ObtainNewSkin : MonoBehaviour
 
     private BallSkinData GenerateCandidateForChestType(ChestType chestType)
     {
+        if (skinRandomGenerator == null)
+            return null;
+
         switch (chestType)
         {
             case ChestType.Random:
                 return skinRandomGenerator.GenerateRandomSkin();
 
             case ChestType.GuaranteedCommon:
-                return GenerateRandomSkinOfExactRarity(SkinRarity.Common);
+                return skinRandomGenerator.GenerateGuaranteedCommonSkin();
 
             case ChestType.GuaranteedRare:
-                return GenerateRandomSkinOfExactRarity(SkinRarity.Rare);
+                return skinRandomGenerator.GenerateGuaranteedRareSkin();
 
             case ChestType.GuaranteedEpic:
-                return GenerateRandomSkinOfExactRarity(SkinRarity.Epic);
+                return skinRandomGenerator.GenerateGuaranteedEpicSkin();
 
             case ChestType.GuaranteedLegendary:
-                return GenerateRandomSkinOfExactRarity(SkinRarity.Legendary);
+                return skinRandomGenerator.GenerateGuaranteedLegendarySkin();
 
             default:
                 return skinRandomGenerator.GenerateRandomSkin();
         }
-    }
-
-    private BallSkinData GenerateRandomSkinOfExactRarity(SkinRarity targetRarity)
-    {
-        for (int i = 0; i < maxExactRarityRollAttempts; i++)
-        {
-            BallSkinData candidate = skinRandomGenerator.GenerateRandomSkin();
-            if (candidate != null && candidate.rarity == targetRarity)
-                return candidate;
-        }
-
-        Debug.LogWarning(
-            "[ObtainNewSkin] Failed to generate exact rarity skin after " +
-            maxExactRarityRollAttempts +
-            " attempts. TargetRarity=" + targetRarity,
-            this
-        );
-
-        return null;
     }
 
     private void RefreshNewSkinPreviewSection()
@@ -335,7 +332,12 @@ public class ObtainNewSkin : MonoBehaviour
         if (!collectionPagedUI.gameObject.activeInHierarchy)
         {
             if (logDebug)
-                Debug.Log("[ObtainNewSkin] CollectionPanel inactive, skip rebuild. It will rebuild on enable.", this);
+            {
+                Debug.Log(
+                    "[ObtainNewSkin] CollectionPanel inactive, skip rebuild. It will rebuild on enable.",
+                    this
+                );
+            }
 
             return;
         }

@@ -16,24 +16,600 @@ MonoBehaviour:
   - id: white
     color: {r: 1, g: 1, b: 1, a: 1}
     rarity: 0
+  - id: ivory
+    color: {r: 1, g: 0.972549, b: 0.90588236, a: 1}
+    rarity: 0
+  - id: cream
+    color: {r: 1, g: 0.94509804, b: 0.8, a: 1}
+    rarity: 0
+  - id: pearl
+    color: {r: 0.95686275, g: 0.9647059, b: 0.972549, a: 1}
+    rarity: 0
+  - id: gray
+    color: {r: 0.5019608, g: 0.5019608, b: 0.5019608, a: 1}
+    rarity: 0
+  - id: slate
+    color: {r: 0.4392157, g: 0.5019608, b: 0.5647059, a: 1}
+    rarity: 0
+  - id: silver
+    color: {r: 0.7529412, g: 0.7529412, b: 0.7529412, a: 1}
+    rarity: 1
+  - id: charcoal
+    color: {r: 0.18431373, g: 0.21176471, b: 0.2509804, a: 1}
+    rarity: 1
+  - id: graphite
+    color: {r: 0.2901961, g: 0.30980393, b: 0.34117648, a: 1}
+    rarity: 1
+  - id: obsidian
+    color: {r: 0.06666667, g: 0.06666667, b: 0.06666667, a: 1}
+    rarity: 2
+  - id: frost_white
+    color: {r: 0.972549, g: 0.9882353, b: 1, a: 1}
+    rarity: 2
   - id: black
     color: {r: 0, g: 0, b: 0, a: 1}
-    rarity: 0
-  - id: red
-    color: {r: 1, g: 0, b: 0, a: 1}
-    rarity: 0
-  - id: blue
-    color: {r: 0, g: 0.08463931, b: 1, a: 1}
-    rarity: 0
-  - id: lime
-    color: {r: 0.49527264, g: 1, b: 0, a: 1}
-    rarity: 1
-  - id: gold
-    color: {r: 0.7884582, g: 0.8301887, b: 0, a: 1}
-    rarity: 2
-  - id: purple
-    color: {r: 0.22679824, g: 0, b: 0.2735849, a: 1}
     rarity: 3
-  - id: lightblue
-    color: {r: 0.2688679, g: 0.9173614, b: 1, a: 1}
+  - id: champion_gold
+    color: {r: 1, g: 0.84313726, b: 0, a: 1}
+    rarity: 3
+  - id: red_pastel
+    color: {r: 1, g: 0.78, b: 0.78, a: 1}
+    rarity: 0
+  - id: red_soft
+    color: {r: 0.96, g: 0.5952, b: 0.5952, a: 1}
+    rarity: 0
+  - id: red_light
+    color: {r: 1, g: 0.44, b: 0.44, a: 1}
+    rarity: 0
+  - id: red_classic
+    color: {r: 0.9, g: 0.19800001, b: 0.19800001, a: 1}
+    rarity: 0
+  - id: red_vivid
+    color: {r: 0.98, g: 0.078399986, b: 0.078399986, a: 1}
+    rarity: 1
+  - id: red_deep
+    color: {r: 0.64, g: 0.0768, b: 0.0768, a: 1}
+    rarity: 1
+  - id: red_ice
+    color: {r: 1, g: 0.8308, b: 0.82, a: 1}
+    rarity: 1
+  - id: red_neon
+    color: {r: 1, g: 0, b: 0, a: 1}
+    rarity: 2
+  - id: red_royal
+    color: {r: 0.78, g: 0.1404, b: 0.1404, a: 1}
+    rarity: 2
+  - id: red_plasma
+    color: {r: 1, g: 0.089999996, b: 0, a: 1}
+    rarity: 3
+  - id: red_inferno
+    color: {r: 0.92, g: 0, b: 0.06624003, a: 1}
+    rarity: 3
+  - id: crimson_pastel
+    color: {r: 1, g: 0.78, b: 0.8129999, a: 1}
+    rarity: 0
+  - id: crimson_soft
+    color: {r: 0.96, g: 0.5952, b: 0.64991987, a: 1}
+    rarity: 0
+  - id: crimson_light
+    color: {r: 1, g: 0.44, b: 0.5239998, a: 1}
+    rarity: 0
+  - id: crimson_classic
+    color: {r: 0.9, g: 0.19800001, b: 0.30329975, a: 1}
+    rarity: 0
+  - id: crimson_vivid
+    color: {r: 0.98, g: 0.078399986, b: 0.21363965, a: 1}
+    rarity: 1
+  - id: crimson_deep
+    color: {r: 0.64, g: 0.0768, b: 0.16127978, a: 1}
+    rarity: 1
+  - id: crimson_ice
+    color: {r: 1, g: 0.82, b: 0.8362, a: 1}
+    rarity: 1
+  - id: crimson_neon
+    color: {r: 1, g: 0, b: 0.14999962, a: 1}
+    rarity: 2
+  - id: crimson_royal
+    color: {r: 0.78, g: 0.1404, b: 0.23633975, a: 1}
+    rarity: 2
+  - id: crimson_plasma
+    color: {r: 1, g: 0, b: 0.059999943, a: 1}
+    rarity: 3
+  - id: crimson_inferno
+    color: {r: 0.92, g: 0, b: 0.20424011, a: 1}
+    rarity: 3
+  - id: coral_pastel
+    color: {r: 1, g: 0.8196, b: 0.78, a: 1}
+    rarity: 0
+  - id: coral_soft
+    color: {r: 0.96, g: 0.660864, b: 0.5952, a: 1}
+    rarity: 0
+  - id: coral_light
+    color: {r: 1, g: 0.5408, b: 0.44, a: 1}
+    rarity: 0
+  - id: coral_classic
+    color: {r: 0.9, g: 0.32436, b: 0.19800001, a: 1}
+    rarity: 0
+  - id: coral_vivid
+    color: {r: 0.98, g: 0.24068798, b: 0.078399986, a: 1}
+    rarity: 1
+  - id: coral_deep
+    color: {r: 0.64, g: 0.178176, b: 0.0768, a: 1}
+    rarity: 1
+  - id: coral_ice
+    color: {r: 1, g: 0.8632, b: 0.82, a: 1}
+    rarity: 1
+  - id: coral_neon
+    color: {r: 1, g: 0.17999999, b: 0, a: 1}
+    rarity: 2
+  - id: coral_royal
+    color: {r: 0.78, g: 0.255528, b: 0.1404, a: 1}
+    rarity: 2
+  - id: coral_plasma
+    color: {r: 1, g: 0.26999998, b: 0, a: 1}
+    rarity: 3
+  - id: coral_inferno
+    color: {r: 0.92, g: 0.09936, b: 0, a: 1}
+    rarity: 3
+  - id: orange_pastel
+    color: {r: 1, g: 0.879, b: 0.78, a: 1}
+    rarity: 0
+  - id: orange_soft
+    color: {r: 0.96, g: 0.75936, b: 0.5952, a: 1}
+    rarity: 0
+  - id: orange_light
+    color: {r: 1, g: 0.69200003, b: 0.44, a: 1}
+    rarity: 0
+  - id: orange_classic
+    color: {r: 0.9, g: 0.51390004, b: 0.19800001, a: 1}
+    rarity: 0
+  - id: orange_vivid
+    color: {r: 0.98, g: 0.48412, b: 0.078399986, a: 1}
+    rarity: 1
+  - id: orange_deep
+    color: {r: 0.64, g: 0.33024, b: 0.0768, a: 1}
+    rarity: 1
+  - id: orange_ice
+    color: {r: 1, g: 0.91179997, b: 0.82, a: 1}
+    rarity: 1
+  - id: orange_neon
+    color: {r: 1, g: 0.45000002, b: 0, a: 1}
+    rarity: 2
+  - id: orange_royal
+    color: {r: 0.78, g: 0.42822, b: 0.1404, a: 1}
+    rarity: 2
+  - id: orange_plasma
+    color: {r: 1, g: 0.54, b: 0, a: 1}
+    rarity: 3
+  - id: orange_inferno
+    color: {r: 0.92, g: 0.34776002, b: 0, a: 1}
+    rarity: 3
+  - id: gold_pastel
+    color: {r: 1, g: 0.9648, b: 0.78, a: 1}
+    rarity: 0
+  - id: gold_soft
+    color: {r: 0.96, g: 0.901632, b: 0.5952, a: 1}
+    rarity: 0
+  - id: gold_light
+    color: {r: 1, g: 0.91040003, b: 0.44, a: 1}
+    rarity: 0
+  - id: gold_classic
+    color: {r: 0.9, g: 0.78768003, b: 0.19800001, a: 1}
+    rarity: 0
+  - id: gold_vivid
+    color: {r: 0.98, g: 0.835744, b: 0.078399986, a: 1}
+    rarity: 1
+  - id: gold_deep
+    color: {r: 0.64, g: 0.549888, b: 0.0768, a: 1}
+    rarity: 1
+  - id: gold_ice
+    color: {r: 1, g: 0.982, b: 0.82, a: 1}
+    rarity: 1
+  - id: gold_neon
+    color: {r: 1, g: 0.84000003, b: 0, a: 1}
+    rarity: 2
+  - id: gold_royal
+    color: {r: 0.78, g: 0.677664, b: 0.1404, a: 1}
+    rarity: 2
+  - id: gold_plasma
+    color: {r: 1, g: 0.93, b: 0, a: 1}
+    rarity: 3
+  - id: gold_inferno
+    color: {r: 0.92, g: 0.70656, b: 0, a: 1}
+    rarity: 3
+  - id: yellow_pastel
+    color: {r: 1, g: 0.9912, b: 0.78, a: 1}
+    rarity: 0
+  - id: yellow_soft
+    color: {r: 0.96, g: 0.945408, b: 0.5952, a: 1}
+    rarity: 0
+  - id: yellow_light
+    color: {r: 1, g: 0.9776, b: 0.44, a: 1}
+    rarity: 0
+  - id: yellow_classic
+    color: {r: 0.9, g: 0.87192, b: 0.19800001, a: 1}
+    rarity: 0
+  - id: yellow_vivid
+    color: {r: 0.98, g: 0.943936, b: 0.078399986, a: 1}
+    rarity: 1
+  - id: yellow_deep
+    color: {r: 0.64, g: 0.617472, b: 0.0768, a: 1}
+    rarity: 1
+  - id: yellow_ice
+    color: {r: 0.9964, g: 1, b: 0.82, a: 1}
+    rarity: 1
+  - id: yellow_neon
+    color: {r: 1, g: 0.96, b: 0, a: 1}
+    rarity: 2
+  - id: yellow_royal
+    color: {r: 0.78, g: 0.7544159, b: 0.1404, a: 1}
+    rarity: 2
+  - id: yellow_plasma
+    color: {r: 0.95000005, g: 1, b: 0, a: 1}
+    rarity: 3
+  - id: yellow_inferno
+    color: {r: 0.92, g: 0.81696004, b: 0, a: 1}
+    rarity: 3
+  - id: lime_pastel
+    color: {r: 0.9164, g: 1, b: 0.78, a: 1}
+    rarity: 0
+  - id: lime_soft
+    color: {r: 0.82137597, g: 0.96, b: 0.5952, a: 1}
+    rarity: 0
+  - id: lime_light
+    color: {r: 0.7872, g: 1, b: 0.44, a: 1}
+    rarity: 0
+  - id: lime_classic
+    color: {r: 0.63324, g: 0.9, b: 0.19800001, a: 1}
+    rarity: 0
+  - id: lime_vivid
+    color: {r: 0.637392, g: 0.98, b: 0.078399986, a: 1}
+    rarity: 1
+  - id: lime_deep
+    color: {r: 0.425984, g: 0.64, b: 0.0768, a: 1}
+    rarity: 1
+  - id: lime_ice
+    color: {r: 0.9208, g: 1, b: 0.82, a: 1}
+    rarity: 1
+  - id: lime_neon
+    color: {r: 0.62, g: 1, b: 0, a: 1}
+    rarity: 2
+  - id: lime_royal
+    color: {r: 0.53695196, g: 0.78, b: 0.1404, a: 1}
+    rarity: 2
+  - id: lime_plasma
+    color: {r: 0.53, g: 1, b: 0, a: 1}
+    rarity: 3
+  - id: lime_inferno
+    color: {r: 0.63663995, g: 0.92, b: 0, a: 1}
+    rarity: 3
+  - id: green_pastel
+    color: {r: 0.7844, g: 1, b: 0.78, a: 1}
+    rarity: 0
+  - id: green_soft
+    color: {r: 0.60249597, g: 0.96, b: 0.5952, a: 1}
+    rarity: 0
+  - id: green_light
+    color: {r: 0.45119998, g: 1, b: 0.44, a: 1}
+    rarity: 0
+  - id: green_classic
+    color: {r: 0.21204, g: 0.9, b: 0.19800001, a: 1}
+    rarity: 0
+  - id: green_vivid
+    color: {r: 0.09643197, g: 0.98, b: 0.078399986, a: 1}
+    rarity: 1
+  - id: green_deep
+    color: {r: 0.08806399, g: 0.64, b: 0.0768, a: 1}
+    rarity: 1
+  - id: green_ice
+    color: {r: 0.82, g: 1, b: 0.8272, a: 1}
+    rarity: 1
+  - id: green_neon
+    color: {r: 0.01999998, g: 1, b: 0, a: 1}
+    rarity: 2
+  - id: green_royal
+    color: {r: 0.15319198, g: 0.78, b: 0.1404, a: 1}
+    rarity: 2
+  - id: green_plasma
+    color: {r: 0, g: 1, b: 0.06999993, a: 1}
+    rarity: 3
+  - id: green_inferno
+    color: {r: 0.0846399, g: 0.92, b: 0, a: 1}
+    rarity: 3
+  - id: emerald_pastel
+    color: {r: 0.78, g: 1, b: 0.8548, a: 1}
+    rarity: 0
+  - id: emerald_soft
+    color: {r: 0.5952, g: 0.96, b: 0.71923196, a: 1}
+    rarity: 0
+  - id: emerald_light
+    color: {r: 0.44, g: 1, b: 0.63039994, a: 1}
+    rarity: 0
+  - id: emerald_classic
+    color: {r: 0.19800001, g: 0.9, b: 0.43667996, a: 1}
+    rarity: 0
+  - id: emerald_vivid
+    color: {r: 0.078399986, g: 0.98, b: 0.38494393, a: 1}
+    rarity: 1
+  - id: emerald_deep
+    color: {r: 0.0768, g: 0.64, b: 0.26828796, a: 1}
+    rarity: 1
+  - id: emerald_ice
+    color: {r: 0.82, g: 1, b: 0.89199996, a: 1}
+    rarity: 1
+  - id: emerald_neon
+    color: {r: 0, g: 1, b: 0.3399999, a: 1}
+    rarity: 2
+  - id: emerald_royal
+    color: {r: 0.1404, g: 0.78, b: 0.35786393, a: 1}
+    rarity: 2
+  - id: emerald_plasma
+    color: {r: 0, g: 1, b: 0.42999983, a: 1}
+    rarity: 3
+  - id: emerald_inferno
+    color: {r: 0, g: 0.92, b: 0.2465599, a: 1}
+    rarity: 3
+  - id: cyan_pastel
+    color: {r: 0.78, g: 1, b: 1, a: 1}
+    rarity: 0
+  - id: cyan_soft
+    color: {r: 0.5952, g: 0.96, b: 0.96, a: 1}
+    rarity: 0
+  - id: cyan_light
+    color: {r: 0.44, g: 1, b: 1, a: 1}
+    rarity: 0
+  - id: cyan_classic
+    color: {r: 0.19800001, g: 0.9, b: 0.9, a: 1}
+    rarity: 0
+  - id: cyan_vivid
+    color: {r: 0.078399986, g: 0.98, b: 0.98, a: 1}
+    rarity: 1
+  - id: cyan_deep
+    color: {r: 0.0768, g: 0.64, b: 0.64, a: 1}
+    rarity: 1
+  - id: cyan_ice
+    color: {r: 0.82, g: 0.9892, b: 1, a: 1}
+    rarity: 1
+  - id: cyan_neon
+    color: {r: 0, g: 1, b: 1, a: 1}
+    rarity: 2
+  - id: cyan_royal
+    color: {r: 0.1404, g: 0.78, b: 0.78, a: 1}
+    rarity: 2
+  - id: cyan_plasma
+    color: {r: 0, g: 0.9100001, b: 1, a: 1}
+    rarity: 3
+  - id: cyan_inferno
+    color: {r: 0, g: 0.92, b: 0.85376, a: 1}
+    rarity: 3
+  - id: azure_pastel
+    color: {r: 0.78, g: 0.9274, b: 1, a: 1}
+    rarity: 0
+  - id: azure_soft
+    color: {r: 0.5952, g: 0.839616, b: 0.96, a: 1}
+    rarity: 0
+  - id: azure_light
+    color: {r: 0.44, g: 0.81520003, b: 1, a: 1}
+    rarity: 0
+  - id: azure_classic
+    color: {r: 0.19800001, g: 0.66834, b: 0.9, a: 1}
+    rarity: 0
+  - id: azure_vivid
+    color: {r: 0.078399986, g: 0.68247205, b: 0.98, a: 1}
+    rarity: 1
+  - id: azure_deep
+    color: {r: 0.0768, g: 0.45414403, b: 0.64, a: 1}
+    rarity: 1
+  - id: azure_ice
+    color: {r: 0.82, g: 0.92980003, b: 1, a: 1}
+    rarity: 1
+  - id: azure_neon
+    color: {r: 0, g: 0.6700001, b: 1, a: 1}
+    rarity: 2
+  - id: azure_royal
+    color: {r: 0.1404, g: 0.56893206, b: 0.78, a: 1}
+    rarity: 2
+  - id: azure_plasma
+    color: {r: 0, g: 0.5799999, b: 1, a: 1}
+    rarity: 3
+  - id: azure_inferno
+    color: {r: 0, g: 0.68264014, b: 0.92, a: 1}
+    rarity: 3
+  - id: blue_pastel
+    color: {r: 0.78, g: 0.8548, b: 1, a: 1}
+    rarity: 0
+  - id: blue_soft
+    color: {r: 0.5952, g: 0.71923196, b: 0.96, a: 1}
+    rarity: 0
+  - id: blue_light
+    color: {r: 0.44, g: 0.63039994, b: 1, a: 1}
+    rarity: 0
+  - id: blue_classic
+    color: {r: 0.19800001, g: 0.43667996, b: 0.9, a: 1}
+    rarity: 0
+  - id: blue_vivid
+    color: {r: 0.078399986, g: 0.38494393, b: 0.98, a: 1}
+    rarity: 1
+  - id: blue_deep
+    color: {r: 0.0768, g: 0.26828796, b: 0.64, a: 1}
+    rarity: 1
+  - id: blue_ice
+    color: {r: 0.82, g: 0.8704, b: 1, a: 1}
+    rarity: 1
+  - id: blue_neon
+    color: {r: 0, g: 0.3399999, b: 1, a: 1}
+    rarity: 2
+  - id: blue_royal
+    color: {r: 0.1404, g: 0.35786393, b: 0.78, a: 1}
+    rarity: 2
+  - id: blue_plasma
+    color: {r: 0, g: 0.25, b: 1, a: 1}
+    rarity: 3
+  - id: blue_inferno
+    color: {r: 0, g: 0.37904018, b: 0.92, a: 1}
+    rarity: 3
+  - id: navy_pastel
+    color: {r: 0.78, g: 0.7954, b: 1, a: 1}
+    rarity: 0
+  - id: navy_soft
+    color: {r: 0.5952, g: 0.62073606, b: 0.96, a: 1}
+    rarity: 0
+  - id: navy_light
+    color: {r: 0.44, g: 0.4792001, b: 1, a: 1}
+    rarity: 0
+  - id: navy_classic
+    color: {r: 0.19800001, g: 0.24714014, b: 0.9, a: 1}
+    rarity: 0
+  - id: navy_vivid
+    color: {r: 0.078399986, g: 0.14151214, b: 0.98, a: 1}
+    rarity: 1
+  - id: navy_deep
+    color: {r: 0.0768, g: 0.116224095, b: 0.64, a: 1}
+    rarity: 1
+  - id: navy_ice
+    color: {r: 0.82, g: 0.82180005, b: 1, a: 1}
+    rarity: 1
+  - id: navy_neon
+    color: {r: 0, g: 0.07000017, b: 1, a: 1}
+    rarity: 2
+  - id: navy_royal
+    color: {r: 0.1404, g: 0.18517211, b: 0.78, a: 1}
+    rarity: 2
+  - id: navy_plasma
+    color: {r: 0.019999504, g: 0, b: 1, a: 1}
+    rarity: 3
+  - id: navy_inferno
+    color: {r: 0, g: 0.13064018, b: 0.92, a: 1}
+    rarity: 3
+  - id: indigo_pastel
+    color: {r: 0.8306, g: 0.78, b: 1, a: 1}
+    rarity: 0
+  - id: indigo_soft
+    color: {r: 0.679104, g: 0.5952, b: 0.96, a: 1}
+    rarity: 0
+  - id: indigo_light
+    color: {r: 0.56880003, g: 0.44, b: 1, a: 1}
+    rarity: 0
+  - id: indigo_classic
+    color: {r: 0.35946003, g: 0.19800001, b: 0.9, a: 1}
+    rarity: 0
+  - id: indigo_vivid
+    color: {r: 0.285768, g: 0.078399986, b: 0.98, a: 1}
+    rarity: 1
+  - id: indigo_deep
+    color: {r: 0.206336, g: 0.0768, b: 0.64, a: 1}
+    rarity: 1
+  - id: indigo_ice
+    color: {r: 0.8722, g: 0.82, b: 1, a: 1}
+    rarity: 1
+  - id: indigo_neon
+    color: {r: 0.23000002, g: 0, b: 1, a: 1}
+    rarity: 2
+  - id: indigo_royal
+    color: {r: 0.287508, g: 0.1404, b: 0.78, a: 1}
+    rarity: 2
+  - id: indigo_plasma
+    color: {r: 0.3199997, g: 0, b: 1, a: 1}
+    rarity: 3
+  - id: indigo_inferno
+    color: {r: 0.14536, g: 0, b: 0.92, a: 1}
+    rarity: 3
+  - id: purple_pastel
+    color: {r: 0.9032, g: 0.78, b: 1, a: 1}
+    rarity: 0
+  - id: purple_soft
+    color: {r: 0.79948795, g: 0.5952, b: 0.96, a: 1}
+    rarity: 0
+  - id: purple_light
+    color: {r: 0.75359994, g: 0.44, b: 1, a: 1}
+    rarity: 0
+  - id: purple_classic
+    color: {r: 0.59111995, g: 0.19800001, b: 0.9, a: 1}
+    rarity: 0
+  - id: purple_vivid
+    color: {r: 0.58329594, g: 0.078399986, b: 0.98, a: 1}
+    rarity: 1
+  - id: purple_deep
+    color: {r: 0.39219195, g: 0.0768, b: 0.64, a: 1}
+    rarity: 1
+  - id: purple_ice
+    color: {r: 0.9316, g: 0.82, b: 1, a: 1}
+    rarity: 1
+  - id: purple_neon
+    color: {r: 0.55999994, g: 0, b: 1, a: 1}
+    rarity: 2
+  - id: purple_royal
+    color: {r: 0.49857596, g: 0.1404, b: 0.78, a: 1}
+    rarity: 2
+  - id: purple_plasma
+    color: {r: 0.6499996, g: 0, b: 1, a: 1}
+    rarity: 3
+  - id: purple_inferno
+    color: {r: 0.44895992, g: 0, b: 0.92, a: 1}
+    rarity: 3
+  - id: magenta_pastel
+    color: {r: 1, g: 0.78, b: 0.96480006, a: 1}
+    rarity: 0
+  - id: magenta_soft
+    color: {r: 0.96, g: 0.5952, b: 0.901632, a: 1}
+    rarity: 0
+  - id: magenta_light
+    color: {r: 1, g: 0.44, b: 0.9104001, a: 1}
+    rarity: 0
+  - id: magenta_classic
+    color: {r: 0.9, g: 0.19800001, b: 0.7876801, a: 1}
+    rarity: 0
+  - id: magenta_vivid
+    color: {r: 0.98, g: 0.078399986, b: 0.83574414, a: 1}
+    rarity: 1
+  - id: magenta_deep
+    color: {r: 0.64, g: 0.0768, b: 0.5498881, a: 1}
+    rarity: 1
+  - id: magenta_ice
+    color: {r: 1, g: 0.82, b: 0.9603999, a: 1}
+    rarity: 1
+  - id: magenta_neon
+    color: {r: 1, g: 0, b: 0.84000015, a: 1}
+    rarity: 2
+  - id: magenta_royal
+    color: {r: 0.78, g: 0.1404, b: 0.6776641, a: 1}
+    rarity: 2
+  - id: magenta_plasma
+    color: {r: 1, g: 0, b: 0.75, a: 1}
+    rarity: 3
+  - id: magenta_inferno
+    color: {r: 0.92, g: 0, b: 0.83904016, a: 1}
+    rarity: 3
+  - id: pink_pastel
+    color: {r: 1, g: 0.78, b: 0.8988, a: 1}
+    rarity: 0
+  - id: pink_soft
+    color: {r: 0.96, g: 0.5952, b: 0.792192, a: 1}
+    rarity: 0
+  - id: pink_light
+    color: {r: 1, g: 0.44, b: 0.7424, a: 1}
+    rarity: 0
+  - id: pink_classic
+    color: {r: 0.9, g: 0.19800001, b: 0.57707995, a: 1}
+    rarity: 0
+  - id: pink_vivid
+    color: {r: 0.98, g: 0.078399986, b: 0.565264, a: 1}
+    rarity: 1
+  - id: pink_deep
+    color: {r: 0.64, g: 0.0768, b: 0.38092798, a: 1}
+    rarity: 1
+  - id: pink_ice
+    color: {r: 1, g: 0.82, b: 0.9064, a: 1}
+    rarity: 1
+  - id: pink_neon
+    color: {r: 1, g: 0, b: 0.53999996, a: 1}
+    rarity: 2
+  - id: pink_royal
+    color: {r: 0.78, g: 0.1404, b: 0.48578396, a: 1}
+    rarity: 2
+  - id: pink_plasma
+    color: {r: 1, g: 0, b: 0.4499998, a: 1}
+    rarity: 3
+  - id: pink_inferno
+    color: {r: 0.92, g: 0, b: 0.56304, a: 1}
     rarity: 3

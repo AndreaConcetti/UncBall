@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 186b829679a66a64db45c3303a1f3c71, type: 3}
+  m_Name: BallColorHarmonyProfile
+  m_EditorClassIdentifier: Assembly-CSharp::BallColorHarmonyProfile
+  complementaryWeight: 1.35
+  splitComplementaryWeight: 1.1
+  analogousWeight: 0.7
+  triadicWeight: 0.95
+  neutralWeight: 0.55
+  valueContrastWeight: 0.9
+  saturationContrastWeight: 0.4
+  sameHuePenalty: 0.7
+  tooSimilarPenalty: 0.45
+  baseCommonToCommon: 0.9
+  baseCommonToRare: 1.2
+  baseCommonToEpic: 1.1
+  baseCommonToLegendary: 0.65
+  baseRareToCommon: 1
+  baseRareToRare: 0.95
+  baseRareToEpic: 1.1
+  baseRareToLegendary: 0.8
+  baseEpicToCommon: 1.25
+  baseEpicToRare: 1.1
+  baseEpicToEpic: 0.85
+  baseEpicToLegendary: 0.55
+  baseLegendaryToCommon: 1.45
+  baseLegendaryToRare: 1.2
+  baseLegendaryToEpic: 0.75
+  baseLegendaryToLegendary: 0.35
+  minimumCandidateWeight: 0.0001

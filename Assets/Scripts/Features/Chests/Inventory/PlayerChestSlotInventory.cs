@@ -15,7 +15,7 @@ public class PlayerChestSlotInventory : MonoBehaviour
 
     [Header("Persistence")]
     [SerializeField] private bool dontDestroyOnLoad = true;
-    [SerializeField] private string saveKey = "PLAYER1_CHEST_SLOT_INVENTORY_V3";
+    [SerializeField] private string saveKey = "PLAYER_CHEST_SLOT_INVENTORY_V3";
 
     [Header("Profile")]
     [SerializeField] private string activeProfileId = "local_player_1";
@@ -23,8 +23,9 @@ public class PlayerChestSlotInventory : MonoBehaviour
     [Header("Slots")]
     [SerializeField] private int slotCount = 4;
 
-    [Header("Time Provider")]
+    [Header("Dependencies")]
     [SerializeField] private ChestTimeProviderBase timeProvider;
+    [SerializeField] private PlayerProfileManager profileManager;
 
     [Header("Unlock Durations By Chest Type")]
     [SerializeField]
@@ -62,6 +63,9 @@ public class PlayerChestSlotInventory : MonoBehaviour
 
         ResolveDependencies();
 
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            activeProfileId = profileManager.ActiveProfileId;
+
         LoadInventory();
         EnsureRuntimeStructure();
         MigrateLoadedDataIfNeeded();
@@ -80,6 +84,31 @@ public class PlayerChestSlotInventory : MonoBehaviour
                 this
             );
         }
+    }
+
+    private void OnEnable()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null)
+        {
+            profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+            profileManager.OnActiveProfileChanged += HandleActiveProfileChanged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (profileManager != null)
+            profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+    }
+
+    private void Start()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            SetActiveProfileId(profileManager.ActiveProfileId, true);
     }
 
     public bool AwardChest(ChestType chestType)
@@ -414,6 +443,14 @@ public class PlayerChestSlotInventory : MonoBehaviour
         return timeProvider != null && timeProvider.IsUsingAuthoritativeServerTime();
     }
 
+    private void HandleActiveProfileChanged(PlayerProfileRuntimeData profileData)
+    {
+        if (profileData == null)
+            return;
+
+        SetActiveProfileId(profileData.profileId, true);
+    }
+
     private void AssignChestToSlot(int slotIndex, ChestRuntimeData chest)
     {
         if (!IsValidSlotIndex(slotIndex) || chest == null)
@@ -569,6 +606,9 @@ public class PlayerChestSlotInventory : MonoBehaviour
 
         if (timeProvider == null)
             timeProvider = GetComponentInChildren<ChestTimeProviderBase>();
+
+        if (profileManager == null)
+            profileManager = PlayerProfileManager.Instance;
 
 #if UNITY_2023_1_OR_NEWER
         if (timeProvider == null)

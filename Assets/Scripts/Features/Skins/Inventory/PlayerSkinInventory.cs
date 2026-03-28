@@ -26,6 +26,7 @@ public class PlayerSkinInventory : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private BallSkinDatabase database;
     [SerializeField] private PlayerSkinLoadout playerSkinLoadout;
+    [SerializeField] private PlayerProfileManager profileManager;
 
     [Header("Persistence")]
     [SerializeField] private bool dontDestroyOnLoad = true;
@@ -65,6 +66,9 @@ public class PlayerSkinInventory : MonoBehaviour
 
         ResolveDependencies();
 
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            activeProfileId = profileManager.ActiveProfileId;
+
         LoadInventory();
         EnsureRuntimeStructure();
         MigrateLoadedDataIfNeeded();
@@ -87,6 +91,31 @@ public class PlayerSkinInventory : MonoBehaviour
                 this
             );
         }
+    }
+
+    private void OnEnable()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null)
+        {
+            profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+            profileManager.OnActiveProfileChanged += HandleActiveProfileChanged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (profileManager != null)
+            profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+    }
+
+    private void Start()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            SetActiveProfileId(profileManager.ActiveProfileId, true);
     }
 
     public bool AddUnlockedSkin(BallSkinData skin)
@@ -366,10 +395,21 @@ public class PlayerSkinInventory : MonoBehaviour
         }
     }
 
+    private void HandleActiveProfileChanged(PlayerProfileRuntimeData profileData)
+    {
+        if (profileData == null)
+            return;
+
+        SetActiveProfileId(profileData.profileId, true);
+    }
+
     private void ResolveDependencies()
     {
         if (playerSkinLoadout == null)
             playerSkinLoadout = PlayerSkinLoadout.Instance;
+
+        if (profileManager == null)
+            profileManager = PlayerProfileManager.Instance;
 
 #if UNITY_2023_1_OR_NEWER
         if (database == null)
@@ -449,9 +489,7 @@ public class PlayerSkinInventory : MonoBehaviour
         runtimeData.unlockedSkins = deduped;
 
         if (!string.IsNullOrWhiteSpace(runtimeData.equippedSkinId) && !seenIds.Contains(runtimeData.equippedSkinId))
-        {
             runtimeData.equippedSkinId = deduped.Count > 0 ? deduped[0].skinUniqueId : string.Empty;
-        }
     }
 
     private bool IsInventoryEmpty()

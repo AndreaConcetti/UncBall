@@ -59,6 +59,9 @@ public static class BallSkinFactory
         value = value.Replace(" ", "_");
         value = value.Replace("-", "_");
 
+        while (value.Contains("__"))
+            value = value.Replace("__", "_");
+
         return value;
     }
 }

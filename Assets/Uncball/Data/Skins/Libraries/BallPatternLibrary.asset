@@ -16,12 +16,36 @@ MonoBehaviour:
   - id: onda
     texture: {fileID: 2800000, guid: eb4b2b33917c51f40ae21882a54be622, type: 3}
     rarity: 0
-  - id: stella
-    texture: {fileID: 2800000, guid: fad234796255c88439c0f7526136b904, type: 3}
-    rarity: 1
-  - id: prova
-    texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
-    rarity: 2
   - id: onda1
     texture: {fileID: 2800000, guid: eb4b2b33917c51f40ae21882a54be622, type: 3}
+    rarity: 1
+  - id: onda2
+    texture: {fileID: 2800000, guid: eb4b2b33917c51f40ae21882a54be622, type: 3}
+    rarity: 2
+  - id: onda3
+    texture: {fileID: 2800000, guid: eb4b2b33917c51f40ae21882a54be622, type: 3}
+    rarity: 3
+  - id: star1
+    texture: {fileID: 2800000, guid: fad234796255c88439c0f7526136b904, type: 3}
+    rarity: 0
+  - id: star2
+    texture: {fileID: 2800000, guid: fad234796255c88439c0f7526136b904, type: 3}
+    rarity: 1
+  - id: star3
+    texture: {fileID: 2800000, guid: fad234796255c88439c0f7526136b904, type: 3}
+    rarity: 2
+  - id: star4
+    texture: {fileID: 2800000, guid: fad234796255c88439c0f7526136b904, type: 3}
+    rarity: 3
+  - id: prova1
+    texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
+    rarity: 0
+  - id: prova2
+    texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
+    rarity: 1
+  - id: prova3
+    texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
+    rarity: 2
+  - id: prova4
+    texture: {fileID: 2800000, guid: 4fadf117d7f9cf647ac2613f29ca581c, type: 3}
     rarity: 3
