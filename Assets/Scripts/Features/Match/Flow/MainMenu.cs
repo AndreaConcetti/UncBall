@@ -7,6 +7,7 @@ public class MainMenu : MonoBehaviour
 {
     [Header("Dependencies")]
     [SerializeField] private MatchRuntimeConfig matchRuntimeConfig;
+    [SerializeField] private PlayerProfileManager profileManager;
 
     [Header("Scene References")]
     [Tooltip("Scena gameplay della modalità Versus, usata sia per TimeLimit che per ScoreTarget")]
@@ -41,6 +42,16 @@ public class MainMenu : MonoBehaviour
     [Header("Default Player Names")]
     public string defaultPlayer1Name = "Player 1";
     public string defaultPlayer2Name = "Player 2";
+
+    [Header("Bot Mode Defaults")]
+    [SerializeField] private string defaultBotName = "BOT";
+
+    [Header("Multiplayer Placeholder Defaults")]
+    [SerializeField] private string defaultRemotePlayerName = "Remote Player";
+    [SerializeField] private bool defaultMultiplayerIsRanked = false;
+    [SerializeField] private int defaultMultiplayerPointsToWin = 16;
+    [SerializeField] private float defaultMultiplayerMatchDuration = 180f;
+    [SerializeField] private StartEndController.MatchMode defaultMultiplayerMatchMode = StartEndController.MatchMode.ScoreTarget;
 
     [Header("Chest UI Refresh")]
     [SerializeField] private ChestSlotUI[] chestSlotUIs;
@@ -84,17 +95,19 @@ public class MainMenu : MonoBehaviour
 
         currentTimePresetIndex = Mathf.Clamp(defaultTimePresetIndex, 0, timeModeDurationPresets.Length - 1);
 
+        string resolvedLocalDisplayName = GetResolvedDefaultLocalDisplayName();
+
         if (scoreModePointsToWinInputField != null)
             scoreModePointsToWinInputField.text = defaultPointsToWin.ToString();
 
         if (timeModePlayer1NameInputField != null)
-            timeModePlayer1NameInputField.text = defaultPlayer1Name;
+            timeModePlayer1NameInputField.text = resolvedLocalDisplayName;
 
         if (timeModePlayer2NameInputField != null)
             timeModePlayer2NameInputField.text = defaultPlayer2Name;
 
         if (scoreModePlayer1NameInputField != null)
-            scoreModePlayer1NameInputField.text = defaultPlayer1Name;
+            scoreModePlayer1NameInputField.text = resolvedLocalDisplayName;
 
         if (scoreModePlayer2NameInputField != null)
             scoreModePlayer2NameInputField.text = defaultPlayer2Name;
@@ -109,7 +122,9 @@ public class MainMenu : MonoBehaviour
             Debug.Log(
                 "[MainMenu] Initialized. " +
                 "CurrentTimePresetIndex=" + currentTimePresetIndex +
-                " | CurrentTimePresetValue=" + GetCurrentTimePresetValue(),
+                " | CurrentTimePresetValue=" + GetCurrentTimePresetValue() +
+                " | LocalProfileId=" + GetResolvedLocalProfileId() +
+                " | LocalDisplayName=" + resolvedLocalDisplayName,
                 this
             );
         }
@@ -131,12 +146,21 @@ public class MainMenu : MonoBehaviour
         if (matchRuntimeConfig == null)
             matchRuntimeConfig = MatchRuntimeConfig.Instance;
 
+        if (profileManager == null)
+            profileManager = PlayerProfileManager.Instance;
+
 #if UNITY_2023_1_OR_NEWER
         if (matchRuntimeConfig == null)
             matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
+
+        if (profileManager == null)
+            profileManager = FindFirstObjectByType<PlayerProfileManager>();
 #else
         if (matchRuntimeConfig == null)
             matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
+
+        if (profileManager == null)
+            profileManager = FindObjectOfType<PlayerProfileManager>();
 #endif
     }
 
@@ -194,19 +218,28 @@ public class MainMenu : MonoBehaviour
             return;
         }
 
-        matchRuntimeConfig.ConfigureVersusTimeMode(
+        string localProfileId = GetResolvedLocalProfileId();
+        string localDisplayName = ReadPlayerName(timeModePlayer1NameInputField, GetResolvedDefaultLocalDisplayName());
+        string guestDisplayName = ReadPlayerName(timeModePlayer2NameInputField, defaultPlayer2Name);
+
+        matchRuntimeConfig.ConfigureLocalVersusTimeMode(
             GetCurrentTimePresetValue(),
             defaultPointsToWin,
-            ReadPlayerName(timeModePlayer1NameInputField, defaultPlayer1Name),
-            ReadPlayerName(timeModePlayer2NameInputField, defaultPlayer2Name)
+            localProfileId,
+            localDisplayName,
+            guestDisplayName
         );
 
         if (logDebug)
         {
             Debug.Log(
-                "[MainMenu] PlayVersusTimeMode -> Duration=" + matchRuntimeConfig.SelectedMatchDuration +
-                " | P1=" + matchRuntimeConfig.SelectedPlayer1Name +
-                " | P2=" + matchRuntimeConfig.SelectedPlayer2Name,
+                "[MainMenu] PlayVersusTimeMode -> " +
+                "Duration=" + matchRuntimeConfig.SelectedMatchDuration +
+                " | LocalProfileId=" + matchRuntimeConfig.SelectedLocalProfileId +
+                " | LocalName=" + matchRuntimeConfig.SelectedLocalDisplayName +
+                " | OpponentName=" + matchRuntimeConfig.SelectedOpponentDisplayName +
+                " | SessionType=" + matchRuntimeConfig.SelectedSessionType +
+                " | AuthorityType=" + matchRuntimeConfig.SelectedAuthorityType,
                 this
             );
         }
@@ -224,18 +257,27 @@ public class MainMenu : MonoBehaviour
             return;
         }
 
-        matchRuntimeConfig.ConfigureVersusScoreMode(
+        string localProfileId = GetResolvedLocalProfileId();
+        string localDisplayName = ReadPlayerName(scoreModePlayer1NameInputField, GetResolvedDefaultLocalDisplayName());
+        string guestDisplayName = ReadPlayerName(scoreModePlayer2NameInputField, defaultPlayer2Name);
+
+        matchRuntimeConfig.ConfigureLocalVersusScoreMode(
             ReadScoreModePointsToWin(),
-            ReadPlayerName(scoreModePlayer1NameInputField, defaultPlayer1Name),
-            ReadPlayerName(scoreModePlayer2NameInputField, defaultPlayer2Name)
+            localProfileId,
+            localDisplayName,
+            guestDisplayName
         );
 
         if (logDebug)
         {
             Debug.Log(
-                "[MainMenu] PlayVersusScoreMode -> PointsToWin=" + matchRuntimeConfig.SelectedPointsToWin +
-                " | P1=" + matchRuntimeConfig.SelectedPlayer1Name +
-                " | P2=" + matchRuntimeConfig.SelectedPlayer2Name,
+                "[MainMenu] PlayVersusScoreMode -> " +
+                "PointsToWin=" + matchRuntimeConfig.SelectedPointsToWin +
+                " | LocalProfileId=" + matchRuntimeConfig.SelectedLocalProfileId +
+                " | LocalName=" + matchRuntimeConfig.SelectedLocalDisplayName +
+                " | OpponentName=" + matchRuntimeConfig.SelectedOpponentDisplayName +
+                " | SessionType=" + matchRuntimeConfig.SelectedSessionType +
+                " | AuthorityType=" + matchRuntimeConfig.SelectedAuthorityType,
                 this
             );
         }
@@ -248,7 +290,16 @@ public class MainMenu : MonoBehaviour
         ResolveDependencies();
 
         if (matchRuntimeConfig != null)
-            matchRuntimeConfig.ConfigureBotMode();
+        {
+            matchRuntimeConfig.ConfigureBotMode(
+                GetResolvedLocalProfileId(),
+                GetResolvedDefaultLocalDisplayName(),
+                defaultBotName,
+                defaultPointsToWin,
+                GetCurrentTimePresetValue(),
+                StartEndController.MatchMode.ScoreTarget
+            );
+        }
 
         LoadSceneSafe(botSceneName);
     }
@@ -258,7 +309,33 @@ public class MainMenu : MonoBehaviour
         ResolveDependencies();
 
         if (matchRuntimeConfig != null)
-            matchRuntimeConfig.ConfigureMultiplayerMode();
+        {
+            matchRuntimeConfig.ConfigureMultiplayerMode(
+                defaultMultiplayerMatchMode,
+                defaultMultiplayerPointsToWin,
+                defaultMultiplayerMatchDuration,
+                GetResolvedLocalProfileId(),
+                GetResolvedDefaultLocalDisplayName(),
+                defaultRemotePlayerName,
+                defaultMultiplayerIsRanked,
+                MatchRuntimeConfig.MatchSessionType.OnlinePrivate,
+                MatchRuntimeConfig.MatchAuthorityType.DedicatedServer,
+                MatchRuntimeConfig.LocalParticipantSlot.Player1
+            );
+        }
+
+        if (logDebug && matchRuntimeConfig != null)
+        {
+            Debug.Log(
+                "[MainMenu] OpenMultiplayerMode -> " +
+                "MatchMode=" + matchRuntimeConfig.SelectedMatchMode +
+                " | SessionType=" + matchRuntimeConfig.SelectedSessionType +
+                " | AuthorityType=" + matchRuntimeConfig.SelectedAuthorityType +
+                " | Ranked=" + matchRuntimeConfig.SelectedIsRanked +
+                " | LocalProfileId=" + matchRuntimeConfig.SelectedLocalProfileId,
+                this
+            );
+        }
 
         LoadSceneSafe(multiplayerSceneName);
     }
@@ -321,6 +398,26 @@ public class MainMenu : MonoBehaviour
         }
 
         return value;
+    }
+
+    private string GetResolvedLocalProfileId()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            return profileManager.ActiveProfileId;
+
+        return "local_player_1";
+    }
+
+    private string GetResolvedDefaultLocalDisplayName()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveDisplayName))
+            return profileManager.ActiveDisplayName;
+
+        return defaultPlayer1Name;
     }
 
     public int GetCurrentTimePresetIndex()

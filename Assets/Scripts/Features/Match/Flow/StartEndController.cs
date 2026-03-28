@@ -85,41 +85,7 @@ public class StartEndController : MonoBehaviour
 
     void Start()
     {
-        if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
-
-        if (turnManager == null)
-            turnManager = TurnManager.Instance;
-
-#if UNITY_2023_1_OR_NEWER
-        if (gameModeUIChanger == null)
-            gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
-
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
-
-        if (xpRewardService == null)
-            xpRewardService = FindFirstObjectByType<PlayerXPRewardService>();
-
-        if (profileManager == null)
-            profileManager = FindFirstObjectByType<PlayerProfileManager>();
-#else
-        if (gameModeUIChanger == null)
-            gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
-
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
-
-        if (xpRewardService == null)
-            xpRewardService = FindObjectOfType<PlayerXPRewardService>();
-
-        if (profileManager == null)
-            profileManager = FindObjectOfType<PlayerProfileManager>();
-#endif
-
-        if (rewardManager == null)
-            rewardManager = RewardManager.Instance;
-
+        ResolveDependencies();
         ApplyRuntimeConfig();
 
         Time.timeScale = 1f;
@@ -176,6 +142,44 @@ public class StartEndController : MonoBehaviour
             UpdateScoreTargetMode();
 
         UpdateUniversalBoardAndMathRules();
+    }
+
+    void ResolveDependencies()
+    {
+        if (scoreManager == null)
+            scoreManager = ScoreManagerNew.Instance;
+
+        if (turnManager == null)
+            turnManager = TurnManager.Instance;
+
+        if (rewardManager == null)
+            rewardManager = RewardManager.Instance;
+
+#if UNITY_2023_1_OR_NEWER
+        if (gameModeUIChanger == null)
+            gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
+
+        if (xpRewardService == null)
+            xpRewardService = FindFirstObjectByType<PlayerXPRewardService>();
+
+        if (profileManager == null)
+            profileManager = FindFirstObjectByType<PlayerProfileManager>();
+#else
+        if (gameModeUIChanger == null)
+            gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
+
+        if (xpRewardService == null)
+            xpRewardService = FindObjectOfType<PlayerXPRewardService>();
+
+        if (profileManager == null)
+            profileManager = FindObjectOfType<PlayerProfileManager>();
+#endif
     }
 
     void ApplyRuntimeConfig()
@@ -294,40 +298,7 @@ public class StartEndController : MonoBehaviour
 
     public void StartMatch()
     {
-        if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
-
-        if (turnManager == null)
-            turnManager = TurnManager.Instance;
-
-#if UNITY_2023_1_OR_NEWER
-        if (gameModeUIChanger == null)
-            gameModeUIChanger = FindFirstObjectByType<GameModeUIChanger>();
-
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
-
-        if (xpRewardService == null)
-            xpRewardService = FindFirstObjectByType<PlayerXPRewardService>();
-
-        if (profileManager == null)
-            profileManager = FindFirstObjectByType<PlayerProfileManager>();
-#else
-        if (gameModeUIChanger == null)
-            gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
-
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
-
-        if (xpRewardService == null)
-            xpRewardService = FindObjectOfType<PlayerXPRewardService>();
-
-        if (profileManager == null)
-            profileManager = FindObjectOfType<PlayerProfileManager>();
-#endif
-
-        if (rewardManager == null)
-            rewardManager = RewardManager.Instance;
+        ResolveDependencies();
 
         if (scoreManager == null)
         {
@@ -375,8 +346,15 @@ public class StartEndController : MonoBehaviour
         {
             Debug.Log(
                 "[StartEndController] StartMatch -> " +
-                "GameMode=" + (matchRuntimeConfig != null ? matchRuntimeConfig.SelectedGameMode.ToString() : "null") +
-                " | MatchMode=" + matchMode,
+                "GameMode=" + GetSafeGameMode() +
+                " | MatchMode=" + matchMode +
+                " | OpponentType=" + GetSafeOpponentType() +
+                " | SessionType=" + GetSafeSessionType() +
+                " | AuthorityType=" + GetSafeAuthorityType() +
+                " | LocalPlayer=" + GetResolvedLocalPlayerId() +
+                " | ChestRewards=" + ShouldGrantChestRewards() +
+                " | XpRewards=" + ShouldGrantXpRewards() +
+                " | StatsProgression=" + ShouldGrantStatsProgression(),
                 this
             );
         }
@@ -748,14 +726,20 @@ public class StartEndController : MonoBehaviour
         if (logDebug)
         {
             Debug.Log(
-                "[StartEndController] FinalizeEndMatchUI START -> Winner=" + resolvedWinner +
-                " | GameMode=" + (matchRuntimeConfig != null ? matchRuntimeConfig.SelectedGameMode.ToString() : "null") +
-                " | MatchMode=" + matchMode,
+                "[StartEndController] FinalizeEndMatchUI START -> " +
+                "Winner=" + resolvedWinner +
+                " | GameMode=" + GetSafeGameMode() +
+                " | MatchMode=" + matchMode +
+                " | LocalPlayer=" + GetResolvedLocalPlayerId() +
+                " | Ranked=" + IsCurrentMatchRanked() +
+                " | ChestRewards=" + ShouldGrantChestRewards() +
+                " | XpRewards=" + ShouldGrantXpRewards() +
+                " | StatsProgression=" + ShouldGrantStatsProgression(),
                 this
             );
         }
 
-        if (!matchRewardProcessed)
+        if (!matchRewardProcessed && ShouldGrantChestRewards())
         {
             if (rewardManager == null)
                 rewardManager = RewardManager.Instance;
@@ -766,35 +750,23 @@ public class StartEndController : MonoBehaviour
             matchRewardProcessed = true;
         }
 
-#if UNITY_2023_1_OR_NEWER
-        if (xpRewardService == null)
-            xpRewardService = FindFirstObjectByType<PlayerXPRewardService>();
+        ResolveDependencies();
 
-        if (profileManager == null)
-            profileManager = FindFirstObjectByType<PlayerProfileManager>();
-#else
-        if (xpRewardService == null)
-            xpRewardService = FindObjectOfType<PlayerXPRewardService>();
-
-        if (profileManager == null)
-            profileManager = FindObjectOfType<PlayerProfileManager>();
-#endif
-
-        if (!matchXpProcessed && xpRewardService != null)
+        if (!matchXpProcessed && ShouldGrantXpRewards() && xpRewardService != null)
         {
-            xpRewardService.TryGrantMatchCompletionRewards(resolvedWinner, PlayerID.Player1);
+            xpRewardService.TryGrantMatchCompletionRewards(resolvedWinner, GetResolvedLocalPlayerId());
             matchXpProcessed = true;
         }
 
-        if (!matchStatsProcessed && profileManager != null && matchRuntimeConfig != null)
+        if (!matchStatsProcessed && ShouldGrantStatsProgression() && profileManager != null && matchRuntimeConfig != null)
         {
-            bool localPlayerWon = resolvedWinner == PlayerID.Player1;
+            bool localPlayerWon = resolvedWinner == GetResolvedLocalPlayerId();
 
             profileManager.RegisterMatchResult(
                 matchRuntimeConfig.SelectedGameMode,
                 matchRuntimeConfig.SelectedMatchMode,
                 localPlayerWon,
-                treatCurrentMatchAsRanked && matchRuntimeConfig.SelectedGameMode == MatchRuntimeConfig.GameMode.Multiplayer
+                IsCurrentMatchRanked()
             );
 
             matchStatsProcessed = true;
@@ -803,8 +775,9 @@ public class StartEndController : MonoBehaviour
             {
                 Debug.Log(
                     "[StartEndController] Match stats registered ONCE for local profile. " +
-                    "LocalPlayer=Player1" +
-                    " | LocalWin=" + localPlayerWon,
+                    "LocalPlayer=" + GetResolvedLocalPlayerId() +
+                    " | LocalWin=" + localPlayerWon +
+                    " | ProfileId=" + matchRuntimeConfig.SelectedLocalProfileId,
                     this
                 );
             }
@@ -897,6 +870,66 @@ public class StartEndController : MonoBehaviour
             return PlayerID.Player2;
 
         return PlayerID.None;
+    }
+
+    private PlayerID GetResolvedLocalPlayerId()
+    {
+        if (matchRuntimeConfig == null)
+            return PlayerID.Player1;
+
+        return matchRuntimeConfig.GetResolvedLocalPlayerId();
+    }
+
+    private bool IsCurrentMatchRanked()
+    {
+        if (matchRuntimeConfig != null)
+            return matchRuntimeConfig.SelectedIsRanked;
+
+        return treatCurrentMatchAsRanked;
+    }
+
+    private bool ShouldGrantChestRewards()
+    {
+        if (matchRuntimeConfig == null)
+            return true;
+
+        return matchRuntimeConfig.SelectedAllowChestRewards;
+    }
+
+    private bool ShouldGrantXpRewards()
+    {
+        if (matchRuntimeConfig == null)
+            return true;
+
+        return matchRuntimeConfig.SelectedAllowXpRewards;
+    }
+
+    private bool ShouldGrantStatsProgression()
+    {
+        if (matchRuntimeConfig == null)
+            return true;
+
+        return matchRuntimeConfig.SelectedAllowStatsProgression;
+    }
+
+    private string GetSafeGameMode()
+    {
+        return matchRuntimeConfig != null ? matchRuntimeConfig.SelectedGameMode.ToString() : "null";
+    }
+
+    private string GetSafeOpponentType()
+    {
+        return matchRuntimeConfig != null ? matchRuntimeConfig.SelectedOpponentType.ToString() : "null";
+    }
+
+    private string GetSafeSessionType()
+    {
+        return matchRuntimeConfig != null ? matchRuntimeConfig.SelectedSessionType.ToString() : "null";
+    }
+
+    private string GetSafeAuthorityType()
+    {
+        return matchRuntimeConfig != null ? matchRuntimeConfig.SelectedAuthorityType.ToString() : "null";
     }
 
     public bool IsMatchStarted() => matchStarted;
