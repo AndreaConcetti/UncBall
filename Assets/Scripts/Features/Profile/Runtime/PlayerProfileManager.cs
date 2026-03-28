@@ -30,14 +30,12 @@ public class PlayerProfileManager : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
+            DestroyDuplicateRuntimeRoot();
             return;
         }
 
         Instance = this;
-
-        if (dontDestroyOnLoad)
-            DontDestroyOnLoad(gameObject);
+        MarkRuntimeRootPersistentIfNeeded();
 
         LoadOrCreateProfile(defaultProfileId, defaultDisplayName);
         ApplyActiveProfileToSystems();
@@ -695,5 +693,20 @@ public class PlayerProfileManager : MonoBehaviour
     private long GetNowUnixSeconds()
     {
         return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    }
+
+    private void MarkRuntimeRootPersistentIfNeeded()
+    {
+        if (!dontDestroyOnLoad)
+            return;
+
+        GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        DontDestroyOnLoad(runtimeRoot);
+    }
+
+    private void DestroyDuplicateRuntimeRoot()
+    {
+        GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        Destroy(duplicateRoot);
     }
 }

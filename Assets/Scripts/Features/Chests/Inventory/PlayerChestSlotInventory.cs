@@ -52,14 +52,12 @@ public class PlayerChestSlotInventory : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
+            DestroyDuplicateRuntimeRoot();
             return;
         }
 
         Instance = this;
-
-        if (dontDestroyOnLoad)
-            DontDestroyOnLoad(gameObject);
+        MarkRuntimeRootPersistentIfNeeded();
 
         ResolveDependencies();
 
@@ -659,5 +657,20 @@ public class PlayerChestSlotInventory : MonoBehaviour
             return string.Format("{0:D2}:{1:D2}:{2:D2}", (int)span.TotalHours, span.Minutes, span.Seconds);
 
         return string.Format("{0:D2}:{1:D2}", span.Minutes, span.Seconds);
+    }
+
+    private void MarkRuntimeRootPersistentIfNeeded()
+    {
+        if (!dontDestroyOnLoad)
+            return;
+
+        GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        DontDestroyOnLoad(runtimeRoot);
+    }
+
+    private void DestroyDuplicateRuntimeRoot()
+    {
+        GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        Destroy(duplicateRoot);
     }
 }

@@ -30,14 +30,12 @@ public class PlayerProgressionRules : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
+            DestroyDuplicateRuntimeRoot();
             return;
         }
 
         Instance = this;
-
-        if (dontDestroyOnLoad)
-            DontDestroyOnLoad(gameObject);
+        MarkRuntimeRootPersistentIfNeeded();
 
         if (logDebug)
         {
@@ -124,5 +122,20 @@ public class PlayerProgressionRules : MonoBehaviour
         int safeXp = Mathf.Max(0, totalXp);
         int level = CalculateLevelFromTotalXp(safeXp);
         return GetXpRequiredToAdvanceFromLevel(level);
+    }
+
+    private void MarkRuntimeRootPersistentIfNeeded()
+    {
+        if (!dontDestroyOnLoad)
+            return;
+
+        GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        DontDestroyOnLoad(runtimeRoot);
+    }
+
+    private void DestroyDuplicateRuntimeRoot()
+    {
+        GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        Destroy(duplicateRoot);
     }
 }

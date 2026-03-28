@@ -40,14 +40,12 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
+            DestroyDuplicateRuntimeRoot();
             return;
         }
 
         Instance = this;
-
-        if (dontDestroyOnLoad)
-            DontDestroyOnLoad(gameObject);
+        MarkRuntimeRootPersistentIfNeeded();
 
         ResolveDependencies();
         EnsureRuntimeStructure();
@@ -373,14 +371,6 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         if (profileManager == null)
             profileManager = PlayerProfileManager.Instance;
-
-#if UNITY_2023_1_OR_NEWER
-        if (database == null)
-            database = FindFirstObjectByType<BallSkinDatabase>();
-#else
-        if (database == null)
-            database = FindObjectOfType<BallSkinDatabase>();
-#endif
     }
 
     private void EnsureRuntimeStructure()
@@ -467,5 +457,20 @@ public class PlayerSkinLoadout : MonoBehaviour
     private string GetSafeSkinId(BallSkinData skin)
     {
         return skin != null ? skin.skinUniqueId : "none";
+    }
+
+    private void MarkRuntimeRootPersistentIfNeeded()
+    {
+        if (!dontDestroyOnLoad)
+            return;
+
+        GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        DontDestroyOnLoad(runtimeRoot);
+    }
+
+    private void DestroyDuplicateRuntimeRoot()
+    {
+        GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        Destroy(duplicateRoot);
     }
 }

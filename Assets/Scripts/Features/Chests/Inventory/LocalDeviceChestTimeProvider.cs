@@ -8,7 +8,12 @@ public class LocalDeviceChestTimeProvider : ChestTimeProviderBase
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         if (logDebug)
-            Debug.Log("[LocalDeviceChestTimeProvider] UnixTimeSeconds=" + now, this);
+        {
+            Debug.Log(
+                "[LocalDeviceChestTimeProvider] Returning device UTC unix time: " + now,
+                this
+            );
+        }
 
         return now;
     }
@@ -16,5 +21,10 @@ public class LocalDeviceChestTimeProvider : ChestTimeProviderBase
     public override bool IsUsingAuthoritativeServerTime()
     {
         return false;
+    }
+
+    public override string GetProviderDebugName()
+    {
+        return "Local_Device_UtcNow";
     }
 }

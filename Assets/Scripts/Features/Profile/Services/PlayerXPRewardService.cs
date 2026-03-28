@@ -39,15 +39,12 @@ public class PlayerXPRewardService : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
+            DestroyDuplicateRuntimeRoot();
             return;
         }
 
         Instance = this;
-
-        if (dontDestroyOnLoad)
-            DontDestroyOnLoad(gameObject);
-
+        MarkRuntimeRootPersistentIfNeeded();
         ResolveDependencies();
     }
 
@@ -159,8 +156,8 @@ public class PlayerXPRewardService : MonoBehaviour
             grantedXp,
             "match_completion",
             wonMatch ? "match_played_and_won" : "match_played",
-            additionalMatchesPlayed: 1,
-            additionalWins: wonMatch ? 1 : 0,
+            additionalMatchesPlayed: 0,
+            additionalWins: 0,
             newDailyLoginDateUtc: null,
             newConsecutiveLoginDays: null
         );
@@ -241,5 +238,20 @@ public class PlayerXPRewardService : MonoBehaviour
 
         if (progressionRules == null)
             progressionRules = PlayerProgressionRules.Instance;
+    }
+
+    private void MarkRuntimeRootPersistentIfNeeded()
+    {
+        if (!dontDestroyOnLoad)
+            return;
+
+        GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        DontDestroyOnLoad(runtimeRoot);
+    }
+
+    private void DestroyDuplicateRuntimeRoot()
+    {
+        GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        Destroy(duplicateRoot);
     }
 }

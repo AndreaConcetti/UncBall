@@ -17,6 +17,7 @@ public class ChestSlotUI : MonoBehaviour
     [Header("Refresh")]
     [SerializeField] private bool refreshOnEnable = true;
     [SerializeField] private float timerRefreshInterval = 1f;
+    [SerializeField] private float dependencyRetryInterval = 0.25f;
 
     [Header("Editor Preview")]
     [SerializeField] private bool forceOccupiedPreviewInEditor = false;
@@ -24,20 +25,22 @@ public class ChestSlotUI : MonoBehaviour
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = false;
+    [SerializeField] private bool logMissingInventoryWarning = false;
 
     private float timerRefreshElapsed = 0f;
+    private float dependencyRetryElapsed = 0f;
+    private bool isSubscribedToInventory = false;
 
     private void Awake()
     {
         ResolveDependencies();
+        TrySubscribeToInventory();
     }
 
     private void OnEnable()
     {
         ResolveDependencies();
-
-        if (playerChestSlotInventory != null)
-            playerChestSlotInventory.OnChestInventoryChanged += RefreshUI;
+        TrySubscribeToInventory();
 
         if (refreshOnEnable)
             RefreshUI();
@@ -45,8 +48,7 @@ public class ChestSlotUI : MonoBehaviour
 
     private void OnDisable()
     {
-        if (playerChestSlotInventory != null)
-            playerChestSlotInventory.OnChestInventoryChanged -= RefreshUI;
+        UnsubscribeFromInventory();
     }
 
     private void Update()
@@ -60,7 +62,22 @@ public class ChestSlotUI : MonoBehaviour
 #endif
 
         if (playerChestSlotInventory == null)
+        {
+            dependencyRetryElapsed += Time.unscaledDeltaTime;
+
+            if (dependencyRetryElapsed >= dependencyRetryInterval)
+            {
+                dependencyRetryElapsed = 0f;
+                ResolveDependencies();
+                TrySubscribeToInventory();
+                RefreshUI();
+            }
+
             return;
+        }
+
+        if (!isSubscribedToInventory)
+            TrySubscribeToInventory();
 
         if (!playerChestSlotInventory.HasChestInSlot(slotIndex))
             return;
@@ -82,6 +99,9 @@ public class ChestSlotUI : MonoBehaviour
         if (timerRefreshInterval < 0.1f)
             timerRefreshInterval = 0.1f;
 
+        if (dependencyRetryInterval < 0.05f)
+            dependencyRetryInterval = 0.05f;
+
         HandleEditorPreview();
     }
 #endif
@@ -89,8 +109,10 @@ public class ChestSlotUI : MonoBehaviour
     public void RefreshUI()
     {
         timerRefreshElapsed = 0f;
+        dependencyRetryElapsed = 0f;
 
         ResolveDependencies();
+        TrySubscribeToInventory();
 
         if (!Application.isPlaying)
         {
@@ -114,9 +136,18 @@ public class ChestSlotUI : MonoBehaviour
 
         if (playerChestSlotInventory == null)
         {
-            Debug.LogError("[ChestSlotUI] PlayerChestSlotInventory missing on " + name, this);
             emptySlotView.SetActive(true);
             occupiedSlotView.SetActive(false);
+
+            if (logMissingInventoryWarning || logDebug)
+            {
+                Debug.LogWarning(
+                    "[ChestSlotUI] PlayerChestSlotInventory not ready yet on " + name +
+                    ". UI will retry automatically.",
+                    this
+                );
+            }
+
             return;
         }
 
@@ -151,6 +182,42 @@ public class ChestSlotUI : MonoBehaviour
     {
         if (playerChestSlotInventory == null)
             playerChestSlotInventory = PlayerChestSlotInventory.Instance;
+
+        if (obtainNewSkin == null)
+            obtainNewSkin = FindFirstObjectByTypeSafe<ObtainNewSkin>();
+    }
+
+    private void TrySubscribeToInventory()
+    {
+        if (isSubscribedToInventory)
+            return;
+
+        if (playerChestSlotInventory == null)
+            return;
+
+        playerChestSlotInventory.OnChestInventoryChanged -= RefreshUI;
+        playerChestSlotInventory.OnChestInventoryChanged += RefreshUI;
+        isSubscribedToInventory = true;
+    }
+
+    private void UnsubscribeFromInventory()
+    {
+        if (!isSubscribedToInventory)
+            return;
+
+        if (playerChestSlotInventory != null)
+            playerChestSlotInventory.OnChestInventoryChanged -= RefreshUI;
+
+        isSubscribedToInventory = false;
+    }
+
+    private T FindFirstObjectByTypeSafe<T>() where T : Object
+    {
+#if UNITY_2023_1_OR_NEWER
+        return Object.FindFirstObjectByType<T>(FindObjectsInactive.Include);
+#else
+        return Object.FindObjectOfType<T>(true);
+#endif
     }
 
 #if UNITY_EDITOR

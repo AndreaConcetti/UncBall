@@ -1059,9 +1059,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1726694513}
-        m_TargetAssemblyTypeName: PlayerChestSlotInventory, Assembly-CSharp
-        m_MethodName: DebugAddCommonChest
+      - m_Target: {fileID: 1920383339}
+        m_TargetAssemblyTypeName: ChestDebugPanel, Assembly-CSharp
+        m_MethodName: GiveGuaranteedCommonChest
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -5320,9 +5320,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1726694513}
-        m_TargetAssemblyTypeName: PlayerChestSlotInventory, Assembly-CSharp
-        m_MethodName: DebugAddLegendaryChest
+      - m_Target: {fileID: 1920383339}
+        m_TargetAssemblyTypeName: ChestDebugPanel, Assembly-CSharp
+        m_MethodName: GiveGuaranteedLegendaryChest
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -6279,9 +6279,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1726694513}
-        m_TargetAssemblyTypeName: PlayerChestSlotInventory, Assembly-CSharp
-        m_MethodName: DebugAddRareChest
+      - m_Target: {fileID: 1920383339}
+        m_TargetAssemblyTypeName: ChestDebugPanel, Assembly-CSharp
+        m_MethodName: GiveGuaranteedRareChest
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -8656,9 +8656,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1726694513}
-        m_TargetAssemblyTypeName: PlayerChestSlotInventory, Assembly-CSharp
-        m_MethodName: DebugAddRandomChest
+      - m_Target: {fileID: 1920383339}
+        m_TargetAssemblyTypeName: ChestDebugPanel, Assembly-CSharp
+        m_MethodName: GiveRandomChest
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -9480,9 +9480,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1726694513}
-        m_TargetAssemblyTypeName: PlayerChestSlotInventory, Assembly-CSharp
-        m_MethodName: ClearAllChestDataForDebug
+      - m_Target: {fileID: 1920383339}
+        m_TargetAssemblyTypeName: ChestDebugPanel, Assembly-CSharp
+        m_MethodName: ClearAllChestData
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -19347,6 +19347,7 @@ GameObject:
   - component: {fileID: 1726694515}
   - component: {fileID: 1726694513}
   - component: {fileID: 1726694514}
+  - component: {fileID: 1726694517}
   m_Layer: 0
   m_Name: ChestAndSkinsRuntime
   m_TagString: Untagged
@@ -19370,7 +19371,7 @@ MonoBehaviour:
   saveKey: PLAYER1_CHEST_SLOT_INVENTORY_V3
   activeProfileId: local_player_1
   slotCount: 4
-  timeProvider: {fileID: 0}
+  timeProvider: {fileID: 1726694517}
   profileManager: {fileID: 1445563842}
   unlockDurationEntries:
   - chestType: 0
@@ -19403,7 +19404,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerSkinLoadout
   database: {fileID: 11400000, guid: 0171e50e3b3f2d74ea664272acc97b1d, type: 2}
-  profileManager: {fileID: 0}
+  profileManager: {fileID: 1445563842}
   dontDestroyOnLoad: 1
   player1ProfileId: local_player_1
   player2ProfileId: local_player_2
@@ -19427,7 +19428,7 @@ MonoBehaviour:
       patternIntensity: 1
       patternScale: 1
       rarity: 0
-  logDebug: 1
+  logDebug: 0
 --- !u!114 &1726694515
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -19484,6 +19485,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1901326736}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1726694517
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1726694512}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8d26b3cb7a973944a7d42b7f7013fc3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LocalDeviceChestTimeProvider
+  logDebug: 0
 --- !u!1 &1731076499
 GameObject:
   m_ObjectHideFlags: 0
@@ -21274,6 +21288,7 @@ GameObject:
   - component: {fileID: 1920383337}
   - component: {fileID: 1920383336}
   - component: {fileID: 1920383338}
+  - component: {fileID: 1920383339}
   m_Layer: 0
   m_Name: SkinManager
   m_TagString: Untagged
@@ -21336,8 +21351,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObtainNewSkin
   skinRandomGenerator: {fileID: 1920383338}
-  playerSkinInventory: {fileID: 0}
-  playerChestSlotInventory: {fileID: 0}
+  playerSkinInventory: {fileID: 1726694515}
+  playerChestSlotInventory: {fileID: 1726694513}
   newSkinPreviewSection: {fileID: 284401213}
   previewSkinApplier: {fileID: 1251489789}
   equipButton: {fileID: 768626905}
@@ -21370,6 +21385,20 @@ MonoBehaviour:
   patternIntensityRange: {x: 1, y: 1}
   patternScaleRange: {x: 1, y: 1}
   fallbackToNearestAvailableRarity: 1
+  logDebug: 0
+--- !u!114 &1920383339
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1920383329}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8649c0847986b1349afaa9dd626b8c6f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChestDebugPanel
+  playerChestSlotInventory: {fileID: 1726694513}
   logDebug: 0
 --- !u!1 &1922575127
 GameObject:
@@ -23063,9 +23092,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1726694513}
-        m_TargetAssemblyTypeName: PlayerChestSlotInventory, Assembly-CSharp
-        m_MethodName: DebugAddEpicChest
+      - m_Target: {fileID: 1920383339}
+        m_TargetAssemblyTypeName: ChestDebugPanel, Assembly-CSharp
+        m_MethodName: GiveGuaranteedEpicChest
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
