@@ -23,6 +23,17 @@ public abstract class OnlineLobbyServiceBase : MonoBehaviour
         string localPlayerId,
         string localDisplayName);
 
+    public abstract void BeginMatchmaking(
+        string queueId,
+        string localPlayerId,
+        string localDisplayName,
+        StartEndController.MatchMode matchMode,
+        int pointsToWin,
+        float matchDuration,
+        bool isRanked);
+
+    public abstract void CancelMatchmaking(string localPlayerId);
+
     public abstract void LeaveLobby(string localPlayerId);
 
     public abstract void SetLocalReady(string localPlayerId, bool isReady);
