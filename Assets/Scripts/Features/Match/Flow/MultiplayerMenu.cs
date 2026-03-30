@@ -24,10 +24,22 @@ public class MultiplayerMenu : MonoBehaviour
     [SerializeField] private PlayerProfileManager profileManager;
     [SerializeField] private PhotonFusionSessionController fusionSessionController;
 
-    [Header("Local Player Input")]
+    [Header("Local Player Input - Shared Fallback")]
     [SerializeField] private TMP_InputField localPlayerNameInputField;
+
+    [Header("Local Player Input - Private Host")]
+    [SerializeField] private TMP_InputField privateHostPlayerNameInputField;
+
+    [Header("Local Player Input - Private Join")]
+    [SerializeField] private TMP_InputField privateJoinPlayerNameInputField;
+
+    [Header("Local Player Input - Matchmaking / Online")]
+    [SerializeField] private TMP_InputField matchmakingPlayerNameInputField;
+
+    [Header("Local Player Defaults")]
     [SerializeField] private string defaultHostLocalPlayerName = "HostPlayer";
     [SerializeField] private string defaultJoinLocalPlayerName = "JoinPlayer";
+    [SerializeField] private string defaultMatchmakingLocalPlayerName = "Player 1";
 
     [Header("Optional Status UI")]
     [SerializeField] private TMP_Text statusText;
@@ -245,7 +257,7 @@ public class MultiplayerMenu : MonoBehaviour
             ? ReadHostMatchDuration()
             : Mathf.Max(1f, defaultMatchDuration);
 
-        string resolvedLocalName = ReadResolvedLocalPlayerName(isHostFlow: true);
+        string resolvedLocalName = ReadResolvedLocalPlayerName(PlayerNameInputContext.PrivateHost);
 
         isCreatingLobby = true;
         isJoiningLobby = false;
@@ -287,7 +299,7 @@ public class MultiplayerMenu : MonoBehaviour
             return;
         }
 
-        string resolvedLocalName = ReadResolvedLocalPlayerName(isHostFlow: false);
+        string resolvedLocalName = ReadResolvedLocalPlayerName(PlayerNameInputContext.PrivateJoin);
 
         isCreatingLobby = false;
         isJoiningLobby = true;
@@ -366,7 +378,7 @@ public class MultiplayerMenu : MonoBehaviour
             return;
         }
 
-        string resolvedLocalName = ReadResolvedLocalPlayerName(isHostFlow: false);
+        string resolvedLocalName = ReadResolvedLocalPlayerName(PlayerNameInputContext.Matchmaking);
 
         isCreatingLobby = false;
         isJoiningLobby = false;
@@ -544,14 +556,25 @@ public class MultiplayerMenu : MonoBehaviour
 
     private void InitializeDefaultInputs()
     {
-        if (localPlayerNameInputField != null && string.IsNullOrWhiteSpace(localPlayerNameInputField.text))
-            localPlayerNameInputField.text = defaultHostLocalPlayerName;
+        SetDefaultIfEmpty(localPlayerNameInputField, defaultHostLocalPlayerName);
+        SetDefaultIfEmpty(privateHostPlayerNameInputField, defaultHostLocalPlayerName);
+        SetDefaultIfEmpty(privateJoinPlayerNameInputField, defaultJoinLocalPlayerName);
+        SetDefaultIfEmpty(matchmakingPlayerNameInputField, defaultMatchmakingLocalPlayerName);
 
         if (hostPointsToWinInputField != null && string.IsNullOrWhiteSpace(hostPointsToWinInputField.text))
             hostPointsToWinInputField.text = defaultPointsToWin.ToString();
 
         if (hostMatchDurationInputField != null && string.IsNullOrWhiteSpace(hostMatchDurationInputField.text))
             hostMatchDurationInputField.text = Mathf.RoundToInt(defaultMatchDuration).ToString();
+    }
+
+    private void SetDefaultIfEmpty(TMP_InputField field, string fallback)
+    {
+        if (field == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(field.text))
+            field.text = fallback;
     }
 
     private void SetSelectableInteractable(Selectable selectable, bool interactable)
@@ -826,22 +849,71 @@ public class MultiplayerMenu : MonoBehaviour
         return "local_player_1";
     }
 
-    private string ReadResolvedLocalPlayerName(bool isHostFlow)
+    private enum PlayerNameInputContext
     {
-        string fallback = isHostFlow ? defaultHostLocalPlayerName : defaultJoinLocalPlayerName;
+        PrivateHost,
+        PrivateJoin,
+        Matchmaking
+    }
 
-        if (localPlayerNameInputField == null)
+    private string ReadResolvedLocalPlayerName(PlayerNameInputContext context)
+    {
+        TMP_InputField sourceField = GetInputFieldForContext(context);
+        string fallback = GetFallbackNameForContext(context);
+
+        if (sourceField == null)
             return fallback;
 
-        string value = localPlayerNameInputField.text.Trim();
+        string value = sourceField.text != null ? sourceField.text.Trim() : string.Empty;
 
         if (string.IsNullOrWhiteSpace(value))
         {
-            localPlayerNameInputField.text = fallback;
+            sourceField.text = fallback;
             return fallback;
         }
 
         return value;
+    }
+
+    private TMP_InputField GetInputFieldForContext(PlayerNameInputContext context)
+    {
+        switch (context)
+        {
+            case PlayerNameInputContext.PrivateHost:
+                if (privateHostPlayerNameInputField != null)
+                    return privateHostPlayerNameInputField;
+                break;
+
+            case PlayerNameInputContext.PrivateJoin:
+                if (privateJoinPlayerNameInputField != null)
+                    return privateJoinPlayerNameInputField;
+                break;
+
+            case PlayerNameInputContext.Matchmaking:
+                if (matchmakingPlayerNameInputField != null)
+                    return matchmakingPlayerNameInputField;
+                break;
+        }
+
+        return localPlayerNameInputField;
+    }
+
+    private string GetFallbackNameForContext(PlayerNameInputContext context)
+    {
+        switch (context)
+        {
+            case PlayerNameInputContext.PrivateHost:
+                return defaultHostLocalPlayerName;
+
+            case PlayerNameInputContext.PrivateJoin:
+                return defaultJoinLocalPlayerName;
+
+            case PlayerNameInputContext.Matchmaking:
+                return defaultMatchmakingLocalPlayerName;
+
+            default:
+                return defaultHostLocalPlayerName;
+        }
     }
 
     private int ReadHostPointsToWin()

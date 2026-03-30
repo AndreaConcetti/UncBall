@@ -22,7 +22,7 @@ public class ScoreRollDisplay : MonoBehaviour
     }
 
     [Header("References")]
-    public ScoreManagerNew scoreManager;
+    public ScoreManager scoreManager;
 
     [Header("Player UI")]
     public RollingScoreUI player1UI;
@@ -46,7 +46,7 @@ public class ScoreRollDisplay : MonoBehaviour
     void Awake()
     {
         if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
+            scoreManager = ScoreManager.Instance;
     }
 
     void Start()
@@ -64,7 +64,7 @@ public class ScoreRollDisplay : MonoBehaviour
     void OnEnable()
     {
         if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
+            scoreManager = ScoreManager.Instance;
 
         if (scoreManager != null)
             scoreManager.onPointsScored.AddListener(OnPointsScored);

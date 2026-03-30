@@ -5,7 +5,7 @@ using UnityEngine;
 public class ShotScorePopupUI : MonoBehaviour
 {
     [Header("References")]
-    public ScoreManagerNew scoreManager;
+    public ScoreManager scoreManager;
     public Camera worldCamera;
     public Canvas parentCanvas;
     public RectTransform canvasRect;
@@ -18,10 +18,7 @@ public class ShotScorePopupUI : MonoBehaviour
     public TMP_Text pointsText;
 
     [Header("World To UI Offset")]
-    [Tooltip("Offset in world sopra lo slot")]
     public Vector3 worldOffset = new Vector3(0f, 0.2f, 0f);
-
-    [Tooltip("Offset finale in pixel UI")]
     public Vector2 screenOffset = new Vector2(0f, 30f);
 
     [Header("Text Formatting")]
@@ -66,7 +63,7 @@ public class ShotScorePopupUI : MonoBehaviour
     void OnEnable()
     {
         if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
+            scoreManager = ScoreManager.Instance;
 
         if (scoreManager != null)
             scoreManager.onShotScoreDetailed.AddListener(HandleShotScoreDetailed);

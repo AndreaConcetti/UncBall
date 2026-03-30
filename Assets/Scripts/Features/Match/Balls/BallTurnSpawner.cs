@@ -1,15 +1,16 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
+using Fusion;
 using UnityEngine;
 
-/// <summary>
-/// Gestisce la creazione e la preparazione della ball del turno corrente.
-/// Tiene anche traccia dei lati di gioco:
-/// - quale player è a sinistra
-/// - quale player è a destra
-/// </summary>
 public class BallTurnSpawner : MonoBehaviour
 {
     [Header("References")]
     public BallLauncher launcher;
+    public PhotonFusionRunnerManager runnerManager;
+    public OnlineGameplayAuthority onlineGameplayAuthority;
 
     [Header("Ball Prefabs")]
     public GameObject player1BallPrefab;
@@ -27,53 +28,212 @@ public class BallTurnSpawner : MonoBehaviour
     [Header("Skin System")]
     public bool applyEquippedSkins = true;
 
-    [Header("Legacy Material Override")]
-    public bool overrideBallMaterial = false;
-    public Material player1Material;
-    public Material player2Material;
-
     [Header("Runtime Sides")]
-    [Tooltip("True se Player1 occupa attualmente il lato sinistro del tavolo")]
     [SerializeField] private bool player1IsOnLeft = true;
 
-    public BallPhysics PrepareBallForTurn(PlayerController player, PlayerController player1, PlayerController player2)
+    [Header("Debug")]
+    [SerializeField] private bool logDebug = true;
+
+    private BallPhysics lastBoundOnlineBall;
+    private PlayerID lastBoundOnlineOwner = PlayerID.None;
+
+    private void Awake()
     {
-        if (player == null)
+        ResolveDependencies();
+    }
+
+    private void ResolveDependencies()
+    {
+        if (runnerManager == null)
+            runnerManager = PhotonFusionRunnerManager.Instance;
+
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
+    }
+
+    private PlayerID ResolveEffectiveLocalPlayerId()
+    {
+        ResolveDependencies();
+
+        if (onlineGameplayAuthority != null && onlineGameplayAuthority.OnlineMatchController != null)
+            return onlineGameplayAuthority.OnlineMatchController.EffectiveLocalPlayerId;
+
+        if (runnerManager != null && runnerManager.IsRunning && runnerManager.ActiveRunner != null)
+            return runnerManager.ActiveRunner.IsServer ? PlayerID.Player1 : PlayerID.Player2;
+
+        if (onlineGameplayAuthority != null)
+            return onlineGameplayAuthority.LocalPlayerId;
+
+        return PlayerID.Player1;
+    }
+
+    public BallPhysics SpawnOnlineBallForOwner(PlayerID ownerId)
+    {
+        ResolveDependencies();
+
+        if (runnerManager == null || !runnerManager.IsRunning || runnerManager.ActiveRunner == null)
         {
-            Debug.LogError("BallTurnSpawner: player nullo.", this);
+            Debug.LogError("[BallTurnSpawner] Runner not ready for online spawn.", this);
             return null;
         }
+
+        Transform spawnPoint = ownerId == PlayerID.Player1 ? player1SpawnPoint : player2SpawnPoint;
+        GameObject prefabToSpawn = ownerId == PlayerID.Player1
+            ? (player1BallPrefab != null ? player1BallPrefab : fallbackBallPrefab)
+            : (player2BallPrefab != null ? player2BallPrefab : fallbackBallPrefab);
+
+        if (spawnPoint == null || prefabToSpawn == null)
+        {
+            Debug.LogError("[BallTurnSpawner] Missing spawn point or prefab for online spawn.", this);
+            return null;
+        }
+
+        string skinUniqueId = ResolveEquippedSkinUniqueIdForOwner(ownerId);
+
+        NetworkObject networkPrefab = prefabToSpawn.GetComponent<NetworkObject>();
+        if (networkPrefab == null)
+        {
+            Debug.LogError("[BallTurnSpawner] Ball prefab missing NetworkObject.", this);
+            return null;
+        }
+
+        NetworkObject spawnedObject = runnerManager.ActiveRunner.Spawn(
+            networkPrefab,
+            spawnPoint.position,
+            spawnPoint.rotation,
+            inputAuthority: null,
+            onBeforeSpawned: (runner, obj) =>
+            {
+                FusionNetworkBall fusionBall = obj.GetComponent<FusionNetworkBall>();
+                if (fusionBall != null)
+                    fusionBall.SetOwnerAndSkin(ownerId, skinUniqueId);
+
+                BallOwnership ownership = obj.GetComponent<BallOwnership>();
+                if (ownership != null)
+                    ownership.Owner = ownerId;
+            }
+        );
+
+        if (spawnedObject == null)
+        {
+            Debug.LogError("[BallTurnSpawner] Runner.Spawn returned null.", this);
+            return null;
+        }
+
+        BallPhysics ballPhysics = spawnedObject.GetComponent<BallPhysics>();
+        if (ballPhysics == null)
+        {
+            Debug.LogError("[BallTurnSpawner] Spawned object missing BallPhysics.", this);
+            return null;
+        }
+
+        Rigidbody rb = spawnedObject.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.constraints = RigidbodyConstraints.FreezeAll;
+            rb.isKinematic = true;
+        }
+
+        if (logDebug)
+            Debug.Log("[BallTurnSpawner] SpawnOnlineBallForOwner -> " + ownerId, this);
+
+        return ballPhysics;
+    }
+
+    public void RegisterNetworkSpawnedBall(FusionNetworkBall networkBall)
+    {
+        if (networkBall == null)
+            return;
+
+        TryBindCurrentOnlineBallForLocalControl(networkBall.BallPhysics, networkBall.OwnerPlayerId);
+    }
+
+    public void TryBindCurrentOnlineBallForLocalControl(BallPhysics currentBall, PlayerID owner)
+    {
+        ResolveDependencies();
+
+        if (launcher == null || currentBall == null)
+            return;
+
+        PlayerID localPlayer = ResolveEffectiveLocalPlayerId();
+        if (owner != localPlayer)
+            return;
+
+        if (lastBoundOnlineBall == currentBall && lastBoundOnlineOwner == owner)
+            return;
+
+        BoxCollider area = owner == PlayerID.Player1 ? player1PlacementArea : player2PlacementArea;
+
+        launcher.ball = currentBall;
+        launcher.SetActivePlacementArea(area);
+        launcher.ResetLaunch();
+
+        lastBoundOnlineBall = currentBall;
+        lastBoundOnlineOwner = owner;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[BallTurnSpawner] TryBindCurrentOnlineBallForLocalControl -> " +
+                "LocalPlayer=" + localPlayer +
+                " | Owner=" + owner,
+                this
+            );
+        }
+    }
+
+    public void ClearOnlineLauncherBindingIfNeeded(PlayerID currentTurnOwner)
+    {
+        ResolveDependencies();
+
+        if (launcher == null)
+            return;
+
+        PlayerID localPlayer = ResolveEffectiveLocalPlayerId();
+        if (currentTurnOwner == localPlayer)
+            return;
+
+        launcher.ball = null;
+        lastBoundOnlineBall = null;
+        lastBoundOnlineOwner = PlayerID.None;
+    }
+
+    // Compatibilità
+    public BallPhysics PrepareBallForTurn(PlayerController player, PlayerController player1, PlayerController player2)
+    {
+        ResolveDependencies();
+
+        bool isOnline = onlineGameplayAuthority != null && onlineGameplayAuthority.IsOnlineSession;
+        if (isOnline)
+            return null;
+
+        if (player == null)
+            return null;
 
         Transform spawnPoint = GetSpawnPointForPlayer(player, player1, player2);
         BoxCollider placementArea = GetPlacementAreaForPlayer(player, player1, player2);
         GameObject prefabToSpawn = GetBallPrefabForPlayer(player, player1, player2);
 
-        if (spawnPoint == null)
-        {
-            Debug.LogError("BallTurnSpawner: spawn point non assegnato.", this);
+        if (spawnPoint == null || prefabToSpawn == null)
             return null;
-        }
 
-        if (prefabToSpawn == null)
-        {
-            Debug.LogError("BallTurnSpawner: prefab ball non assegnato.", this);
-            return null;
-        }
+        PlayerID ownerId = player == player1 ? PlayerID.Player1 : PlayerID.Player2;
+        string skinUniqueId = ResolveEquippedSkinUniqueIdForOwner(ownerId);
 
         GameObject ballObject = Instantiate(prefabToSpawn, spawnPoint.position, spawnPoint.rotation);
 
-        ApplyBallVisuals(ballObject, player, player1, player2);
-
         BallPhysics ballPhysics = ballObject.GetComponent<BallPhysics>();
         if (ballPhysics == null)
-        {
-            Debug.LogError("BallTurnSpawner: il prefab spawnato non contiene BallPhysics.", ballObject);
             return null;
-        }
 
         BallOwnership ownership = ballObject.GetComponent<BallOwnership>();
         if (ownership != null)
-            ownership.Owner = player == player1 ? PlayerID.Player1 : PlayerID.Player2;
+            ownership.Owner = ownerId;
+
+        ApplyOfflineSkin(ballObject, skinUniqueId);
 
         Rigidbody rb = ballObject.GetComponent<Rigidbody>();
         if (rb != null)
@@ -95,41 +255,6 @@ public class BallTurnSpawner : MonoBehaviour
         return ballPhysics;
     }
 
-    private void ApplyBallVisuals(GameObject ballObject, PlayerController player, PlayerController player1, PlayerController player2)
-    {
-        if (ballObject == null)
-            return;
-
-        if (applyEquippedSkins)
-        {
-            BallSkinApplier skinApplier = ballObject.GetComponent<BallSkinApplier>();
-
-            if (skinApplier != null && PlayerSkinLoadout.Instance != null && PlayerSkinLoadout.Instance.Database != null)
-            {
-                BallSkinData equippedSkin = null;
-
-                if (player == player1)
-                    equippedSkin = PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer1();
-                else if (player == player2)
-                    equippedSkin = PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer2();
-
-                if (equippedSkin != null)
-                    skinApplier.ApplySkinData(PlayerSkinLoadout.Instance.Database, equippedSkin);
-            }
-        }
-
-        if (overrideBallMaterial)
-        {
-            MeshRenderer renderer = ballObject.GetComponent<MeshRenderer>();
-
-            if (renderer == null)
-                renderer = ballObject.GetComponentInChildren<MeshRenderer>(true);
-
-            if (renderer != null)
-                renderer.material = player == player1 ? player1Material : player2Material;
-        }
-    }
-
     public void SwapPlayerSides()
     {
         Transform tempSpawn = player1SpawnPoint;
@@ -141,8 +266,6 @@ public class BallTurnSpawner : MonoBehaviour
         player2PlacementArea = tempArea;
 
         player1IsOnLeft = !player1IsOnLeft;
-
-        Debug.Log("[BallTurnSpawner] Player sides swapped.");
     }
 
     public void ClearAllBallsInScene()
@@ -153,16 +276,31 @@ public class BallTurnSpawner : MonoBehaviour
         BallPhysics[] balls = FindObjectsOfType<BallPhysics>();
 #endif
 
+        bool isOnline =
+            onlineGameplayAuthority != null &&
+            onlineGameplayAuthority.IsOnlineSession &&
+            runnerManager != null &&
+            runnerManager.IsRunning &&
+            runnerManager.ActiveRunner != null;
+
         for (int i = 0; i < balls.Length; i++)
         {
-            if (balls[i] != null)
+            if (balls[i] == null)
+                continue;
+
+            NetworkObject netObj = balls[i].GetComponent<NetworkObject>();
+
+            if (isOnline && netObj != null && runnerManager.ActiveRunner.IsServer)
+                runnerManager.ActiveRunner.Despawn(netObj);
+            else if (!isOnline)
                 Destroy(balls[i].gameObject);
         }
 
         if (launcher != null)
             launcher.ball = null;
 
-        Debug.Log("[BallTurnSpawner] All balls cleared.");
+        lastBoundOnlineBall = null;
+        lastBoundOnlineOwner = PlayerID.None;
     }
 
     public bool IsBallInsideCurrentLaunchArea(BallPhysics ball, PlayerController currentPlayer, PlayerController player1, PlayerController player2)
@@ -204,7 +342,7 @@ public class BallTurnSpawner : MonoBehaviour
         return !IsPlayerOnLeft(player, player1, player2);
     }
 
-    Transform GetSpawnPointForPlayer(PlayerController player, PlayerController player1, PlayerController player2)
+    private Transform GetSpawnPointForPlayer(PlayerController player, PlayerController player1, PlayerController player2)
     {
         if (player == player1)
             return player1SpawnPoint;
@@ -215,7 +353,7 @@ public class BallTurnSpawner : MonoBehaviour
         return null;
     }
 
-    BoxCollider GetPlacementAreaForPlayer(PlayerController player, PlayerController player1, PlayerController player2)
+    private BoxCollider GetPlacementAreaForPlayer(PlayerController player, PlayerController player1, PlayerController player2)
     {
         if (player == player1)
             return player1PlacementArea;
@@ -226,7 +364,7 @@ public class BallTurnSpawner : MonoBehaviour
         return null;
     }
 
-    GameObject GetBallPrefabForPlayer(PlayerController player, PlayerController player1, PlayerController player2)
+    private GameObject GetBallPrefabForPlayer(PlayerController player, PlayerController player1, PlayerController player2)
     {
         if (player == player1)
             return player1BallPrefab != null ? player1BallPrefab : fallbackBallPrefab;
@@ -235,5 +373,65 @@ public class BallTurnSpawner : MonoBehaviour
             return player2BallPrefab != null ? player2BallPrefab : fallbackBallPrefab;
 
         return fallbackBallPrefab;
+    }
+
+    private void ApplyOfflineSkin(GameObject ballObject, string skinUniqueId)
+    {
+        if (!applyEquippedSkins || string.IsNullOrWhiteSpace(skinUniqueId))
+            return;
+
+        BallSkinApplier skinApplier = ballObject.GetComponent<BallSkinApplier>();
+        if (skinApplier == null || PlayerSkinLoadout.Instance == null || PlayerSkinLoadout.Instance.Database == null)
+            return;
+
+        BallSkinData skin = ResolveSkinDataByUniqueId(PlayerSkinLoadout.Instance.Database, skinUniqueId);
+        if (skin != null)
+            skinApplier.ApplySkinData(PlayerSkinLoadout.Instance.Database, skin);
+    }
+
+    private string ResolveEquippedSkinUniqueIdForOwner(PlayerID ownerId)
+    {
+        if (!applyEquippedSkins || PlayerSkinLoadout.Instance == null)
+            return string.Empty;
+
+        BallSkinData equippedSkin = null;
+
+        if (ownerId == PlayerID.Player1)
+            equippedSkin = PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer1();
+        else if (ownerId == PlayerID.Player2)
+            equippedSkin = PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer2();
+
+        if (equippedSkin == null)
+            return string.Empty;
+
+        return string.IsNullOrWhiteSpace(equippedSkin.skinUniqueId) ? string.Empty : equippedSkin.skinUniqueId.Trim();
+    }
+
+    private BallSkinData ResolveSkinDataByUniqueId(BallSkinDatabase database, string skinUniqueId)
+    {
+        if (database == null || string.IsNullOrWhiteSpace(skinUniqueId))
+            return null;
+
+        Type dbType = database.GetType();
+
+        FieldInfo[] fields = dbType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        for (int i = 0; i < fields.Length; i++)
+        {
+            object value = fields[i].GetValue(database);
+            if (value is IEnumerable enumerable)
+            {
+                foreach (object item in enumerable)
+                {
+                    if (item is BallSkinData candidate &&
+                        candidate != null &&
+                        string.Equals(candidate.skinUniqueId, skinUniqueId, StringComparison.Ordinal))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 }

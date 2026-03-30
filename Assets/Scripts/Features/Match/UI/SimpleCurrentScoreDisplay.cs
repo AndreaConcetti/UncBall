@@ -9,7 +9,7 @@ public class SimpleCurrentScoreDisplay : MonoBehaviour
     public List<TMP_Text> player2ScoreTexts = new List<TMP_Text>();
 
     [Header("Optional Score Source")]
-    public ScoreManagerNew scoreManager;
+    public ScoreManager scoreManager;
 
     void OnEnable()
     {
@@ -19,11 +19,11 @@ public class SimpleCurrentScoreDisplay : MonoBehaviour
     public void RefreshScores()
     {
         if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
+            scoreManager = ScoreManager.Instance;
 
         if (scoreManager == null)
         {
-            Debug.LogWarning("SimpleCurrentScoreDisplay: ScoreManagerNew non trovato.");
+            Debug.LogWarning("SimpleCurrentScoreDisplay: ScoreManager non trovato.");
             return;
         }
 

@@ -17,9 +17,9 @@ public class ShotScoreData
 [Serializable]
 public class ShotScoreDataEvent : UnityEvent<ShotScoreData> { }
 
-public class ScoreManagerNew : MonoBehaviour
+public class ScoreManager : MonoBehaviour
 {
-    public static ScoreManagerNew Instance { get; private set; }
+    public static ScoreManager Instance { get; private set; }
 
     [Header("Star Plates")]
     public StarPlate[] starPlates = new StarPlate[3];
@@ -31,12 +31,17 @@ public class ScoreManagerNew : MonoBehaviour
     public UnityEvent<PlayerID> onMatchEnd;
     public UnityEvent onOvertimeStart;
 
+    [Header("Debug")]
+    [SerializeField] private bool logDebug = false;
+
     public int ScoreP1 { get; private set; }
     public int ScoreP2 { get; private set; }
 
     public bool IsHalftime { get; private set; }
     public bool IsOvertime { get; private set; }
     public bool MatchActive { get; private set; }
+
+    private bool isApplyingReplicatedScores = false;
 
     void Awake()
     {
@@ -60,6 +65,9 @@ public class ScoreManagerNew : MonoBehaviour
 
         foreach (StarPlate plate in starPlates)
             plate?.ResetPlate();
+
+        if (logDebug)
+            Debug.Log("[ScoreManager] StartMatch -> scores reset.", this);
     }
 
     public void BeginHalftime()
@@ -105,6 +113,9 @@ public class ScoreManagerNew : MonoBehaviour
         if (!MatchActive)
             return;
 
+        if (isApplyingReplicatedScores)
+            return;
+
         if (owner == PlayerID.Player1)
             ScoreP1 += points;
         else if (owner == PlayerID.Player2)
@@ -131,6 +142,42 @@ public class ScoreManagerNew : MonoBehaviour
 
         if (IsOvertime && points > 0)
             EndMatch(owner);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[ScoreManager] AddPoints -> " +
+                "Owner=" + owner +
+                " | Points=" + points +
+                " | ScoreP1=" + ScoreP1 +
+                " | ScoreP2=" + ScoreP2,
+                this
+            );
+        }
+    }
+
+    public void SetReplicatedScores(int player1Score, int player2Score)
+    {
+        player1Score = Mathf.Max(0, player1Score);
+        player2Score = Mathf.Max(0, player2Score);
+
+        if (ScoreP1 == player1Score && ScoreP2 == player2Score)
+            return;
+
+        isApplyingReplicatedScores = true;
+        ScoreP1 = player1Score;
+        ScoreP2 = player2Score;
+        isApplyingReplicatedScores = false;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[ScoreManager] SetReplicatedScores -> " +
+                "ScoreP1=" + ScoreP1 +
+                " | ScoreP2=" + ScoreP2,
+                this
+            );
+        }
     }
 
     public bool AreAllBoardsFull()

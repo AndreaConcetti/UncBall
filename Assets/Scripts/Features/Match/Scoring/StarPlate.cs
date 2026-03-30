@@ -103,7 +103,7 @@ public class StarPlate : MonoBehaviour
         int totalThisShot = shotPoints + fullStarExtra;
         Vector3 slotWorldPosition = slotTransform != null ? slotTransform.position : transform.position;
 
-        ScoreManagerNew scoreManager = ScoreManagerNew.Instance;
+        ScoreManager scoreManager = ScoreManager.Instance;
         if (scoreManager != null)
         {
             scoreManager.AddPoints(
@@ -117,7 +117,7 @@ public class StarPlate : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning($"[StarPlate {plateNumber}] ScoreManagerNew.Instance nullo.");
+            Debug.LogWarning($"[StarPlate {plateNumber}] ScoreManager.Instance nullo.");
         }
     }
 

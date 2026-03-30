@@ -82,8 +82,7 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             maxPlayers,
             sessionProperties,
             string.IsNullOrWhiteSpace(customLobbyNameOverride) ? privateLobbyName : customLobbyNameOverride,
-            connectionToken: null,
-            useRandomMatchmaking: false
+            connectionToken: null
         );
     }
 
@@ -107,13 +106,18 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             maxPlayers,
             null,
             string.IsNullOrWhiteSpace(customLobbyNameOverride) ? privateLobbyName : customLobbyNameOverride,
-            connectionToken,
-            useRandomMatchmaking: false
+            connectionToken
         );
     }
 
+    /// <summary>
+    /// Matchmaking deterministico per bucket.
+    /// Tutti i player che cercano con lo stesso bucketSessionName provano a entrare nella stessa room.
+    /// Se la room non esiste, il primo diventa host. Il secondo entra come client.
+    /// </summary>
     public async Task<bool> StartMatchmakingAsync(
-        Dictionary<string, SessionProperty> matchmakingFilters,
+        string bucketSessionName,
+        Dictionary<string, SessionProperty> matchmakingProperties,
         int maxPlayers = 2,
         string customLobbyNameOverride = null,
         byte[] connectionToken = null)
@@ -125,15 +129,20 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             return false;
         }
 
+        if (string.IsNullOrWhiteSpace(bucketSessionName))
+        {
+            Debug.LogError("[PhotonFusionRunnerManager] Matchmaking bucket session name is empty.", this);
+            return false;
+        }
+
         return await StartGameInternalAsync(
             GameMode.AutoHostOrClient,
-            sessionName: null,
+            bucketSessionName,
             currentScene,
             maxPlayers,
-            matchmakingFilters,
+            matchmakingProperties,
             string.IsNullOrWhiteSpace(customLobbyNameOverride) ? matchmakingLobbyName : customLobbyNameOverride,
-            connectionToken,
-            useRandomMatchmaking: true
+            connectionToken
         );
     }
 
@@ -171,9 +180,7 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         if (logDebug)
-        {
             Debug.Log("[PhotonFusionRunnerManager] Loading network scene -> " + sceneName, this);
-        }
 
         activeRunner.LoadScene(sceneRef, LoadSceneMode.Single);
         return true;
@@ -261,8 +268,7 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         int maxPlayers,
         Dictionary<string, SessionProperty> sessionProperties,
         string customLobbyName,
-        byte[] connectionToken,
-        bool useRandomMatchmaking)
+        byte[] connectionToken)
     {
         if (!sceneRef.IsValid)
         {
@@ -270,7 +276,7 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             return false;
         }
 
-        if (!useRandomMatchmaking && string.IsNullOrWhiteSpace(sessionName))
+        if (string.IsNullOrWhiteSpace(sessionName))
         {
             Debug.LogError("[PhotonFusionRunnerManager] Session name is empty.", this);
             return false;
@@ -303,23 +309,15 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             ConnectionToken = connectionToken
         };
 
-        if (useRandomMatchmaking)
-        {
-            args.SessionNameGenerator = GenerateRandomMatchSessionName;
-            args.EnableClientSessionCreation = true;
-            args.MatchmakingMode = Fusion.Photon.Realtime.MatchmakingMode.FillRoom;
-        }
-
         if (logDebug)
         {
             Debug.Log(
                 "[PhotonFusionRunnerManager] Starting Fusion game. " +
                 "Mode=" + gameMode +
-                " | SessionName=" + (string.IsNullOrWhiteSpace(sessionName) ? "<random>" : sessionName) +
+                " | SessionName=" + sessionName +
                 " | SceneRef=" + sceneRef +
                 " | MaxPlayers=" + maxPlayers +
-                " | CustomLobbyName=" + customLobbyName +
-                " | RandomMatchmaking=" + useRandomMatchmaking,
+                " | CustomLobbyName=" + customLobbyName,
                 this
             );
         }
@@ -338,11 +336,6 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         return true;
-    }
-
-    private string GenerateRandomMatchSessionName()
-    {
-        return "MM_" + Guid.NewGuid().ToString("N");
     }
 
     private NetworkRunner CreateRunnerInstance()

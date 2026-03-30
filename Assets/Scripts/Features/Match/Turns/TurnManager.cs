@@ -1,20 +1,7 @@
-using UnityEngine;
+using Fusion;
 using TMPro;
+using UnityEngine;
 
-/// <summary>
-/// Gestisce il flusso dei turni:
-/// - player attivo
-/// - timer turno
-/// - cambio turno
-/// - stuck ball check
-/// - stesso turno dopo punto
-///
-/// Regola implementata:
-/// se durante il turno corrente entra almeno UNA pallina del player attivo,
-/// il turno rimane allo stesso player.
-/// Inoltre, se cade una pallina vecchia in DeathZone, non deve influenzare il turno.
-/// Solo la watchedBall (pallina del turno corrente) può chiudere il tiro.
-/// </summary>
 public class TurnManager : MonoBehaviour
 {
     public static TurnManager Instance;
@@ -25,9 +12,13 @@ public class TurnManager : MonoBehaviour
     public PlayerController currentPlayer;
 
     [Header("References")]
-    public ScoreManagerNew scoreManager;
+    public ScoreManager scoreManager;
     public BallTurnSpawner ballTurnSpawner;
     public StartEndController startEndController;
+    public OnlineGameplayAuthority onlineGameplayAuthority;
+    public FusionMatchState fusionMatchState;
+    public MatchRuntimeConfig matchRuntimeConfig;
+    public PhotonFusionRunnerManager runnerManager;
     public TextMeshProUGUI timerText;
 
     [Header("Turn UI")]
@@ -43,6 +34,9 @@ public class TurnManager : MonoBehaviour
     public float stuckTimeout = 3f;
     public float stuckPositionDeltaThreshold = 0.002f;
 
+    [Header("Debug")]
+    [SerializeField] private bool logDebug = false;
+
     private float currentTimer;
     public float CurrentTimer => currentTimer;
 
@@ -55,15 +49,12 @@ public class TurnManager : MonoBehaviour
     private float stuckTimer;
     private Vector3 lastWatchedBallPosition;
 
-    // True se durante questo turno il player corrente ha fatto almeno un punto con una sua pallina
     private bool currentPlayerScoredThisTurn = false;
 
     public bool IsPlayer1Turn => currentPlayer == player1;
     public bool IsPlayer2Turn => currentPlayer == player2;
+    public PlayerID CurrentTurnOwnerId => GetCurrentTurnOwnerId();
 
-    /// <summary>
-    /// True solo se esiste ancora la ball corrente ed è già stata lanciata.
-    /// </summary>
     public bool IsLaunchInProgress()
     {
         return watchedBall != null && hasBallBeenLaunched;
@@ -76,16 +67,18 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
-        if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
+        ResolveDependencies();
+        UpdateTurnText();
 
-#if UNITY_2023_1_OR_NEWER
-        if (startEndController == null)
-            startEndController = FindFirstObjectByType<StartEndController>();
-#else
-        if (startEndController == null)
-            startEndController = FindObjectOfType<StartEndController>();
-#endif
+        if (!ShouldRunAuthoritativeGameplayFlow())
+        {
+            PauseTimer();
+
+            if (logDebug)
+                Debug.Log("[TurnManager] Online gameplay detected. Local authoritative gameplay flow disabled.", this);
+
+            return;
+        }
 
         StartTurn(player1);
     }
@@ -93,7 +86,7 @@ public class TurnManager : MonoBehaviour
     void OnEnable()
     {
         if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
+            scoreManager = ScoreManager.Instance;
 
         if (scoreManager != null)
             scoreManager.onPointsScored.AddListener(OnPointsScored);
@@ -107,16 +100,120 @@ public class TurnManager : MonoBehaviour
 
     void Update()
     {
+        if (!ShouldRunAuthoritativeGameplayFlow())
+        {
+            UpdateTurnText();
+            return;
+        }
+
         UpdateTurnTimer();
         UpdateStuckBallCheck();
+    }
+
+    void ResolveDependencies()
+    {
+        if (scoreManager == null)
+            scoreManager = ScoreManager.Instance;
+
+        if (startEndController == null)
+            startEndController = StartEndController.InstanceOrFind();
+
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = MatchRuntimeConfig.Instance;
+
+        if (runnerManager == null)
+            runnerManager = PhotonFusionRunnerManager.Instance;
+
+#if UNITY_2023_1_OR_NEWER
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = FindFirstObjectByType<OnlineGameplayAuthority>();
+
+        if (fusionMatchState == null)
+            fusionMatchState = FindFirstObjectByType<FusionMatchState>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
+
+        if (runnerManager == null)
+            runnerManager = FindFirstObjectByType<PhotonFusionRunnerManager>();
+#else
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = FindObjectOfType<OnlineGameplayAuthority>();
+
+        if (fusionMatchState == null)
+            fusionMatchState = FindObjectOfType<FusionMatchState>();
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
+
+        if (runnerManager == null)
+            runnerManager = FindObjectOfType<PhotonFusionRunnerManager>();
+#endif
     }
 
     public void ApplyPlayerNames(string player1Name, string player2Name)
     {
         player1TurnLabel = string.IsNullOrWhiteSpace(player1Name) ? "Player 1" : player1Name;
         player2TurnLabel = string.IsNullOrWhiteSpace(player2Name) ? "Player 2" : player2Name;
-
         UpdateTurnText();
+    }
+
+    bool IsRuntimeOnlineMode()
+    {
+        if (onlineGameplayAuthority != null && onlineGameplayAuthority.IsOnlineSession)
+            return true;
+
+        if (matchRuntimeConfig != null && matchRuntimeConfig.IsOnlineMatch)
+            return true;
+
+        if (runnerManager != null && runnerManager.IsRunning)
+            return true;
+
+        return false;
+    }
+
+    bool ShouldRunAuthoritativeGameplayFlow()
+    {
+        if (IsRuntimeOnlineMode())
+            return false;
+
+        return true;
+    }
+
+    PlayerID GetCurrentTurnOwnerId()
+    {
+        if (currentPlayer == player1)
+            return PlayerID.Player1;
+
+        if (currentPlayer == player2)
+            return PlayerID.Player2;
+
+        if (onlineGameplayAuthority != null)
+            return onlineGameplayAuthority.CurrentTurnOwner;
+
+        return PlayerID.None;
+    }
+
+    public PlayerID GetRemotePlayerIdFallback()
+    {
+        if (onlineGameplayAuthority == null)
+            return PlayerID.Player2;
+
+        return onlineGameplayAuthority.RemotePlayerId;
+    }
+
+    void PublishTurnOwnerRuntime()
+    {
+        PlayerID owner = GetCurrentTurnOwnerId();
+
+        if (onlineGameplayAuthority != null)
+            onlineGameplayAuthority.SetCurrentTurnOwner(owner);
+
+        if (fusionMatchState != null)
+            fusionMatchState.PublishTurnOwner(owner);
     }
 
     void UpdateTurnTimer()
@@ -126,35 +223,19 @@ public class TurnManager : MonoBehaviour
 
         currentTimer -= Time.deltaTime;
 
+        if (currentTimer < 0f)
+            currentTimer = 0f;
+
         if (timerText != null)
             timerText.text = Mathf.CeilToInt(currentTimer).ToString();
 
         if (currentTimer <= 0f)
-        {
-            Debug.Log("Tempo scaduto!");
             EndTurn();
-        }
     }
 
-    /// <summary>
-    /// Controllo stuck basato SOLO sulla posizione.
-    /// Vale solo per la watchedBall del turno corrente.
-    /// Se la watchedBall si blocca:
-    /// - se il player corrente aveva già segnato in questo turno, rigioca
-    /// - altrimenti perde il turno
-    /// </summary>
     void UpdateStuckBallCheck()
     {
-        if (!enableStuckBallCheck)
-            return;
-
-        if (watchedBall == null)
-            return;
-
-        if (!hasBallBeenLaunched)
-            return;
-
-        if (ballTurnSpawner != null && ballTurnSpawner.IsBallInsideCurrentLaunchArea(watchedBall, currentPlayer, player1, player2))
+        if (!enableStuckBallCheck || watchedBall == null || !hasBallBeenLaunched)
             return;
 
         if (watchedBallRb == null)
@@ -165,7 +246,6 @@ public class TurnManager : MonoBehaviour
 
         Vector3 currentPosition = watchedBall.transform.position;
         float positionDelta = Vector3.Distance(currentPosition, lastWatchedBallPosition);
-
         bool isNearlyStill = positionDelta <= stuckPositionDeltaThreshold;
 
         if (isNearlyStill)
@@ -174,16 +254,10 @@ public class TurnManager : MonoBehaviour
 
             if (stuckTimer >= stuckTimeout)
             {
-               // Debug.Log("Palla del turno bloccata troppo a lungo.");
-
                 if (currentPlayerScoredThisTurn)
-                {
                     HandleSuccessfulTurnResolution();
-                }
                 else
-                {
                     ResolveShotWithoutScore();
-                }
 
                 return;
             }
@@ -198,6 +272,9 @@ public class TurnManager : MonoBehaviour
 
     void StartTurn(PlayerController player)
     {
+        if (!ShouldRunAuthoritativeGameplayFlow())
+            return;
+
         currentPlayer = player;
 
         ResetTimer();
@@ -209,10 +286,12 @@ public class TurnManager : MonoBehaviour
         if (player2 != null)
             player2.SetActive(player == player2);
 
+        PublishTurnOwnerRuntime();
         UpdateTurnText();
         SpawnBallForCurrentTurn();
 
-       // Debug.Log("Turno di: " + currentPlayer.name);
+        if (logDebug)
+            Debug.Log("[TurnManager] StartTurn -> " + GetCurrentTurnOwnerId(), this);
     }
 
     void UpdateTurnText()
@@ -220,9 +299,11 @@ public class TurnManager : MonoBehaviour
         if (turnOwnerText == null)
             return;
 
-        if (currentPlayer == player1)
+        PlayerID owner = GetCurrentTurnOwnerId();
+
+        if (owner == PlayerID.Player1)
             turnOwnerText.text = player1TurnLabel;
-        else if (currentPlayer == player2)
+        else if (owner == PlayerID.Player2)
             turnOwnerText.text = player2TurnLabel;
         else
             turnOwnerText.text = string.Empty;
@@ -230,6 +311,9 @@ public class TurnManager : MonoBehaviour
 
     void SpawnBallForCurrentTurn()
     {
+        if (!ShouldRunAuthoritativeGameplayFlow())
+            return;
+
         if (ballTurnSpawner == null)
         {
             Debug.LogError("TurnManager: BallTurnSpawner non assegnato.", this);
@@ -246,7 +330,10 @@ public class TurnManager : MonoBehaviour
 
     public void EndTurn()
     {
-        DestroyCurrentBallIfNotLaunched();
+        if (!ShouldRunAuthoritativeGameplayFlow())
+            return;
+
+        DestroyCurrentBallAlways();
 
         ResetStuckBallWatch();
         ResetTurnScoreState();
@@ -257,40 +344,25 @@ public class TurnManager : MonoBehaviour
             StartTurn(player1);
     }
 
-    /// <summary>
-    /// Chiamato dalla DeathZone.
-    /// Solo la watchedBall del turno corrente può davvero chiudere il tiro.
-    /// Se cade una pallina vecchia, viene ignorata ai fini del turno.
-    /// </summary>
     public void BallLost(BallPhysics lostBall)
     {
-        if (lostBall == null)
+        if (!ShouldRunAuthoritativeGameplayFlow())
             return;
 
-        if (lostBall != watchedBall)
-        {
-            Debug.Log("DeathZone: è caduta una ball non tracciata dal turno corrente, ignorata per il cambio turno.");
+        if (lostBall == null || lostBall != watchedBall)
             return;
-        }
-
-       // Debug.Log("DeathZone: è caduta la watchedBall del turno corrente.");
 
         if (currentPlayerScoredThisTurn)
-        {
             HandleSuccessfulTurnResolution();
-        }
         else
-        {
             ResolveShotWithoutScore();
-        }
     }
 
-    /// <summary>
-    /// Chiamato dal BallLauncher quando il lancio avviene davvero.
-    /// Da questo momento il controllo stuck può partire.
-    /// </summary>
     public void NotifyBallLaunched(BallPhysics launchedBall)
     {
+        if (!ShouldRunAuthoritativeGameplayFlow())
+            return;
+
         if (launchedBall == null)
             return;
 
@@ -305,12 +377,12 @@ public class TurnManager : MonoBehaviour
         lastWatchedBallPosition = launchedBall.transform.position;
     }
 
-    /// <summary>
-    /// Tiro fallito: nessun punto utile del player corrente.
-    /// </summary>
     void ResolveShotWithoutScore()
     {
         PauseTimer();
+
+        DestroyCurrentBallAlways();
+
         ResetStuckBallWatch();
         ResetTurnScoreState();
 
@@ -323,13 +395,12 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        EndTurn();
+        if (currentPlayer == player1)
+            StartTurn(player2);
+        else
+            StartTurn(player1);
     }
 
-    /// <summary>
-    /// Tiro riuscito: durante questo turno il player corrente ha segnato almeno una volta.
-    /// Quindi rigioca.
-    /// </summary>
     void HandleSuccessfulTurnResolution()
     {
         if (handlingSuccessfulScore)
@@ -338,6 +409,9 @@ public class TurnManager : MonoBehaviour
         handlingSuccessfulScore = true;
 
         PauseTimer();
+
+        DestroyCurrentBallAlways();
+
         ResetStuckBallWatch();
         ResetTurnScoreState();
 
@@ -381,13 +455,11 @@ public class TurnManager : MonoBehaviour
             player2.ball = ball;
     }
 
-    /// <summary>
-    /// Se durante il turno corrente segna almeno una pallina del player attivo,
-    /// il turno diventa "riuscito".
-    /// La prima volta che accade, rigioca subito lo stesso player con nuova ball.
-    /// </summary>
     void OnPointsScored(PlayerID playerWhoScored, int newTotal)
     {
+        if (!ShouldRunAuthoritativeGameplayFlow())
+            return;
+
         bool pointBelongsToCurrentTurn =
             (playerWhoScored == PlayerID.Player1 && IsPlayer1Turn) ||
             (playerWhoScored == PlayerID.Player2 && IsPlayer2Turn);
@@ -405,7 +477,11 @@ public class TurnManager : MonoBehaviour
 
     public void SuspendTurnForHalftime()
     {
+        if (!ShouldRunAuthoritativeGameplayFlow())
+            return;
+
         PauseTimer();
+        DestroyCurrentBallAlways();
         ResetStuckBallWatch();
         ResetTurnScoreState();
 
@@ -418,16 +494,16 @@ public class TurnManager : MonoBehaviour
 
     public void StartSpecificTurn(PlayerController player)
     {
+        if (!ShouldRunAuthoritativeGameplayFlow())
+            return;
+
         ResetStuckBallWatch();
         ResetTurnScoreState();
         StartTurn(player);
     }
 
-    void DestroyCurrentBallIfNotLaunched()
+    void DestroyCurrentBallAlways()
     {
-        if (hasBallBeenLaunched)
-            return;
-
         BallPhysics ballToDestroy = watchedBall;
 
         if (ballToDestroy == null)
@@ -439,7 +515,14 @@ public class TurnManager : MonoBehaviour
         }
 
         if (ballToDestroy != null)
-            Destroy(ballToDestroy.gameObject);
+        {
+            NetworkObject netObj = ballToDestroy.GetComponent<NetworkObject>();
+
+            if (netObj != null && fusionMatchState != null && fusionMatchState.IsNetworkSpawnReady)
+                fusionMatchState.Runner.Despawn(netObj);
+            else
+                Destroy(ballToDestroy.gameObject);
+        }
 
         if (ballTurnSpawner != null && ballTurnSpawner.launcher != null)
             ballTurnSpawner.launcher.ball = null;
@@ -458,7 +541,6 @@ public class TurnManager : MonoBehaviour
         hasBallBeenLaunched = false;
         stuckTimer = 0f;
         lastWatchedBallPosition = ball != null ? ball.transform.position : Vector3.zero;
-
         currentPlayerScoredThisTurn = false;
     }
 
@@ -474,5 +556,25 @@ public class TurnManager : MonoBehaviour
     void ResetTurnScoreState()
     {
         currentPlayerScoredThisTurn = false;
+    }
+
+    public void ApplyOnlineReplicaState(PlayerID replicatedTurnOwner, float replicatedTimeRemaining)
+    {
+        if (!IsRuntimeOnlineMode())
+            return;
+
+        currentTimer = Mathf.Max(0f, replicatedTimeRemaining);
+
+        if (replicatedTurnOwner == PlayerID.Player1)
+            currentPlayer = player1;
+        else if (replicatedTurnOwner == PlayerID.Player2)
+            currentPlayer = player2;
+        else
+            currentPlayer = null;
+
+        UpdateTurnText();
+
+        if (timerText != null)
+            timerText.text = Mathf.CeilToInt(currentTimer).ToString();
     }
 }

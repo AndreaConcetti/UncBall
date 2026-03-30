@@ -17,23 +17,13 @@ public class BallLauncher : MonoBehaviour
     public BallPhysics ball;
     public BallCameraController cameraController;
     public Camera gameplayCamera;
-    public StartEndController startEndController;
     public BallVisualRoll ballVisualRoll;
+    public OnlineGameplayAuthority onlineAuthority;
 
     [Header("Placement")]
-    [Tooltip("Area di placement valida per la ball corrente")]
     public BoxCollider activePlacementArea;
-
-    [Tooltip("Offset verticale opzionale applicato in placement")]
     public float placementYOffset = 0f;
-
-    [Tooltip("Distanza massima tra touch iniziale e centro ball per iniziare il drag di placement")]
     public float placementPickRadiusScreen = 140f;
-
-    [Tooltip("Se attivo, il placement viene smussato leggermente")]
-    public bool smoothPlacement = false;
-
-    [Tooltip("Velocità di smoothing del placement")]
     public float placementSmoothSpeed = 20f;
 
     [Header("Confirm")]
@@ -45,14 +35,8 @@ public class BallLauncher : MonoBehaviour
     public float minForce = 8f;
     public float maxForce = 37.5f;
     public float maxSwipePixels = 300f;
-
-    [Tooltip("Soglia minima di swipe in pixel per considerare valido il lancio")]
     public float minLaunchSwipePixels = 20f;
-
-    [Tooltip("Esponente della curva di carica. >1 = più controllo sui tiri bassi/medi")]
     public float chargeCurveExponent = 1.5f;
-
-    [Tooltip("Se attivo, la potenza usa quasi solo la componente forward (Y) dello swipe")]
     public bool useForwardOnlyForPower = true;
 
     [Header("Direction Constraint")]
@@ -67,12 +51,8 @@ public class BallLauncher : MonoBehaviour
     public bool enableTouchSimulationInEditor = true;
     public bool allowMouseInputInEditor = true;
 
-    [Header("Gameplay Input Lock")]
-    [Tooltip("Se attivo, blocca placement/aim/launch quando la partita è in pausa")]
-    public bool blockGameplayInputWhenPaused = true;
-
     [Header("Debug")]
-    public bool debugLogs = false;
+    public bool debugLogs = true;
 
     public float ChargeRatio { get; private set; }
     public Vector3 LaunchDirection { get; private set; }
@@ -91,27 +71,24 @@ public class BallLauncher : MonoBehaviour
     private float lastPlacementTapTime = -999f;
     private Vector2 lastPlacementTapScreenPos;
 
-    // Placement line data: la ball si muove solo lungo l'asse X locale del BoxCollider
     private float placementPlaneY;
     private float placementLineLocalY;
     private float placementLineLocalZ;
 
-    // Drag state stabile
     private bool hasPlacementDragStart;
     private Vector3 placementDragStartWorldPoint;
     private Vector3 placementDragStartBallWorldPosition;
 
-    // Serve per rilevare il cambio stato verso pausa e pulire input in corso
-    private bool wasGameplayInputLockedLastFrame;
+    private FusionOnlineMatchController cachedController;
 
     void Awake()
     {
 #if UNITY_2023_1_OR_NEWER
-        if (startEndController == null)
-            startEndController = FindFirstObjectByType<StartEndController>();
+        if (onlineAuthority == null)
+            onlineAuthority = FindFirstObjectByType<OnlineGameplayAuthority>();
 #else
-        if (startEndController == null)
-            startEndController = FindObjectOfType<StartEndController>();
+        if (onlineAuthority == null)
+            onlineAuthority = FindObjectOfType<OnlineGameplayAuthority>();
 #endif
 
         RefreshBallVisualRollReference();
@@ -139,30 +116,127 @@ public class BallLauncher : MonoBehaviour
 
     void Update()
     {
+        ResolveOnlineController();
+        SyncOnlineCurrentBallBinding();
+
         if (ball == null)
             return;
 
         if (gameplayCamera == null)
             gameplayCamera = Camera.main;
 
-        bool gameplayInputLocked = IsGameplayInputLocked();
-
-        if (gameplayInputLocked && !wasGameplayInputLockedLastFrame)
-        {
-            CancelAllCurrentInputState();
-
-            if (debugLogs)
-                Debug.Log("[BallLauncher] Gameplay input locked because match is paused.");
-        }
-
-        wasGameplayInputLockedLastFrame = gameplayInputLocked;
-
-        if (gameplayInputLocked)
+        if (IsGameplayInputLocked())
             return;
 
         HandleKeyboardConfirm();
         HandleTouchInput();
         HandleMouseInput();
+    }
+
+    private void ResolveOnlineController()
+    {
+        if (cachedController != null)
+            return;
+
+        if (onlineAuthority != null && onlineAuthority.OnlineMatchController != null)
+        {
+            cachedController = onlineAuthority.OnlineMatchController;
+            return;
+        }
+
+#if UNITY_2023_1_OR_NEWER
+        cachedController = FindFirstObjectByType<FusionOnlineMatchController>();
+#else
+        cachedController = FindObjectOfType<FusionOnlineMatchController>();
+#endif
+    }
+
+    private PlayerID ResolveEffectiveLocalPlayerId()
+    {
+        ResolveOnlineController();
+
+        if (cachedController != null)
+            return cachedController.EffectiveLocalPlayerId;
+
+        if (onlineAuthority != null)
+            return onlineAuthority.LocalPlayerId;
+
+        return PlayerID.Player1;
+    }
+
+    private void SyncOnlineCurrentBallBinding()
+    {
+        if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
+            return;
+
+        ResolveOnlineController();
+
+        if (cachedController == null)
+            return;
+
+        PlayerID localPlayer = ResolveEffectiveLocalPlayerId();
+        BallPhysics currentBall = cachedController.CurrentBall;
+
+        if (currentBall == null)
+        {
+            if (ball != null)
+            {
+                ball = null;
+                activePlacementArea = null;
+            }
+
+            return;
+        }
+
+        PlayerID owner = GetOwnerFromBall(currentBall);
+        if (owner != localPlayer)
+        {
+            if (ball != null && ball == currentBall)
+            {
+                ball = null;
+                activePlacementArea = null;
+            }
+
+            return;
+        }
+
+        if (ball != currentBall)
+        {
+            ball = currentBall;
+            activePlacementArea = owner == PlayerID.Player1
+                ? FindPlacementAreaForPlayer1()
+                : FindPlacementAreaForPlayer2();
+
+            ResetLaunch();
+
+            if (debugLogs)
+            {
+                Debug.Log(
+                    "[BallLauncher] SyncOnlineCurrentBallBinding -> bound local ball for owner " + owner,
+                    this
+                );
+            }
+        }
+    }
+
+    private BoxCollider FindPlacementAreaForPlayer1()
+    {
+#if UNITY_2023_1_OR_NEWER
+        BallTurnSpawner spawner = FindFirstObjectByType<BallTurnSpawner>();
+#else
+        BallTurnSpawner spawner = FindObjectOfType<BallTurnSpawner>();
+#endif
+        return spawner != null ? spawner.player1PlacementArea : null;
+    }
+
+    private BoxCollider FindPlacementAreaForPlayer2()
+    {
+#if UNITY_2023_1_OR_NEWER
+        BallTurnSpawner spawner = FindFirstObjectByType<BallTurnSpawner>();
+#else
+        BallTurnSpawner spawner = FindObjectOfType<BallTurnSpawner>();
+#endif
+        return spawner != null ? spawner.player2PlacementArea : null;
     }
 
     public void SetActivePlacementArea(BoxCollider placementArea)
@@ -213,26 +287,10 @@ public class BallLauncher : MonoBehaviour
         lastPlacementTapScreenPos = Vector2.zero;
 
         cameraController?.SetAiming(false);
-
-        wasGameplayInputLockedLastFrame = IsGameplayInputLocked();
-
-        if (debugLogs)
-            Debug.Log("[BallLauncher] Reset -> Placement");
-    }
-
-    public void ConfirmPlacementFromUI()
-    {
-        if (IsGameplayInputLocked())
-            return;
-
-        ConfirmPlacement();
     }
 
     void HandleKeyboardConfirm()
     {
-        if (IsGameplayInputLocked())
-            return;
-
         if (!allowKeyboardConfirm || CurrentPhase != LaunchPhase.Placement || hasLaunched)
             return;
 
@@ -245,9 +303,6 @@ public class BallLauncher : MonoBehaviour
 
     void HandleTouchInput()
     {
-        if (IsGameplayInputLocked())
-            return;
-
         if (Touch.activeTouches.Count == 0)
             return;
 
@@ -317,9 +372,6 @@ public class BallLauncher : MonoBehaviour
     void HandleMouseInput()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
-        if (IsGameplayInputLocked())
-            return;
-
         if (!allowMouseInputInEditor)
             return;
 
@@ -348,9 +400,6 @@ public class BallLauncher : MonoBehaviour
                         lastPlacementTapTime = -999f;
                         lastPlacementTapScreenPos = Vector2.zero;
                         confirmedByDoubleClick = true;
-
-                        if (debugLogs)
-                            Debug.Log("[BallLauncher] Mouse double click confirm");
                     }
                     else
                     {
@@ -413,6 +462,9 @@ public class BallLauncher : MonoBehaviour
         if (ball == null || CurrentPhase != LaunchPhase.Placement || gameplayCamera == null)
             return false;
 
+        if (!IsCurrentBallOwnedByLocalPlayer())
+            return false;
+
         Vector2 screenPos = touch.screenPosition;
         Vector2 ballScreen = gameplayCamera.WorldToScreenPoint(ball.transform.position);
 
@@ -468,17 +520,13 @@ public class BallLauncher : MonoBehaviour
 
     void UpdatePlacement(Vector2 screenPos)
     {
-        if (ball == null)
-            return;
-
-        if (!hasPlacementDragStart)
+        if (ball == null || !hasPlacementDragStart)
             return;
 
         if (!TryGetPlacementWorldPoint(screenPos, out Vector3 currentWorldPoint))
             return;
 
         Vector3 placementAxisWorld = GetPlacementAxisWorld();
-
         Vector3 worldDelta = currentWorldPoint - placementDragStartWorldPoint;
         float deltaAlongAxis = Vector3.Dot(worldDelta, placementAxisWorld);
 
@@ -487,29 +535,9 @@ public class BallLauncher : MonoBehaviour
 
         Rigidbody rb = ball.GetComponent<Rigidbody>();
         if (rb != null)
-        {
-            if (!rb.isKinematic)
-            {
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                rb.constraints = RigidbodyConstraints.FreezeAll;
-                rb.isKinematic = true;
-            }
-
             rb.position = targetWorld;
-        }
         else
-        {
-            if (smoothPlacement)
-            {
-                float t = 1f - Mathf.Exp(-placementSmoothSpeed * Time.deltaTime);
-                ball.transform.position = Vector3.Lerp(ball.transform.position, targetWorld, t);
-            }
-            else
-            {
-                ball.transform.position = targetWorld;
-            }
-        }
+            ball.transform.position = targetWorld;
     }
 
     void EndPlacementDrag()
@@ -539,17 +567,11 @@ public class BallLauncher : MonoBehaviour
         if (quickEnough && sameAreaAsPreviousTap)
         {
             ConfirmPlacement();
-
             lastPlacementTapTime = -999f;
             lastPlacementTapScreenPos = Vector2.zero;
-
             activeFinger = null;
             isPlacementDragging = false;
             hasPlacementDragStart = false;
-
-            if (debugLogs)
-                Debug.Log("[BallLauncher] Double tap confirm");
-
             return true;
         }
 
@@ -560,10 +582,10 @@ public class BallLauncher : MonoBehaviour
 
     void ConfirmPlacement()
     {
-        if (IsGameplayInputLocked())
+        if (CurrentPhase != LaunchPhase.Placement)
             return;
 
-        if (CurrentPhase != LaunchPhase.Placement)
+        if (!IsCurrentBallOwnedByLocalPlayer())
             return;
 
         CurrentPhase = LaunchPhase.AimReady;
@@ -571,17 +593,14 @@ public class BallLauncher : MonoBehaviour
         LaunchDirection = GetSafeForward();
 
         cameraController?.SetAiming(true);
-
-        if (debugLogs)
-            Debug.Log("[BallLauncher] Placement confirmed -> AimReady");
     }
 
     void BeginAimSwipe(Touch touch)
     {
-        if (IsGameplayInputLocked())
+        if (CurrentPhase != LaunchPhase.AimReady || hasLaunched)
             return;
 
-        if (CurrentPhase != LaunchPhase.AimReady || hasLaunched)
+        if (!IsCurrentBallOwnedByLocalPlayer())
             return;
 
         activeFinger = touch.finger;
@@ -635,10 +654,15 @@ public class BallLauncher : MonoBehaviour
 
     void DoLaunch()
     {
-        if (IsGameplayInputLocked())
+        if (hasLaunched || ball == null)
             return;
 
-        if (hasLaunched || ball == null)
+        if (!IsCurrentBallOwnedByLocalPlayer())
+            return;
+
+        ResolveOnlineController();
+
+        if (onlineAuthority == null || !onlineAuthority.IsOnlineSession || cachedController == null)
             return;
 
         hasLaunched = true;
@@ -646,30 +670,13 @@ public class BallLauncher : MonoBehaviour
 
         RefreshBallVisualRollReference();
 
-        Rigidbody rb = ball.GetComponent<Rigidbody>();
-        if (rb != null)
-        {
-            rb.isKinematic = false;
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
-            rb.constraints =
-                RigidbodyConstraints.FreezePositionY |
-                RigidbodyConstraints.FreezeRotationX |
-                RigidbodyConstraints.FreezeRotationZ;
-        }
-
         float force = Mathf.Lerp(minForce, maxForce, ChargeRatio);
-        Vector3 impulse = LaunchDirection * force;
-        impulse.y = 0f;
+        Vector3 impulseDir = LaunchDirection.normalized;
+        impulseDir.y = 0f;
 
-        TurnManager.Instance?.NotifyBallLaunched(ball);
-        ball.Launch(impulse);
+        cachedController.RequestLaunchCurrentBall(impulseDir, force);
 
         cameraController?.OnBallLaunched();
-        TurnManager.Instance?.PauseTimer();
-
-        if (debugLogs)
-            Debug.Log($"[BallLauncher] Launch -> charge={ChargeRatio:F3} force={force:F2} dir={LaunchDirection}");
     }
 
     void ApplySwipe(Vector2 swipe)
@@ -694,23 +701,11 @@ public class BallLauncher : MonoBehaviour
 
         LaunchDirection = dir;
 
-        float rawCharge;
+        float rawCharge = useForwardOnlyForPower
+            ? Mathf.Clamp01(Mathf.Max(0f, swipe.y) / Mathf.Max(1f, maxSwipePixels))
+            : Mathf.Clamp01(swipe.magnitude / Mathf.Max(1f, maxSwipePixels));
 
-        if (useForwardOnlyForPower)
-        {
-            float forwardPixels = Mathf.Max(0f, swipe.y);
-            rawCharge = Mathf.Clamp01(forwardPixels / Mathf.Max(1f, maxSwipePixels));
-        }
-        else
-        {
-            rawCharge = Mathf.Clamp01(swipe.magnitude / Mathf.Max(1f, maxSwipePixels));
-        }
-
-        float safeExponent = Mathf.Max(0.01f, chargeCurveExponent);
-        ChargeRatio = Mathf.Pow(rawCharge, safeExponent);
-
-        if (debugLogs)
-            Debug.Log($"[BallLauncher] Swipe={swipe} rawCharge={rawCharge:F3} curvedCharge={ChargeRatio:F3}");
+        ChargeRatio = Mathf.Pow(rawCharge, Mathf.Max(0.01f, chargeCurveExponent));
     }
 
     bool TryGetPlacementWorldPoint(Vector2 screenPos, out Vector3 worldPoint)
@@ -723,13 +718,11 @@ public class BallLauncher : MonoBehaviour
         Ray ray = gameplayCamera.ScreenPointToRay(screenPos);
         Plane plane = new Plane(Vector3.up, new Vector3(0f, placementPlaneY, 0f));
 
-        if (plane.Raycast(ray, out float enter))
-        {
-            worldPoint = ray.GetPoint(enter);
-            return true;
-        }
+        if (!plane.Raycast(ray, out float enter))
+            return false;
 
-        return false;
+        worldPoint = ray.GetPoint(enter);
+        return true;
     }
 
     Vector3 GetPlacementAxisWorld()
@@ -782,46 +775,51 @@ public class BallLauncher : MonoBehaviour
         activeFinger = null;
     }
 
-    void CancelAllCurrentInputState()
-    {
-        activeFinger = null;
-
-        isPlacementDragging = false;
-        isAimTracking = false;
-        hasPlacementDragStart = false;
-
-        mousePlacementDragging = false;
-        mouseAimDragging = false;
-
-        aimStartScreen = Vector2.zero;
-        mouseAimStartScreen = Vector2.zero;
-
-        ChargeRatio = 0f;
-
-        if (CurrentPhase == LaunchPhase.AimReady)
-            LaunchDirection = GetSafeForward();
-        else
-            LaunchDirection = Vector3.zero;
-    }
-
     bool IsGameplayInputLocked()
     {
-        if (!blockGameplayInputWhenPaused)
+        if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
+            return true;
+
+        ResolveOnlineController();
+
+        if (cachedController == null)
+            return true;
+
+        if (cachedController.CurrentTurnOwner != ResolveEffectiveLocalPlayerId())
+            return true;
+
+        if (!IsCurrentBallOwnedByLocalPlayer())
+            return true;
+
+        return false;
+    }
+
+    bool IsCurrentBallOwnedByLocalPlayer()
+    {
+        if (ball == null)
             return false;
 
-        if (startEndController == null)
-        {
-#if UNITY_2023_1_OR_NEWER
-            startEndController = FindFirstObjectByType<StartEndController>();
-#else
-            startEndController = FindObjectOfType<StartEndController>();
-#endif
-        }
-
-        if (startEndController == null)
+        PlayerID owner = GetOwnerFromBall(ball);
+        if (owner == PlayerID.None)
             return false;
 
-        return startEndController.IsPaused() || startEndController.IsMatchEnded();
+        return owner == ResolveEffectiveLocalPlayerId();
+    }
+
+    PlayerID GetOwnerFromBall(BallPhysics targetBall)
+    {
+        if (targetBall == null)
+            return PlayerID.None;
+
+        FusionNetworkBall fusionBall = targetBall.GetComponent<FusionNetworkBall>();
+        if (fusionBall != null)
+            return fusionBall.OwnerPlayerId;
+
+        BallOwnership ownership = targetBall.GetComponent<BallOwnership>();
+        if (ownership != null)
+            return ownership.Owner;
+
+        return PlayerID.None;
     }
 
     void RefreshBallVisualRollReference()
@@ -834,81 +832,4 @@ public class BallLauncher : MonoBehaviour
 
         ballVisualRoll = ball.GetComponent<BallVisualRoll>();
     }
-
-    public void Launch(Vector3 direction, float force)
-    {
-        if (IsGameplayInputLocked())
-            return;
-
-        if (ball == null)
-            return;
-
-        RefreshBallVisualRollReference();
-
-        Rigidbody rb = ball.GetComponent<Rigidbody>();
-        if (rb != null)
-        {
-            rb.isKinematic = false;
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
-            rb.constraints =
-                RigidbodyConstraints.FreezePositionY |
-                RigidbodyConstraints.FreezeRotationX |
-                RigidbodyConstraints.FreezeRotationZ;
-        }
-
-        LaunchDirection = direction.normalized;
-        LaunchDirection = new Vector3(LaunchDirection.x, 0f, LaunchDirection.z);
-        force = Mathf.Clamp(force, minForce, maxForce);
-
-        TurnManager.Instance?.NotifyBallLaunched(ball);
-
-        ball.Launch(LaunchDirection * force);
-        hasLaunched = true;
-        CurrentPhase = LaunchPhase.Launched;
-
-        cameraController?.OnBallLaunched();
-        TurnManager.Instance?.PauseTimer();
-    }
-
-#if UNITY_EDITOR
-    void OnDrawGizmosSelected()
-    {
-        if (ball == null)
-            return;
-
-        Vector3 origin = ball.transform.position;
-
-        Gizmos.color = Color.white;
-        Gizmos.DrawRay(origin, GetSafeForward() * 1.5f);
-
-        if (activePlacementArea != null)
-        {
-            Vector3 placementAxis = activePlacementArea.transform.right;
-            placementAxis.y = 0f;
-
-            if (placementAxis.sqrMagnitude > 0.0001f)
-            {
-                Gizmos.color = Color.cyan;
-                Gizmos.DrawRay(origin, placementAxis.normalized * 0.75f);
-                Gizmos.DrawRay(origin, -placementAxis.normalized * 0.75f);
-            }
-        }
-
-        if (constrainAngle)
-        {
-            Gizmos.color = new Color(1f, 1f, 0f, 0.3f);
-            Vector3 left = Quaternion.AngleAxis(-angleLimit, Vector3.up) * GetSafeForward();
-            Vector3 right = Quaternion.AngleAxis(angleLimit, Vector3.up) * GetSafeForward();
-            Gizmos.DrawRay(origin, left * 1.5f);
-            Gizmos.DrawRay(origin, right * 1.5f);
-        }
-
-        if (Application.isPlaying && CurrentPhase == LaunchPhase.AimReady)
-        {
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawRay(origin, LaunchDirection * Mathf.Lerp(minForce, maxForce, ChargeRatio) * 0.1f);
-        }
-    }
-#endif
 }

@@ -10,8 +10,10 @@ public class StartEndController : MonoBehaviour
         TimeLimit
     }
 
+    public static StartEndController Instance { get; private set; }
+
     [Header("References")]
-    public ScoreManagerNew scoreManager;
+    public ScoreManager scoreManager;
     public TurnManager turnManager;
     public BallTurnSpawner ballTurnSpawner;
     public SimpleCurrentScoreDisplay simpleCurrentScoreDisplay;
@@ -21,6 +23,11 @@ public class StartEndController : MonoBehaviour
     public MatchRuntimeConfig matchRuntimeConfig;
     public PlayerXPRewardService xpRewardService;
     public PlayerProfileManager profileManager;
+    public OnlineGameplayAuthority onlineGameplayAuthority;
+    public PhotonFusionSessionController fusionSessionController;
+    public PhotonFusionRunnerManager runnerManager;
+    public OnlineMatchSession onlineMatchSession;
+    public FusionMatchState fusionMatchState;
 
     [Header("UI Panels")]
     public GameObject gameUIPanel;
@@ -55,11 +62,15 @@ public class StartEndController : MonoBehaviour
     public bool stopTimeOnEnd = true;
 
     [Header("Early Finish Rules")]
-    [Tooltip("In TimeLimit, dopo che il reset di halftime è già avvenuto, termina subito se un player è matematicamente irraggiungibile.")]
     public bool enableMathematicalWinInTimeMode = true;
-
-    [Tooltip("Se tutte le board sono piene: in prima metà della modalità TimeLimit avvia subito l'halftime; altrimenti chiude la partita.")]
     public bool endOrAdvanceWhenAllBoardsFull = true;
+
+    [Header("Online Exit")]
+    [SerializeField] private bool shutdownFusionRunnerBeforeMainMenu = true;
+    [SerializeField] private bool clearPreparedOnlineSessionOnMainMenuReturn = true;
+
+    [Header("Safe Reward Execution")]
+    [SerializeField] private bool protectEndMatchFlowFromRewardExceptions = true;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
@@ -80,8 +91,26 @@ public class StartEndController : MonoBehaviour
     private bool matchXpProcessed = false;
     private bool matchStatsProcessed = false;
     private bool endMatchFinalizationStarted = false;
+    private bool returnToMenuRequested = false;
 
     public float CurrentMatchTimer => currentMatchTimer;
+
+    public static StartEndController InstanceOrFind()
+    {
+        if (Instance != null)
+            return Instance;
+
+#if UNITY_2023_1_OR_NEWER
+        return FindFirstObjectByType<StartEndController>();
+#else
+        return FindObjectOfType<StartEndController>();
+#endif
+    }
+
+    void Awake()
+    {
+        Instance = this;
+    }
 
     void Start()
     {
@@ -107,18 +136,19 @@ public class StartEndController : MonoBehaviour
         matchXpProcessed = false;
         matchStatsProcessed = false;
         endMatchFinalizationStarted = false;
+        returnToMenuRequested = false;
 
         currentMatchTimer = matchDuration;
         RefreshModeUI();
 
-        if (startMatchOnStart)
+        if (startMatchOnStart && !IsRuntimeOnlineMode())
             StartMatch();
     }
 
     void OnEnable()
     {
         if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
+            scoreManager = ScoreManager.Instance;
 
         if (scoreManager != null)
             scoreManager.onMatchEnd.AddListener(OnScoreManagerMatchEnd);
@@ -130,30 +160,31 @@ public class StartEndController : MonoBehaviour
             scoreManager.onMatchEnd.RemoveListener(OnScoreManagerMatchEnd);
     }
 
-    void Update()
-    {
-        if (!matchStarted || matchEnded || isPaused || scoreManager == null)
-            return;
-
-        if (matchMode == MatchMode.TimeLimit)
-            UpdateTimeLimitMode();
-
-        if (matchMode == MatchMode.ScoreTarget)
-            UpdateScoreTargetMode();
-
-        UpdateUniversalBoardAndMathRules();
-    }
-
     void ResolveDependencies()
     {
         if (scoreManager == null)
-            scoreManager = ScoreManagerNew.Instance;
+            scoreManager = ScoreManager.Instance;
 
         if (turnManager == null)
             turnManager = TurnManager.Instance;
 
         if (rewardManager == null)
             rewardManager = RewardManager.Instance;
+
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = MatchRuntimeConfig.Instance;
+
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
+
+        if (fusionSessionController == null)
+            fusionSessionController = PhotonFusionSessionController.Instance;
+
+        if (runnerManager == null)
+            runnerManager = PhotonFusionRunnerManager.Instance;
+
+        if (onlineMatchSession == null)
+            onlineMatchSession = OnlineMatchSession.Instance;
 
 #if UNITY_2023_1_OR_NEWER
         if (gameModeUIChanger == null)
@@ -167,6 +198,21 @@ public class StartEndController : MonoBehaviour
 
         if (profileManager == null)
             profileManager = FindFirstObjectByType<PlayerProfileManager>();
+
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = FindFirstObjectByType<OnlineGameplayAuthority>();
+
+        if (fusionSessionController == null)
+            fusionSessionController = FindFirstObjectByType<PhotonFusionSessionController>();
+
+        if (runnerManager == null)
+            runnerManager = FindFirstObjectByType<PhotonFusionRunnerManager>();
+
+        if (onlineMatchSession == null)
+            onlineMatchSession = FindFirstObjectByType<OnlineMatchSession>();
+
+        if (fusionMatchState == null)
+            fusionMatchState = FindFirstObjectByType<FusionMatchState>();
 #else
         if (gameModeUIChanger == null)
             gameModeUIChanger = FindObjectOfType<GameModeUIChanger>();
@@ -179,6 +225,21 @@ public class StartEndController : MonoBehaviour
 
         if (profileManager == null)
             profileManager = FindObjectOfType<PlayerProfileManager>();
+
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = FindObjectOfType<OnlineGameplayAuthority>();
+
+        if (fusionSessionController == null)
+            fusionSessionController = FindObjectOfType<PhotonFusionSessionController>();
+
+        if (runnerManager == null)
+            runnerManager = FindObjectOfType<PhotonFusionRunnerManager>();
+
+        if (onlineMatchSession == null)
+            onlineMatchSession = FindObjectOfType<OnlineMatchSession>();
+
+        if (fusionMatchState == null)
+            fusionMatchState = FindObjectOfType<FusionMatchState>();
 #endif
     }
 
@@ -192,6 +253,28 @@ public class StartEndController : MonoBehaviour
         matchDuration = Mathf.Max(1f, matchRuntimeConfig.SelectedMatchDuration);
     }
 
+    bool IsRuntimeOnlineMode()
+    {
+        if (onlineGameplayAuthority != null && onlineGameplayAuthority.IsOnlineSession)
+            return true;
+
+        if (matchRuntimeConfig != null && matchRuntimeConfig.IsOnlineMatch)
+            return true;
+
+        if (runnerManager != null && runnerManager.IsRunning)
+            return true;
+
+        return false;
+    }
+
+    bool ShouldRunAuthoritativeMatchFlow()
+    {
+        if (IsRuntimeOnlineMode())
+            return false;
+
+        return true;
+    }
+
     void RefreshModeUI()
     {
         if (gameModeUIChanger == null)
@@ -201,6 +284,23 @@ public class StartEndController : MonoBehaviour
         gameModeUIChanger.RefreshPlayerNameTexts();
         gameModeUIChanger.RefreshTargetScoreTexts();
         gameModeUIChanger.RefreshTimerText();
+    }
+
+    void Update()
+    {
+        if (!ShouldRunAuthoritativeMatchFlow())
+            return;
+
+        if (!matchStarted || matchEnded || isPaused || scoreManager == null)
+            return;
+
+        if (matchMode == MatchMode.TimeLimit)
+            UpdateTimeLimitMode();
+
+        if (matchMode == MatchMode.ScoreTarget)
+            UpdateScoreTargetMode();
+
+        UpdateUniversalBoardAndMathRules();
     }
 
     void UpdateTimeLimitMode()
@@ -291,18 +391,24 @@ public class StartEndController : MonoBehaviour
         }
 
         if (TryGetMathematicalWinnerInTimeMode(out PlayerID mathematicalWinner))
-        {
             RequestEndMatch(mathematicalWinner);
-        }
     }
 
     public void StartMatch()
     {
         ResolveDependencies();
 
+        if (IsRuntimeOnlineMode())
+        {
+            if (logDebug)
+                Debug.Log("[StartEndController] StartMatch ignored because online runtime is active.", this);
+
+            return;
+        }
+
         if (scoreManager == null)
         {
-            Debug.LogError("[StartEndController] ScoreManagerNew non trovato.", this);
+            Debug.LogError("[StartEndController] ScoreManager non trovato.", this);
             return;
         }
 
@@ -327,6 +433,7 @@ public class StartEndController : MonoBehaviour
         matchXpProcessed = false;
         matchStatsProcessed = false;
         endMatchFinalizationStarted = false;
+        returnToMenuRequested = false;
 
         currentMatchTimer = matchDuration;
         RefreshModeUI();
@@ -341,23 +448,6 @@ public class StartEndController : MonoBehaviour
 
         if (turnManager != null)
             turnManager.ResumeTimer();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[StartEndController] StartMatch -> " +
-                "GameMode=" + GetSafeGameMode() +
-                " | MatchMode=" + matchMode +
-                " | OpponentType=" + GetSafeOpponentType() +
-                " | SessionType=" + GetSafeSessionType() +
-                " | AuthorityType=" + GetSafeAuthorityType() +
-                " | LocalPlayer=" + GetResolvedLocalPlayerId() +
-                " | ChestRewards=" + ShouldGrantChestRewards() +
-                " | XpRewards=" + ShouldGrantXpRewards() +
-                " | StatsProgression=" + ShouldGrantStatsProgression(),
-                this
-            );
-        }
     }
 
     bool ShouldEnterHalftimeNow()
@@ -380,6 +470,9 @@ public class StartEndController : MonoBehaviour
 
     public void HandleResolvedShotTransition()
     {
+        if (!ShouldRunAuthoritativeMatchFlow())
+            return;
+
         if (transitionCoroutineRunning)
             return;
 
@@ -388,6 +481,9 @@ public class StartEndController : MonoBehaviour
 
     public bool ShouldDelayProgressionAfterResolvedShot()
     {
+        if (!ShouldRunAuthoritativeMatchFlow())
+            return false;
+
         if (transitionCoroutineRunning)
             return true;
 
@@ -557,6 +653,9 @@ public class StartEndController : MonoBehaviour
 
     public void StartHalftime()
     {
+        if (!ShouldRunAuthoritativeMatchFlow())
+            return;
+
         if (!matchStarted || matchEnded || halftimeTriggered || scoreManager == null)
             return;
 
@@ -594,6 +693,9 @@ public class StartEndController : MonoBehaviour
 
     public void EndHalftimeAndResume()
     {
+        if (!ShouldRunAuthoritativeMatchFlow())
+            return;
+
         if (scoreManager == null || !scoreManager.IsHalftime)
             return;
 
@@ -666,42 +768,28 @@ public class StartEndController : MonoBehaviour
 
     public void RequestEndMatch(PlayerID winner)
     {
-        if (endMatchFinalizationStarted || matchEnded)
-        {
-            if (logDebug)
-                Debug.Log("[StartEndController] RequestEndMatch ignored, finalization already started.", this);
-
+        if (!ShouldRunAuthoritativeMatchFlow())
             return;
-        }
+
+        if (endMatchFinalizationStarted || matchEnded)
+            return;
 
         endOfTimePending = false;
         resolvedWinner = winner;
 
         if (scoreManager != null && scoreManager.MatchActive)
-        {
-            if (logDebug)
-                Debug.Log("[StartEndController] RequestEndMatch -> forwarding to ScoreManager.EndMatch", this);
-
             scoreManager.EndMatch(winner);
-        }
         else
-        {
-            if (gameModeUIChanger != null)
-                gameModeUIChanger.RefreshWinnerTexts(winner);
-
             FinalizeEndMatchUI();
-        }
     }
 
     void OnScoreManagerMatchEnd(PlayerID winner)
     {
-        if (endMatchFinalizationStarted || matchEnded)
-        {
-            if (logDebug)
-                Debug.Log("[StartEndController] OnScoreManagerMatchEnd ignored, finalization already started.", this);
-
+        if (!ShouldRunAuthoritativeMatchFlow())
             return;
-        }
+
+        if (endMatchFinalizationStarted || matchEnded)
+            return;
 
         resolvedWinner = winner;
 
@@ -714,74 +802,9 @@ public class StartEndController : MonoBehaviour
     void FinalizeEndMatchUI()
     {
         if (endMatchFinalizationStarted || matchEnded)
-        {
-            if (logDebug)
-                Debug.Log("[StartEndController] FinalizeEndMatchUI ignored, already processing.", this);
-
             return;
-        }
 
         endMatchFinalizationStarted = true;
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[StartEndController] FinalizeEndMatchUI START -> " +
-                "Winner=" + resolvedWinner +
-                " | GameMode=" + GetSafeGameMode() +
-                " | MatchMode=" + matchMode +
-                " | LocalPlayer=" + GetResolvedLocalPlayerId() +
-                " | Ranked=" + IsCurrentMatchRanked() +
-                " | ChestRewards=" + ShouldGrantChestRewards() +
-                " | XpRewards=" + ShouldGrantXpRewards() +
-                " | StatsProgression=" + ShouldGrantStatsProgression(),
-                this
-            );
-        }
-
-        if (!matchRewardProcessed && ShouldGrantChestRewards())
-        {
-            if (rewardManager == null)
-                rewardManager = RewardManager.Instance;
-
-            if (rewardManager != null)
-                rewardManager.TryGrantMatchWinReward(resolvedWinner);
-
-            matchRewardProcessed = true;
-        }
-
-        ResolveDependencies();
-
-        if (!matchXpProcessed && ShouldGrantXpRewards() && xpRewardService != null)
-        {
-            xpRewardService.TryGrantMatchCompletionRewards(resolvedWinner, GetResolvedLocalPlayerId());
-            matchXpProcessed = true;
-        }
-
-        if (!matchStatsProcessed && ShouldGrantStatsProgression() && profileManager != null && matchRuntimeConfig != null)
-        {
-            bool localPlayerWon = resolvedWinner == GetResolvedLocalPlayerId();
-
-            profileManager.RegisterMatchResult(
-                matchRuntimeConfig.SelectedGameMode,
-                matchRuntimeConfig.SelectedMatchMode,
-                localPlayerWon,
-                IsCurrentMatchRanked()
-            );
-
-            matchStatsProcessed = true;
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[StartEndController] Match stats registered ONCE for local profile. " +
-                    "LocalPlayer=" + GetResolvedLocalPlayerId() +
-                    " | LocalWin=" + localPlayerWon +
-                    " | ProfileId=" + matchRuntimeConfig.SelectedLocalProfileId,
-                    this
-                );
-            }
-        }
 
         matchEnded = true;
         isPaused = false;
@@ -801,6 +824,82 @@ public class StartEndController : MonoBehaviour
 
         if (stopTimeOnEnd)
             Time.timeScale = 0f;
+
+        TryGrantChestRewardsSafe();
+        TryGrantXpRewardsSafe();
+        TryRegisterStatsSafe();
+    }
+
+    void TryGrantChestRewardsSafe()
+    {
+        if (matchRewardProcessed || !ShouldGrantChestRewards())
+            return;
+
+        if (rewardManager == null)
+            rewardManager = RewardManager.Instance;
+
+        if (rewardManager == null)
+            return;
+
+        try
+        {
+            rewardManager.TryGrantMatchWinReward(resolvedWinner);
+            matchRewardProcessed = true;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("[StartEndController] Chest reward exception during end match: " + ex, this);
+        }
+    }
+
+    void TryGrantXpRewardsSafe()
+    {
+        if (matchXpProcessed || !ShouldGrantXpRewards())
+            return;
+
+        ResolveDependencies();
+
+        if (xpRewardService == null)
+            return;
+
+        try
+        {
+            xpRewardService.TryGrantMatchCompletionRewards(resolvedWinner, GetResolvedLocalPlayerId());
+            matchXpProcessed = true;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("[StartEndController] XP reward exception during end match: " + ex, this);
+        }
+    }
+
+    void TryRegisterStatsSafe()
+    {
+        if (matchStatsProcessed || !ShouldGrantStatsProgression())
+            return;
+
+        ResolveDependencies();
+
+        if (profileManager == null || matchRuntimeConfig == null)
+            return;
+
+        bool localPlayerWon = resolvedWinner == GetResolvedLocalPlayerId();
+
+        try
+        {
+            profileManager.RegisterMatchResult(
+                matchRuntimeConfig.SelectedGameMode,
+                matchRuntimeConfig.SelectedMatchMode,
+                localPlayerWon,
+                IsCurrentMatchRanked()
+            );
+
+            matchStatsProcessed = true;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("[StartEndController] Stats registration exception during end match: " + ex, this);
+        }
     }
 
     public void ResetUIState()
@@ -817,6 +916,7 @@ public class StartEndController : MonoBehaviour
         matchXpProcessed = false;
         matchStatsProcessed = false;
         endMatchFinalizationStarted = false;
+        returnToMenuRequested = false;
 
         if (pausePanel != null) pausePanel.SetActive(false);
         if (halftimePanel != null) halftimePanel.SetActive(false);
@@ -854,7 +954,46 @@ public class StartEndController : MonoBehaviour
 
     public void ReturnToMainMenu()
     {
+        if (returnToMenuRequested)
+            return;
+
+        returnToMenuRequested = true;
+        StartCoroutine(ReturnToMainMenuRoutine());
+    }
+
+    private IEnumerator ReturnToMainMenuRoutine()
+    {
+        ResolveDependencies();
+
         Time.timeScale = 1f;
+
+        bool shouldShutdownFusion =
+            shutdownFusionRunnerBeforeMainMenu &&
+            matchRuntimeConfig != null &&
+            matchRuntimeConfig.IsOnlineMatch &&
+            runnerManager != null &&
+            runnerManager.HasActiveRunner;
+
+        if (shouldShutdownFusion)
+        {
+            if (fusionSessionController != null)
+            {
+                fusionSessionController.ShutdownSession();
+
+                float timeout = 3f;
+                float elapsed = 0f;
+
+                while (runnerManager != null && runnerManager.HasActiveRunner && elapsed < timeout)
+                {
+                    elapsed += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+            }
+        }
+
+        if (clearPreparedOnlineSessionOnMainMenuReturn && onlineMatchSession != null)
+            onlineMatchSession.ClearPreparedSession();
+
         SceneManager.LoadScene("MainMenu");
     }
 
@@ -917,19 +1056,58 @@ public class StartEndController : MonoBehaviour
         return matchRuntimeConfig != null ? matchRuntimeConfig.SelectedGameMode.ToString() : "null";
     }
 
-    private string GetSafeOpponentType()
+    public void StartMatchOnlineReplicaSafe()
     {
-        return matchRuntimeConfig != null ? matchRuntimeConfig.SelectedOpponentType.ToString() : "null";
+        ResolveDependencies();
+        ApplyRuntimeConfig();
+
+        Time.timeScale = 1f;
+
+        if (pausePanel != null) pausePanel.SetActive(false);
+        if (halftimePanel != null) halftimePanel.SetActive(false);
+        if (postGamePanel != null) postGamePanel.SetActive(false);
+        if (gameUIPanel != null) gameUIPanel.SetActive(true);
+
+        matchStarted = true;
+        matchEnded = false;
+        isPaused = false;
+        halftimeTriggered = false;
+        transitionCoroutineRunning = false;
+        halftimePending = false;
+        endOfTimePending = false;
+        resolvedWinner = PlayerID.None;
+        matchRewardProcessed = false;
+        matchXpProcessed = false;
+        matchStatsProcessed = false;
+        endMatchFinalizationStarted = false;
+        returnToMenuRequested = false;
+
+        currentMatchTimer = matchDuration;
+        RefreshModeUI();
     }
 
-    private string GetSafeSessionType()
+    public void ApplyOnlineReplicaState(bool replicatedStarted, bool replicatedEnded)
     {
-        return matchRuntimeConfig != null ? matchRuntimeConfig.SelectedSessionType.ToString() : "null";
-    }
+        if (!IsRuntimeOnlineMode())
+            return;
 
-    private string GetSafeAuthorityType()
-    {
-        return matchRuntimeConfig != null ? matchRuntimeConfig.SelectedAuthorityType.ToString() : "null";
+        matchStarted = replicatedStarted;
+        matchEnded = replicatedEnded;
+
+        if (replicatedEnded)
+        {
+            isPaused = false;
+
+            if (pausePanel != null) pausePanel.SetActive(false);
+            if (halftimePanel != null) halftimePanel.SetActive(false);
+            if (gameUIPanel != null) gameUIPanel.SetActive(false);
+            if (postGamePanel != null) postGamePanel.SetActive(true);
+        }
+        else
+        {
+            if (postGamePanel != null) postGamePanel.SetActive(false);
+            if (gameUIPanel != null) gameUIPanel.SetActive(true);
+        }
     }
 
     public bool IsMatchStarted() => matchStarted;

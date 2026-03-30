@@ -1,3 +1,4 @@
+using Fusion;
 using UnityEngine;
 
 public class DeathZone : MonoBehaviour
@@ -5,13 +6,23 @@ public class DeathZone : MonoBehaviour
     private void OnTriggerEnter(Collider other)
     {
         BallPhysics ball = other.GetComponent<BallPhysics>();
-
         if (ball == null)
             return;
 
-        if (TurnManager.Instance != null)
-            TurnManager.Instance.BallLost(ball);
+#if UNITY_2023_1_OR_NEWER
+        FusionOnlineMatchController controller = FindFirstObjectByType<FusionOnlineMatchController>();
+#else
+        FusionOnlineMatchController controller = FindObjectOfType<FusionOnlineMatchController>();
+#endif
 
-        Destroy(other.gameObject);
+        NetworkObject netObj = other.GetComponent<NetworkObject>();
+
+        if (controller != null && netObj != null)
+        {
+            if (controller.HasStateAuthority)
+                controller.NotifyAuthoritativeBallLost(ball);
+
+            return;
+        }
     }
 }
