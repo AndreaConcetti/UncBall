@@ -280,7 +280,7 @@ public class PlayerProfileManager : MonoBehaviour
 
     public void RegisterMatchResult(
         MatchRuntimeConfig.GameMode gameMode,
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         bool localPlayerWon,
         bool isRanked)
     {
@@ -310,7 +310,7 @@ public class PlayerProfileManager : MonoBehaviour
                 if (localPlayerWon)
                     versusWins++;
 
-                if (matchMode == StartEndController.MatchMode.TimeLimit)
+                if (matchMode == MatchMode.TimeLimit)
                     versusTimeMatchesPlayed++;
                 else
                     versusScoreMatchesPlayed++;
@@ -427,16 +427,6 @@ public class PlayerProfileManager : MonoBehaviour
         string json = JsonUtility.ToJson(saveData);
         PlayerPrefs.SetString(GetResolvedSaveKey(activeProfile.profileId), json);
         PlayerPrefs.Save();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[PlayerProfileManager] SaveActiveProfile completed. " +
-                "ProfileId=" + activeProfile.profileId +
-                " | SaveKey=" + GetResolvedSaveKey(activeProfile.profileId),
-                this
-            );
-        }
     }
 
     public void ReloadActiveProfile()
@@ -447,9 +437,6 @@ public class PlayerProfileManager : MonoBehaviour
         LoadOrCreateProfile(currentProfileId, currentDisplayName);
         ApplyActiveProfileToSystems();
         NotifyActiveProfileChanged();
-
-        if (logDebug)
-            Debug.Log("[PlayerProfileManager] ReloadActiveProfile completed.", this);
     }
 
     public void ClearActiveProfileForDebug()
@@ -464,9 +451,6 @@ public class PlayerProfileManager : MonoBehaviour
         SaveActiveProfile();
         ApplyActiveProfileToSystems();
         NotifyActiveProfileChanged();
-
-        if (logDebug)
-            Debug.Log("[PlayerProfileManager] Cleared active profile for debug. SaveKey=" + saveKey, this);
     }
 
     private void LoadOrCreateProfile(string profileId, string fallbackDisplayName)

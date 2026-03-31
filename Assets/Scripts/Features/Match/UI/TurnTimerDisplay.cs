@@ -1,93 +1,69 @@
-using UnityEngine;
 using TMPro;
+using UnityEngine;
 
 public class TurnTimerDisplay : MonoBehaviour
 {
-    [Header("References")]
-    public TMP_Text timerText;
+    [Header("UI")]
+    [SerializeField] private TMP_Text targetText;
 
-    [Header("Colors")]
-    public Color startColor = Color.black;
-    public Color endColor = Color.red;
-    public float colorStartTime = 10f;
+    [Header("Dependencies")]
+    [SerializeField] private FusionOnlineMatchController onlineMatchController;
+    [SerializeField] private OnlineGameplayAuthority onlineGameplayAuthority;
 
-    [Header("Pulse Settings")]
-    public float pulseStartTime = 5f;
-    public float pulseScale = 1.75f;
-    public float pulseSpeed = 8f;
+    [Header("Formatting")]
+    [SerializeField] private bool useCeil = true;
+    [SerializeField] private string fallbackText = "0";
 
-    [Header("Shake Settings")]
-    public float shakeStartTime = 3f;
-    public float shakeAmount = 6f;
+    [Header("Debug")]
+    [SerializeField] private bool logDebug = false;
 
-    private Vector3 originalScale;
-    private Vector3 originalPosition;
-    private int lastDisplayedSecond = -1;
-    private float pulseTimer = 0f;
-
-    void Start()
+    private void Awake()
     {
-        originalScale = timerText.transform.localScale;
-        originalPosition = timerText.transform.localPosition;
+        ResolveDependencies();
     }
 
-    void Update()
+    private void Update()
     {
-        float timer = TurnManager.Instance.CurrentTimer;
-        int seconds = Mathf.CeilToInt(timer);
+        ResolveDependencies();
 
-        timerText.text = seconds.ToString();
+        if (targetText == null)
+            return;
 
-        UpdateColor(timer);
-        UpdatePulse(timer, seconds);
-        UpdateShake(timer);
-    }
-
-    void UpdateColor(float timer)
-    {
-        if (timer > colorStartTime)
+        if (onlineMatchController == null)
         {
-            timerText.color = startColor;
+            targetText.text = fallbackText;
+            return;
         }
-        else
+
+        float value = Mathf.Max(0f, onlineMatchController.CurrentTurnTimeRemaining);
+        int shown = useCeil ? Mathf.CeilToInt(value) : Mathf.RoundToInt(value);
+        targetText.text = shown.ToString();
+
+        if (logDebug)
         {
-            float t = 1f - Mathf.Clamp01(timer / colorStartTime);
-            timerText.color = Color.Lerp(startColor, endColor, t);
+            Debug.Log(
+                "[TurnTimerDisplay] Updated -> " +
+                "TurnTime=" + value +
+                " | Shown=" + shown,
+                this
+            );
         }
     }
 
-    void UpdatePulse(float timer, int seconds)
+    private void ResolveDependencies()
     {
-        if (timer <= pulseStartTime && seconds != lastDisplayedSecond)
-        {
-            pulseTimer = 1f;
-            lastDisplayedSecond = seconds;
-        }
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
 
-        if (pulseTimer > 0f)
-        {
-            pulseTimer -= Time.deltaTime * pulseSpeed;
-            pulseTimer = Mathf.Max(pulseTimer, 0f);
+        if (onlineMatchController == null && onlineGameplayAuthority != null)
+            onlineMatchController = onlineGameplayAuthority.OnlineMatchController;
 
-            float scale = Mathf.Lerp(pulseScale, 1f, 1f - pulseTimer);
-            timerText.transform.localScale = originalScale * scale;
-        }
-        else
-        {
-            timerText.transform.localScale = originalScale;
-        }
-    }
-
-    void UpdateShake(float timer)
-    {
-        if (timer <= shakeStartTime)
-        {
-            Vector2 offset = Random.insideUnitCircle * shakeAmount;
-            timerText.transform.localPosition = originalPosition + new Vector3(offset.x, offset.y, 0f);
-        }
-        else
-        {
-            timerText.transform.localPosition = originalPosition;
-        }
+#if UNITY_2023_1_OR_NEWER
+        if (onlineMatchController == null)
+            onlineMatchController = FindFirstObjectByType<FusionOnlineMatchController>();
+#else
+        if (onlineMatchController == null)
+            onlineMatchController = FindObjectOfType<FusionOnlineMatchController>();
+#endif
     }
 }

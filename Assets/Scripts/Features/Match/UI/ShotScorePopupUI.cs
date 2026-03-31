@@ -9,6 +9,7 @@ public class ShotScorePopupUI : MonoBehaviour
     public Camera worldCamera;
     public Canvas parentCanvas;
     public RectTransform canvasRect;
+    public OnlineGameplayAuthority onlineGameplayAuthority;
 
     [Header("Shared Popup")]
     public RectTransform popupRoot;
@@ -40,12 +41,16 @@ public class ShotScorePopupUI : MonoBehaviour
     public float comboFloatY = 20f;
     public float pointsFloatY = 20f;
 
+    [Header("Mode")]
+    public bool listenToLocalScoreManagerEvents = true;
+
     private Coroutine popupRoutine;
     private Vector2 comboLocalStartPos;
     private Vector2 pointsLocalStartPos;
 
     private bool isFollowingWorldTarget;
     private Vector3 currentTrackedWorldPosition;
+    private bool subscribedToLocalScoreEvents;
 
     void Awake()
     {
@@ -62,17 +67,25 @@ public class ShotScorePopupUI : MonoBehaviour
 
     void OnEnable()
     {
-        if (scoreManager == null)
-            scoreManager = ScoreManager.Instance;
-
-        if (scoreManager != null)
-            scoreManager.onShotScoreDetailed.AddListener(HandleShotScoreDetailed);
+        AutoAssignReferences();
+        RefreshLocalSubscription();
     }
 
     void OnDisable()
     {
-        if (scoreManager != null)
-            scoreManager.onShotScoreDetailed.RemoveListener(HandleShotScoreDetailed);
+        RemoveLocalSubscription();
+    }
+
+    public void PlayReplicatedPopup(int comboStreak, int shotPoints, Vector3 slotWorldPosition)
+    {
+        ShotScoreData data = new ShotScoreData
+        {
+            comboStreak = comboStreak,
+            shotPoints = shotPoints,
+            slotWorldPosition = slotWorldPosition
+        };
+
+        HandleShotScoreDetailed(data);
     }
 
     void AutoAssignReferences()
@@ -83,6 +96,9 @@ public class ShotScorePopupUI : MonoBehaviour
         if (canvasRect == null && parentCanvas != null)
             canvasRect = parentCanvas.GetComponent<RectTransform>();
 
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
+
         if (worldCamera == null)
         {
             if (parentCanvas != null && parentCanvas.renderMode == RenderMode.ScreenSpaceCamera)
@@ -91,6 +107,9 @@ public class ShotScorePopupUI : MonoBehaviour
             if (worldCamera == null)
                 worldCamera = Camera.main;
         }
+
+        if (scoreManager == null)
+            scoreManager = ScoreManager.Instance;
     }
 
     void CacheLocalStartPositions()
@@ -105,6 +124,33 @@ public class ShotScorePopupUI : MonoBehaviour
             return Vector2.zero;
 
         return text.rectTransform.anchoredPosition;
+    }
+
+    void RefreshLocalSubscription()
+    {
+        RemoveLocalSubscription();
+
+        bool isOnlineSession = onlineGameplayAuthority != null && onlineGameplayAuthority.IsOnlineSession;
+        if (!listenToLocalScoreManagerEvents || isOnlineSession)
+            return;
+
+        if (scoreManager == null)
+            scoreManager = ScoreManager.Instance;
+
+        if (scoreManager != null)
+        {
+            scoreManager.onShotScoreDetailed.AddListener(HandleShotScoreDetailed);
+            subscribedToLocalScoreEvents = true;
+        }
+    }
+
+    void RemoveLocalSubscription()
+    {
+        if (!subscribedToLocalScoreEvents || scoreManager == null)
+            return;
+
+        scoreManager.onShotScoreDetailed.RemoveListener(HandleShotScoreDetailed);
+        subscribedToLocalScoreEvents = false;
     }
 
     void HandleShotScoreDetailed(ShotScoreData data)

@@ -23,7 +23,7 @@ public class OnlineLobbyState
     public OnlineLobbyPlayerData hostPlayer = new OnlineLobbyPlayerData();
     public OnlineLobbyPlayerData joinPlayer = new OnlineLobbyPlayerData();
 
-    public StartEndController.MatchMode matchMode = StartEndController.MatchMode.TimeLimit;
+    public MatchMode matchMode = MatchMode.TimeLimit;
     public int pointsToWin = 16;
     public float matchDuration = 180f;
     public bool isRanked = false;
@@ -58,7 +58,7 @@ public class OnlineLobbyState
         hostPlayer = new OnlineLobbyPlayerData();
         joinPlayer = new OnlineLobbyPlayerData();
 
-        matchMode = StartEndController.MatchMode.TimeLimit;
+        matchMode = MatchMode.TimeLimit;
         pointsToWin = 16;
         matchDuration = 180f;
         isRanked = false;

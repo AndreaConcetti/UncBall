@@ -28,7 +28,7 @@ public class OnlineMatchSessionData
     public MatchRuntimeConfig.MatchAuthorityType authorityType = MatchRuntimeConfig.MatchAuthorityType.HostClient;
     public MatchRuntimeConfig.LocalParticipantSlot localParticipantSlot = MatchRuntimeConfig.LocalParticipantSlot.Player1;
 
-    public StartEndController.MatchMode matchMode = StartEndController.MatchMode.ScoreTarget;
+    public MatchMode matchMode = MatchMode.ScoreTarget;
     public int pointsToWin = 16;
     public float matchDuration = 180f;
 
@@ -37,10 +37,15 @@ public class OnlineMatchSessionData
     public bool allowStatsProgression = false;
 
     public bool hasRemoteJoiner = false;
+    public bool matchStarted = false;
+    public bool startRequested = false;
     public string lobbyStatusText = "";
 
     public string matchmakingQueueId = "";
     public bool isMatchmakingSearch = false;
+
+    public string player1SkinUniqueId = "";
+    public string player2SkinUniqueId = "";
 }
 
 public class OnlineMatchSession : MonoBehaviour
@@ -70,12 +75,19 @@ public class OnlineMatchSession : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            DestroyDuplicateRuntimeRoot();
+            GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
+            Destroy(duplicateRoot);
             return;
         }
 
         Instance = this;
-        MarkRuntimeRootPersistentIfNeeded();
+
+        if (dontDestroyOnLoad)
+        {
+            GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+            DontDestroyOnLoad(runtimeRoot);
+        }
+
         ResolveDependencies();
 
         if (currentSession == null)
@@ -93,9 +105,6 @@ public class OnlineMatchSession : MonoBehaviour
     {
         currentSession = new OnlineMatchSessionData();
         NotifyUpdated();
-
-        if (logDebug)
-            Debug.Log("[OnlineMatchSession] Cleared prepared session.", this);
     }
 
     public void CancelMatchmakingSearch()
@@ -128,7 +137,7 @@ public class OnlineMatchSession : MonoBehaviour
         string localProfileId,
         string localDisplayName,
         string remoteDisplayName,
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
         bool isRanked,
@@ -142,17 +151,17 @@ public class OnlineMatchSession : MonoBehaviour
 
         currentSession.hasPreparedSession = true;
         currentSession.sessionId = Guid.NewGuid().ToString("N");
-        currentSession.roomCode = string.Empty;
+        currentSession.roomCode = string.IsNullOrWhiteSpace(customRoomCode) ? string.Empty : customRoomCode.Trim().ToUpperInvariant();
 
-        currentSession.localProfileId = SanitizeProfileId(localProfileId, "local_player_1");
-        currentSession.localDisplayName = SanitizeName(localDisplayName, "HostPlayer");
+        currentSession.localProfileId = Sanitize(localProfileId, "local_player_1");
+        currentSession.localDisplayName = Sanitize(localDisplayName, "HostPlayer");
         currentSession.remotePlayerId = string.Empty;
-        currentSession.remoteDisplayName = SanitizeName(remoteDisplayName, "Player 2");
+        currentSession.remoteDisplayName = Sanitize(remoteDisplayName, "Player 2");
 
         currentSession.hostPlayerId = currentSession.localProfileId;
         currentSession.hostDisplayName = currentSession.localDisplayName;
         currentSession.joinPlayerId = string.Empty;
-        currentSession.joinDisplayName = SanitizeName(remoteDisplayName, "JoinPlayer");
+        currentSession.joinDisplayName = Sanitize(remoteDisplayName, "JoinPlayer");
 
         currentSession.isHost = true;
         currentSession.isRanked = isRanked;
@@ -171,12 +180,16 @@ public class OnlineMatchSession : MonoBehaviour
         currentSession.allowStatsProgression = allowStatsProgression;
 
         currentSession.hasRemoteJoiner = false;
-        currentSession.lobbyStatusText = useLiveMultiplayerServices ? "Creating online lobby" : "Preparing offline placeholder lobby";
+        currentSession.matchStarted = false;
+        currentSession.startRequested = false;
+        currentSession.lobbyStatusText = useLiveMultiplayerServices ? "Creating online lobby" : "Preparing host session";
 
         currentSession.matchmakingQueueId = string.Empty;
         currentSession.isMatchmakingSearch = false;
 
-        ResolveDependencies();
+        currentSession.player1SkinUniqueId = ResolveLocalSkinUniqueId(MatchRuntimeConfig.LocalParticipantSlot.Player1);
+        currentSession.player2SkinUniqueId = string.Empty;
+
         SyncPreparedSessionIntoRuntimeConfigIfPossible();
         NotifyUpdated();
 
@@ -198,7 +211,7 @@ public class OnlineMatchSession : MonoBehaviour
         string localProfileId,
         string localDisplayName,
         string remoteDisplayName,
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
         bool isRanked,
@@ -213,13 +226,13 @@ public class OnlineMatchSession : MonoBehaviour
         currentSession.sessionId = Guid.NewGuid().ToString("N");
         currentSession.roomCode = SanitizeRoomCode(roomCode);
 
-        currentSession.localProfileId = SanitizeProfileId(localProfileId, "local_player_2");
-        currentSession.localDisplayName = SanitizeName(localDisplayName, "JoinPlayer");
+        currentSession.localProfileId = Sanitize(localProfileId, "local_player_2");
+        currentSession.localDisplayName = Sanitize(localDisplayName, "JoinPlayer");
         currentSession.remotePlayerId = string.Empty;
-        currentSession.remoteDisplayName = SanitizeName(remoteDisplayName, "HostPlayer");
+        currentSession.remoteDisplayName = Sanitize(remoteDisplayName, "HostPlayer");
 
         currentSession.hostPlayerId = string.Empty;
-        currentSession.hostDisplayName = SanitizeName(remoteDisplayName, "HostPlayer");
+        currentSession.hostDisplayName = Sanitize(remoteDisplayName, "HostPlayer");
         currentSession.joinPlayerId = currentSession.localProfileId;
         currentSession.joinDisplayName = currentSession.localDisplayName;
 
@@ -240,12 +253,16 @@ public class OnlineMatchSession : MonoBehaviour
         currentSession.allowStatsProgression = allowStatsProgression;
 
         currentSession.hasRemoteJoiner = false;
-        currentSession.lobbyStatusText = useLiveMultiplayerServices ? "Joining online lobby" : "Preparing offline placeholder join";
+        currentSession.matchStarted = false;
+        currentSession.startRequested = false;
+        currentSession.lobbyStatusText = useLiveMultiplayerServices ? "Joining online lobby" : "Preparing join session";
 
         currentSession.matchmakingQueueId = string.Empty;
         currentSession.isMatchmakingSearch = false;
 
-        ResolveDependencies();
+        currentSession.player1SkinUniqueId = string.Empty;
+        currentSession.player2SkinUniqueId = ResolveLocalSkinUniqueId(MatchRuntimeConfig.LocalParticipantSlot.Player2);
+
         SyncPreparedSessionIntoRuntimeConfigIfPossible();
         NotifyUpdated();
 
@@ -263,7 +280,7 @@ public class OnlineMatchSession : MonoBehaviour
         string queueId,
         string localProfileId,
         string localDisplayName,
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
         bool isRanked,
@@ -278,8 +295,8 @@ public class OnlineMatchSession : MonoBehaviour
         currentSession.sessionId = Guid.NewGuid().ToString("N");
         currentSession.roomCode = string.Empty;
 
-        currentSession.localProfileId = SanitizeProfileId(localProfileId, "local_player_1");
-        currentSession.localDisplayName = SanitizeName(localDisplayName, "Player 1");
+        currentSession.localProfileId = Sanitize(localProfileId, "local_player_1");
+        currentSession.localDisplayName = Sanitize(localDisplayName, "Player 1");
         currentSession.remotePlayerId = string.Empty;
         currentSession.remoteDisplayName = "Searching...";
 
@@ -305,12 +322,16 @@ public class OnlineMatchSession : MonoBehaviour
         currentSession.allowStatsProgression = allowStatsProgression;
 
         currentSession.hasRemoteJoiner = false;
+        currentSession.matchStarted = false;
+        currentSession.startRequested = false;
         currentSession.lobbyStatusText = "Searching matchmaking";
 
-        currentSession.matchmakingQueueId = SanitizeOptionalValue(queueId);
+        currentSession.matchmakingQueueId = Sanitize(queueId, string.Empty);
         currentSession.isMatchmakingSearch = true;
 
-        ResolveDependencies();
+        currentSession.player1SkinUniqueId = ResolveLocalSkinUniqueId(MatchRuntimeConfig.LocalParticipantSlot.Player1);
+        currentSession.player2SkinUniqueId = string.Empty;
+
         SyncPreparedSessionIntoRuntimeConfigIfPossible();
         NotifyUpdated();
 
@@ -330,19 +351,11 @@ public class OnlineMatchSession : MonoBehaviour
 
     public bool CanHostStartMatch()
     {
-        if (!HasPreparedSession)
-            return false;
-
-        if (!currentSession.isHost)
-            return false;
-
-        if (!currentSession.useLiveMultiplayerServices)
-            return false;
-
-        if (!currentSession.hasRemoteJoiner)
-            return false;
-
-        return true;
+        return HasPreparedSession &&
+               currentSession.isHost &&
+               currentSession.useLiveMultiplayerServices &&
+               currentSession.hasRemoteJoiner &&
+               !currentSession.matchStarted;
     }
 
     public bool RequestHostStartMatch()
@@ -352,23 +365,21 @@ public class OnlineMatchSession : MonoBehaviour
         if (!CanHostStartMatch())
             return false;
 
-        if (onlineLobbyService != null)
-        {
-            onlineLobbyService.RequestStartMatch(currentSession.localProfileId);
-            return true;
-        }
+        if (onlineLobbyService == null)
+            return false;
 
-        return false;
+        currentSession.startRequested = true;
+        currentSession.lobbyStatusText = "Starting match";
+        onlineLobbyService.RequestStartMatch(currentSession.localProfileId);
+        NotifyUpdated();
+        return true;
     }
 
     public bool PushPreparedSessionIntoMatchRuntimeConfig()
     {
         ResolveDependencies();
 
-        if (!HasPreparedSession)
-            return false;
-
-        if (matchRuntimeConfig == null)
+        if (!HasPreparedSession || matchRuntimeConfig == null)
             return false;
 
         matchRuntimeConfig.ConfigureMultiplayerMode(
@@ -390,6 +401,11 @@ public class OnlineMatchSession : MonoBehaviour
             currentSession.allowChestRewards,
             currentSession.allowXpRewards,
             currentSession.allowStatsProgression
+        );
+
+        matchRuntimeConfig.SetPlayerSkinUniqueIds(
+            currentSession.player1SkinUniqueId,
+            currentSession.player2SkinUniqueId
         );
 
         return true;
@@ -419,6 +435,8 @@ public class OnlineMatchSession : MonoBehaviour
         currentSession.roomCode = string.IsNullOrWhiteSpace(lobbyState.roomCode) ? currentSession.roomCode : lobbyState.roomCode;
 
         currentSession.hasRemoteJoiner = lobbyState.HasJoinPlayer();
+        currentSession.matchStarted = lobbyState.matchStarted;
+        currentSession.startRequested = lobbyState.startRequested;
         currentSession.lobbyStatusText = lobbyState.statusText;
 
         currentSession.matchMode = lobbyState.matchMode;
@@ -426,11 +444,11 @@ public class OnlineMatchSession : MonoBehaviour
         currentSession.matchDuration = Mathf.Max(1f, lobbyState.matchDuration);
         currentSession.isRanked = lobbyState.isRanked;
 
-        currentSession.hostPlayerId = SanitizeOptionalValue(lobbyState.hostPlayer != null ? lobbyState.hostPlayer.playerId : string.Empty);
-        currentSession.hostDisplayName = SanitizeName(lobbyState.hostPlayer != null ? lobbyState.hostPlayer.displayName : string.Empty, "HostPlayer");
+        currentSession.hostPlayerId = lobbyState.hostPlayer != null ? lobbyState.hostPlayer.playerId : string.Empty;
+        currentSession.hostDisplayName = lobbyState.hostPlayer != null ? lobbyState.hostPlayer.displayName : "HostPlayer";
 
-        currentSession.joinPlayerId = SanitizeOptionalValue(lobbyState.joinPlayer != null ? lobbyState.joinPlayer.playerId : string.Empty);
-        currentSession.joinDisplayName = SanitizeName(lobbyState.joinPlayer != null ? lobbyState.joinPlayer.displayName : string.Empty, "JoinPlayer");
+        currentSession.joinPlayerId = lobbyState.joinPlayer != null ? lobbyState.joinPlayer.playerId : string.Empty;
+        currentSession.joinDisplayName = lobbyState.joinPlayer != null ? lobbyState.joinPlayer.displayName : "JoinPlayer";
 
         bool localIsHost =
             !string.IsNullOrWhiteSpace(currentSession.localProfileId) &&
@@ -459,24 +477,35 @@ public class OnlineMatchSession : MonoBehaviour
 
         SyncPreparedSessionIntoRuntimeConfigIfPossible();
         NotifyUpdated();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineMatchSession] HandleLobbyStateChanged -> " +
+                "RemoteJoiner=" + currentSession.hasRemoteJoiner +
+                " | MatchStarted=" + currentSession.matchStarted +
+                " | Status=" + currentSession.lobbyStatusText,
+                this
+            );
+        }
     }
 
     private void HandleLobbyError(string errorMessage)
     {
-        if (currentSession != null)
-        {
-            currentSession.lobbyStatusText = errorMessage;
-            NotifyUpdated();
-        }
+        if (currentSession == null)
+            return;
+
+        currentSession.lobbyStatusText = errorMessage;
+        NotifyUpdated();
     }
 
     private void HandleLobbyInfo(string infoMessage)
     {
-        if (currentSession != null)
-        {
-            currentSession.lobbyStatusText = infoMessage;
-            NotifyUpdated();
-        }
+        if (currentSession == null)
+            return;
+
+        currentSession.lobbyStatusText = infoMessage;
+        NotifyUpdated();
     }
 
     private void SubscribeToLobbyService()
@@ -510,15 +539,9 @@ public class OnlineMatchSession : MonoBehaviour
             matchRuntimeConfig = MatchRuntimeConfig.Instance;
 
 #if UNITY_2023_1_OR_NEWER
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
-
         if (onlineLobbyService == null)
             onlineLobbyService = FindFirstObjectByType<OnlineLobbyServiceBase>();
 #else
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
-
         if (onlineLobbyService == null)
             onlineLobbyService = FindObjectOfType<OnlineLobbyServiceBase>();
 #endif
@@ -532,13 +555,8 @@ public class OnlineMatchSession : MonoBehaviour
 
     private void SyncPreparedSessionIntoRuntimeConfigIfPossible()
     {
-        if (!HasPreparedSession)
-            return;
-
-        if (matchRuntimeConfig == null)
-            return;
-
-        PushPreparedSessionIntoMatchRuntimeConfig();
+        if (HasPreparedSession && matchRuntimeConfig != null)
+            PushPreparedSessionIntoMatchRuntimeConfig();
     }
 
     private void NotifyUpdated()
@@ -546,50 +564,34 @@ public class OnlineMatchSession : MonoBehaviour
         OnSessionUpdated?.Invoke();
     }
 
-    private string SanitizeRoomCode(string roomCode)
+    private string ResolveLocalSkinUniqueId(MatchRuntimeConfig.LocalParticipantSlot slot)
     {
-        if (string.IsNullOrWhiteSpace(roomCode))
-            return "ROOM01";
-
-        return roomCode.Trim().ToUpperInvariant();
-    }
-
-    private string SanitizeName(string value, string fallback)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return fallback;
-
-        return value.Trim();
-    }
-
-    private string SanitizeProfileId(string value, string fallback)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return fallback;
-
-        return value.Trim();
-    }
-
-    private string SanitizeOptionalValue(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
+        if (PlayerSkinLoadout.Instance == null)
             return string.Empty;
 
+        BallSkinData skin = slot == MatchRuntimeConfig.LocalParticipantSlot.Player1
+            ? PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer1()
+            : PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer2();
+
+        if (skin == null || string.IsNullOrWhiteSpace(skin.skinUniqueId))
+            return string.Empty;
+
+        return skin.skinUniqueId.Trim();
+    }
+
+    private string SanitizeRoomCode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "ROOM01";
+
+        return value.Trim().ToUpperInvariant();
+    }
+
+    private string Sanitize(string value, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+
         return value.Trim();
-    }
-
-    private void MarkRuntimeRootPersistentIfNeeded()
-    {
-        if (!dontDestroyOnLoad)
-            return;
-
-        GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
-        DontDestroyOnLoad(runtimeRoot);
-    }
-
-    private void DestroyDuplicateRuntimeRoot()
-    {
-        GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
-        Destroy(duplicateRoot);
     }
 }

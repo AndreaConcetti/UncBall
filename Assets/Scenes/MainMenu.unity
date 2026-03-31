@@ -2681,17 +2681,6 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 7353824173169399022, guid: 51d308814e1aef74780c9d9fbe2f6d35, type: 3}
   m_PrefabInstance: {fileID: 163930914}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &163930916 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 3521122340459845481, guid: 51d308814e1aef74780c9d9fbe2f6d35, type: 3}
-  m_PrefabInstance: {fileID: 163930914}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1c789a5644b6558448abebd9bb13ba76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChestSlotUI
 --- !u!1 &167365704
 GameObject:
   m_ObjectHideFlags: 0
@@ -4152,38 +4141,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: '::'
   matchRuntimeConfig: {fileID: 1801468262}
   profileManager: {fileID: 1445563842}
-  versusSceneName: Gameplay
-  botSceneName: Gameplay
   multiplayerSceneName: Gameplay
-  timeModeDurationPresets: b400000068010000d0020000
-  defaultTimePresetIndex: 1
-  timeModeDurationText: {fileID: 406899071}
-  timeModePlayer1NameInputField: {fileID: 108630283}
-  timeModePlayer2NameInputField: {fileID: 1157680414}
-  scoreModePointsToWinInputField: {fileID: 583644216}
-  scoreModePlayer1NameInputField: {fileID: 1675163312}
-  scoreModePlayer2NameInputField: {fileID: 152434931}
-  defaultPointsToWin: 16
-  defaultPlayer1Name: PLAYER 1
-  defaultPlayer2Name: PLAYER 2
-  defaultBotName: BOT
   defaultRemotePlayerName: Remote Player
   defaultMultiplayerIsRanked: 0
   defaultMultiplayerPointsToWin: 16
   defaultMultiplayerMatchDuration: 180
   defaultMultiplayerMatchMode: 0
-  chestSlotUIs:
-  - {fileID: 802294619}
-  - {fileID: 163930916}
-  - {fileID: 2060543601}
-  - {fileID: 2140456555}
-  refreshChestSlotsOnStart: 1
-  refreshChestSlotsOnEnable: 1
-  refreshChestSlotsNextFrameToo: 1
-  refreshChestSlotsAfterShortDelay: 1
-  delayedChestRefreshSeconds: 0.15
-  extraRefreshFrames: 3
-  logChestRefreshDebug: 0
   logDebug: 0
 --- !u!4 &231570640
 Transform:
@@ -10042,9 +10005,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 231570639}
+      - m_Target: {fileID: 231570638}
         m_TargetAssemblyTypeName: MainMenu, Assembly-CSharp
-        m_MethodName: PlayVersusScoreMode
+        m_MethodName: 
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -11830,17 +11793,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: adbcb913939aaf64180b230b5f0e2f03, type: 3}
---- !u!114 &802294619 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 3521122340459845481, guid: adbcb913939aaf64180b230b5f0e2f03, type: 3}
-  m_PrefabInstance: {fileID: 802294618}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1c789a5644b6558448abebd9bb13ba76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChestSlotUI
 --- !u!1 &808143738
 GameObject:
   m_ObjectHideFlags: 0
@@ -16930,7 +16882,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 100}
-  m_SizeDelta: {x: 500, y: 300}
+  m_SizeDelta: {x: 500, y: 200}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1198836074
 GameObject:
@@ -18076,7 +18028,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1373580278
 RectTransform:
   m_ObjectHideFlags: 0
@@ -18556,6 +18508,143 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1393759655}
+  m_CullTransparentMesh: 1
+--- !u!1 &1405276531
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1405276532}
+  - component: {fileID: 1405276534}
+  - component: {fileID: 1405276533}
+  m_Layer: 0
+  m_Name: MatchmakingTimerText
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1405276532
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1405276531}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1.00032, y: 1.00032, z: 1.00032}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1450704806}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: -50}
+  m_SizeDelta: {x: 200, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1405276533
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1405276531}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_text: 00:00
+  m_isRightToLeft: 0
+  m_fontAsset: {fileID: 11400000, guid: 0161d805a3764c089bef00bfe00793f5, type: 2}
+  m_sharedMaterial: {fileID: 2147374, guid: 0161d805a3764c089bef00bfe00793f5, type: 2}
+  m_fontSharedMaterials: []
+  m_fontMaterial: {fileID: 0}
+  m_fontMaterials: []
+  m_fontColor32:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+  m_enableVertexGradient: 0
+  m_colorMode: 3
+  m_fontColorGradient:
+    topLeft: {r: 1, g: 1, b: 1, a: 1}
+    topRight: {r: 1, g: 1, b: 1, a: 1}
+    bottomLeft: {r: 1, g: 1, b: 1, a: 1}
+    bottomRight: {r: 1, g: 1, b: 1, a: 1}
+  m_fontColorGradientPreset: {fileID: 0}
+  m_spriteAsset: {fileID: 0}
+  m_tintAllSprites: 0
+  m_StyleSheet: {fileID: 0}
+  m_TextStyleHashCode: -1183493901
+  m_overrideHtmlColors: 0
+  m_faceColor:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontSize: 67.45
+  m_fontSizeBase: 36
+  m_fontWeight: 400
+  m_enableAutoSizing: 1
+  m_fontSizeMin: 18
+  m_fontSizeMax: 72
+  m_fontStyle: 16
+  m_HorizontalAlignment: 2
+  m_VerticalAlignment: 512
+  m_textAlignment: 65535
+  m_characterSpacing: 0
+  m_characterHorizontalScale: 1
+  m_wordSpacing: 0
+  m_lineSpacing: 0
+  m_lineSpacingMax: 0
+  m_paragraphSpacing: 0
+  m_charWidthMaxAdj: 0
+  m_TextWrappingMode: 1
+  m_wordWrappingRatios: 0.4
+  m_overflowMode: 0
+  m_linkedTextComponent: {fileID: 0}
+  parentLinkedComponent: {fileID: 0}
+  m_enableKerning: 0
+  m_ActiveFontFeatures: 6e72656b
+  m_enableExtraPadding: 0
+  checkPaddingRequired: 0
+  m_isRichText: 1
+  m_EmojiFallbackSupport: 1
+  m_parseCtrlCharacters: 1
+  m_isOrthographic: 1
+  m_isCullingEnabled: 0
+  m_horizontalMapping: 0
+  m_verticalMapping: 0
+  m_uvLineOffset: 0
+  m_geometrySortingOrder: 0
+  m_IsTextObjectScaleStatic: 0
+  m_VertexBufferAutoSizeReduction: 0
+  m_useMaxVisibleDescender: 1
+  m_pageToDisplay: 1
+  m_margin: {x: 0, y: 0, z: 0, w: 0}
+  m_isUsingLegacyAnimationComponent: 0
+  m_isVolumetricText: 0
+  m_hasFontAssetChanged: 0
+  m_baseMaterial: {fileID: 0}
+  m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!222 &1405276534
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1405276531}
   m_CullTransparentMesh: 1
 --- !u!1 &1410501457
 GameObject:
@@ -19397,6 +19486,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1192351270}
+  - {fileID: 1405276532}
   - {fileID: 997724785}
   m_Father: {fileID: 1907812931}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -27973,7 +28063,7 @@ MonoBehaviour:
   - baseColorId: white
     patternId: onda
     patternColorId: black
-    patternIntensity: 2
+    patternIntensity: 1
     patternScale: 1
     rarity: 0
     equipOnInitialization: 0
@@ -29492,6 +29582,8 @@ MonoBehaviour:
   selectedSessionId: 
   selectedRoomCode: 
   selectedRemotePlayerId: 
+  player1SkinUniqueId: 
+  player2SkinUniqueId: 
   selectedAllowChestRewards: 1
   selectedAllowXpRewards: 1
   selectedAllowStatsProgression: 1
@@ -29536,9 +29628,13 @@ MonoBehaviour:
     allowXpRewards: 0
     allowStatsProgression: 0
     hasRemoteJoiner: 0
+    matchStarted: 0
+    startRequested: 0
     lobbyStatusText: 
     matchmakingQueueId: 
     isMatchmakingSearch: 0
+    player1SkinUniqueId: 
+    player2SkinUniqueId: 
   logDebug: 1
 --- !u!114 &1801468265
 MonoBehaviour:
@@ -31641,7 +31737,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e446941fa50ab5d448cba92b2943414d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CollectionSkinPreviewPanel
-  playerSkinInventory: {fileID: 0}
+  playerSkinInventory: {fileID: 1726694515}
   previewSkinApplier: {fileID: 1829137427}
   previewPanelRoot: {fileID: 1488998002}
   equipButton: {fileID: 1814087321}
@@ -32432,77 +32528,66 @@ MonoBehaviour:
   onlineMatchSession: {fileID: 1801468263}
   profileManager: {fileID: 1445563842}
   fusionSessionController: {fileID: 1801468265}
-  localPlayerNameInputField: {fileID: 0}
+  mainMenuSceneName: MainMenu
   privateHostPlayerNameInputField: {fileID: 1798842223}
   privateJoinPlayerNameInputField: {fileID: 1798842223}
   matchmakingPlayerNameInputField: {fileID: 388209280}
-  defaultHostLocalPlayerName: HostPlayer
-  defaultJoinLocalPlayerName: JoinPlayer
-  defaultMatchmakingLocalPlayerName: Player 1
-  statusText: {fileID: 0}
-  generatedRoomCodeText: {fileID: 1824337603}
-  lobbyStatusHostText: {fileID: 1333147782}
-  lobbyStatusJoinText: {fileID: 794234913}
-  waitingOpponentPanelHost: {fileID: 1373580277}
-  waitingOpponentPanelJoin: {fileID: 777306203}
-  waitingHostRoomCodeText: {fileID: 1824337603}
-  waitingHostLobbyStatusText: {fileID: 1333147782}
-  waitingHostPlayerEnteredText: {fileID: 890423220}
-  waitingJoinLobbyStatusText: {fileID: 794234913}
-  waitingJoinPlayerEnteredText: {fileID: 974796052}
-  waitingJoinRoomCodeText: {fileID: 1836949499}
-  hostStartMatchButton: {fileID: 1940082080}
-  privateLobbyLoadingPanel: {fileID: 695663681}
-  privateLobbyLoadingText: {fileID: 60849509}
-  createLobbyLoadingMessage: 'Creating lobby...
-
-    It could take about 30 seconds.'
-  joinLobbyLoadingMessage: 'Joining lobby...
-
-    It could take about 30 seconds.'
-  matchmakingLoadingPanel: {fileID: 1450704805}
-  matchmakingLoadingText: {fileID: 1192351268}
-  normalMatchmakingLoadingMessage: Searching normal match...
-  rankedMatchmakingLoadingMessage: Searching ranked match...
-  defaultSearchingStatusText: SEARCHING FOR OPPONENT...
-  matchFoundPanel: {fileID: 1013717542}
-  matchFoundTitleText: {fileID: 679073059}
-  matchFoundLocalPlayerNameText: {fileID: 1102928697}
-  matchFoundOpponentPlayerNameText: {fileID: 935665273}
-  matchFoundCountdownText: {fileID: 2070545531}
-  matchFoundCountdownSeconds: 15
-  autoStartMatchmakingMatch: 1
-  hostModeLabelText: {fileID: 497403861}
   hostPointsToWinInputField: {fileID: 1805039844}
   hostMatchDurationInputField: {fileID: 1575042650}
-  hostPointsToWinSelectable: {fileID: 1805039844}
-  hostMatchDurationSelectable: {fileID: 1575042650}
-  hostUsesTimeMode: 1
   joinRoomCodeInputField: {fileID: 2012282468}
+  hostMatchModeText: {fileID: 497403861}
+  hostTimeModeSelectedObject: {fileID: 1575042648}
+  hostScoreModeSelectedObject: {fileID: 1805039842}
+  statusText: {fileID: 0}
+  matchmakingLoadingPanel: {fileID: 1450704805}
+  matchmakingLoadingMessageText: {fileID: 1192351268}
+  matchmakingElapsedTimerText: {fileID: 1405276533}
+  matchFoundPanel: {fileID: 1013717542}
+  matchFoundTitleText: {fileID: 679073059}
+  matchFoundPlayer1Text: {fileID: 1102928697}
+  matchFoundPlayer2Text: {fileID: 935665273}
+  matchFoundCountdownText: {fileID: 2070545531}
+  matchFoundCountdownDuration: 5
+  waitingOpponentPanelHost: {fileID: 1373580277}
+  generatedRoomCodeText: {fileID: 1824337603}
+  joinedPlayerText: {fileID: 890423220}
+  joinedPlayerTextRoot: {fileID: 890423219}
+  lobbyStatusText: {fileID: 1333147782}
+  hostStartMatchButton: {fileID: 1940082080}
+  waitingOpponentPanelJoin: {fileID: 777306203}
+  joinLobbyMessageText: {fileID: 1446061577}
+  joinLobbyStatusText: {fileID: 794234913}
+  privateLobbyLoadingPanel: {fileID: 695663681}
+  privateLobbyLoadingText: {fileID: 60849509}
+  defaultPointsToWin: 16
+  defaultMatchDuration: 60
+  useLiveMultiplayerServices: 1
+  privateHostMatchMode: 1
+  privateJoinMatchMode: 1
   normalMatchmakingPreset:
     queueId: normal
     matchMode: 0
     pointsToWin: 16
     matchDuration: 180
     isRanked: 0
-    allowChestRewards: 0
-    allowXpRewards: 0
-    allowStatsProgression: 0
+    allowChestRewards: 1
+    allowXpRewards: 1
+    allowStatsProgression: 1
   rankedMatchmakingPreset:
     queueId: ranked
     matchMode: 1
-    pointsToWin: 21
-    matchDuration: 360
+    pointsToWin: 0
+    matchDuration: 60
     isRanked: 1
     allowChestRewards: 1
-    allowXpRewards: 0
-    allowStatsProgression: 0
-  defaultPointsToWin: 16
-  defaultMatchDuration: 360
-  useLiveMultiplayerServices: 1
-  disableChestRewardsForPlaceholderSessions: 1
-  disableXpRewardsForPlaceholderSessions: 1
-  disableStatsProgressionForPlaceholderSessions: 1
+    allowXpRewards: 1
+    allowStatsProgression: 1
+  defaultSearchingText: SEARCHING FOR OPPONENT...
+  defaultWaitingHostText: WAITING FOR OPPONENT
+  defaultJoinWaitingText: WAITING FOR HOST
+  defaultLobbyReadyText: LOBBY READY
+  defaultStartingText: STARTING MATCH...
+  defaultMatchFoundTitle: MATCH FOUND!
   logDebug: 1
 --- !u!1 &2011424997
 GameObject:
@@ -33983,17 +34068,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 82c8c2e31ae88d042bc38f32083c9677, type: 3}
---- !u!114 &2060543601 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 3521122340459845481, guid: 82c8c2e31ae88d042bc38f32083c9677, type: 3}
-  m_PrefabInstance: {fileID: 2060543600}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1c789a5644b6558448abebd9bb13ba76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChestSlotUI
 --- !u!1 &2070545530
 GameObject:
   m_ObjectHideFlags: 0
@@ -34625,17 +34699,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: af6b9656eb96cb743bd87e9e970e96e4, type: 3}
---- !u!114 &2140456555 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 3521122340459845481, guid: af6b9656eb96cb743bd87e9e970e96e4, type: 3}
-  m_PrefabInstance: {fileID: 2140456554}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1c789a5644b6558448abebd9bb13ba76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ChestSlotUI
 --- !u!1 &2142570377
 GameObject:
   m_ObjectHideFlags: 0

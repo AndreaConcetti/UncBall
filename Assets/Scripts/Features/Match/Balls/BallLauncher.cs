@@ -80,15 +80,20 @@ public class BallLauncher : MonoBehaviour
     private Vector3 placementDragStartBallWorldPosition;
 
     private FusionOnlineMatchController cachedController;
+    private BallTurnSpawner cachedSpawner;
 
     void Awake()
     {
 #if UNITY_2023_1_OR_NEWER
         if (onlineAuthority == null)
             onlineAuthority = FindFirstObjectByType<OnlineGameplayAuthority>();
+
+        cachedSpawner = FindFirstObjectByType<BallTurnSpawner>();
 #else
         if (onlineAuthority == null)
             onlineAuthority = FindObjectOfType<OnlineGameplayAuthority>();
+
+        cachedSpawner = FindObjectOfType<BallTurnSpawner>();
 #endif
 
         RefreshBallVisualRollReference();
@@ -117,6 +122,7 @@ public class BallLauncher : MonoBehaviour
     void Update()
     {
         ResolveOnlineController();
+        ResolveSpawner();
         SyncOnlineCurrentBallBinding();
 
         if (ball == null)
@@ -131,6 +137,18 @@ public class BallLauncher : MonoBehaviour
         HandleKeyboardConfirm();
         HandleTouchInput();
         HandleMouseInput();
+    }
+
+    private void ResolveSpawner()
+    {
+        if (cachedSpawner != null)
+            return;
+
+#if UNITY_2023_1_OR_NEWER
+        cachedSpawner = FindFirstObjectByType<BallTurnSpawner>();
+#else
+        cachedSpawner = FindObjectOfType<BallTurnSpawner>();
+#endif
     }
 
     private void ResolveOnlineController()
@@ -170,6 +188,7 @@ public class BallLauncher : MonoBehaviour
             return;
 
         ResolveOnlineController();
+        ResolveSpawner();
 
         if (cachedController == null)
             return;
@@ -203,9 +222,11 @@ public class BallLauncher : MonoBehaviour
         if (ball != currentBall)
         {
             ball = currentBall;
-            activePlacementArea = owner == PlayerID.Player1
-                ? FindPlacementAreaForPlayer1()
-                : FindPlacementAreaForPlayer2();
+
+            if (cachedSpawner != null)
+                activePlacementArea = cachedSpawner.GetPlacementAreaForOwner(owner);
+            else
+                activePlacementArea = null;
 
             ResetLaunch();
 
@@ -217,26 +238,6 @@ public class BallLauncher : MonoBehaviour
                 );
             }
         }
-    }
-
-    private BoxCollider FindPlacementAreaForPlayer1()
-    {
-#if UNITY_2023_1_OR_NEWER
-        BallTurnSpawner spawner = FindFirstObjectByType<BallTurnSpawner>();
-#else
-        BallTurnSpawner spawner = FindObjectOfType<BallTurnSpawner>();
-#endif
-        return spawner != null ? spawner.player1PlacementArea : null;
-    }
-
-    private BoxCollider FindPlacementAreaForPlayer2()
-    {
-#if UNITY_2023_1_OR_NEWER
-        BallTurnSpawner spawner = FindFirstObjectByType<BallTurnSpawner>();
-#else
-        BallTurnSpawner spawner = FindObjectOfType<BallTurnSpawner>();
-#endif
-        return spawner != null ? spawner.player2PlacementArea : null;
     }
 
     public void SetActivePlacementArea(BoxCollider placementArea)

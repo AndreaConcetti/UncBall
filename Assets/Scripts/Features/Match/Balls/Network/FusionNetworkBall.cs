@@ -1,14 +1,11 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Reflection;
 using Fusion;
 using UnityEngine;
 
 [RequireComponent(typeof(NetworkObject))]
 public class FusionNetworkBall : NetworkBehaviour
 {
-    [Header("Cached References")]
+    [Header("References")]
     [SerializeField] private BallPhysics ballPhysics;
     [SerializeField] private BallOwnership ballOwnership;
     [SerializeField] private BallSkinApplier ballSkinApplier;
@@ -18,9 +15,10 @@ public class FusionNetworkBall : NetworkBehaviour
     [Networked, Capacity(64)] private NetworkString<_64> NetSkinUniqueId { get; set; }
 
     [Header("Debug")]
-    [SerializeField] private bool logDebug = false;
+    [SerializeField] private bool logDebug = true;
 
     private string lastAppliedSkinUniqueId = string.Empty;
+    private bool initialApplyAttempted;
 
     public BallPhysics BallPhysics => ballPhysics;
     public PlayerID OwnerPlayerId => (PlayerID)NetOwnerRaw;
@@ -31,15 +29,30 @@ public class FusionNetworkBall : NetworkBehaviour
         ResolveReferences();
         ApplyOwnerToLocalComponents();
         ForcePlacementFrozenState();
-        ApplySkinIfNeeded();
+        TryApplySkin();
         RegisterIntoLocalGameplay();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionNetworkBall] Spawned -> " +
+                "Owner=" + OwnerPlayerId +
+                " | SkinId=" + SkinUniqueId,
+                this
+            );
+        }
     }
 
     public override void Render()
     {
         ResolveReferences();
         ApplyOwnerToLocalComponents();
-        ApplySkinIfNeeded();
+        TryApplySkin();
+    }
+
+    private void LateUpdate()
+    {
+        TryApplySkin();
     }
 
     public void SetOwnerAndSkin(PlayerID owner, string skinUniqueId)
@@ -53,13 +66,13 @@ public class FusionNetworkBall : NetworkBehaviour
             : skinUniqueId.Trim();
 
         ApplyOwnerToLocalComponents();
-        ApplySkinIfNeeded();
 
         if (logDebug)
         {
             Debug.Log(
-                "[FusionNetworkBall] SetOwnerAndSkin -> Owner=" + owner +
-                " | SkinUniqueId=" + NetSkinUniqueId,
+                "[FusionNetworkBall] SetOwnerAndSkin -> " +
+                "Owner=" + owner +
+                " | SkinId=" + NetSkinUniqueId,
                 this
             );
         }
@@ -91,8 +104,10 @@ public class FusionNetworkBall : NetworkBehaviour
             ballPhysics.Deactivate();
     }
 
-    private void ApplySkinIfNeeded()
+    private void TryApplySkin()
     {
+        ResolveReferences();
+
         string skinUniqueId = NetSkinUniqueId.ToString();
 
         if (string.IsNullOrWhiteSpace(skinUniqueId))
@@ -101,93 +116,56 @@ public class FusionNetworkBall : NetworkBehaviour
         if (string.Equals(lastAppliedSkinUniqueId, skinUniqueId, StringComparison.Ordinal))
             return;
 
-        ResolveReferences();
-
         if (ballSkinApplier == null)
             return;
 
-        if (PlayerSkinLoadout.Instance == null || PlayerSkinLoadout.Instance.Database == null)
+        if (PlayerSkinLoadout.Instance == null)
             return;
 
-        BallSkinData resolvedSkin = ResolveSkinDataByUniqueId(PlayerSkinLoadout.Instance.Database, skinUniqueId);
-        if (resolvedSkin == null)
+        BallSkinDatabase database = PlayerSkinLoadout.Instance.Database;
+        if (database == null)
             return;
 
-        bool applied = ballSkinApplier.ApplySkinData(PlayerSkinLoadout.Instance.Database, resolvedSkin);
+        BallSkinData parsedData = null;
+
+        bool parsed =
+            BallSkinIdParser.TryParse(skinUniqueId, database, out parsedData) ||
+            BallSkinIdParser.TryParse(skinUniqueId, out parsedData);
+
+        if (!parsed || parsedData == null)
+        {
+            if (logDebug && !initialApplyAttempted)
+            {
+                Debug.LogWarning(
+                    "[FusionNetworkBall] Cannot parse skinUniqueId: " + skinUniqueId,
+                    this
+                );
+            }
+
+            initialApplyAttempted = true;
+            return;
+        }
+
+        bool applied = ballSkinApplier.ApplySkinData(database, parsedData);
         if (!applied)
+        {
+            initialApplyAttempted = true;
             return;
+        }
 
         lastAppliedSkinUniqueId = skinUniqueId;
-    }
+        initialApplyAttempted = true;
 
-    private BallSkinData ResolveSkinDataByUniqueId(BallSkinDatabase database, string skinUniqueId)
-    {
-        if (database == null || string.IsNullOrWhiteSpace(skinUniqueId))
-            return null;
-
-        Type dbType = database.GetType();
-
-        MethodInfo[] methods = dbType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        for (int i = 0; i < methods.Length; i++)
-        {
-            MethodInfo method = methods[i];
-            ParameterInfo[] parameters = method.GetParameters();
-
-            if (parameters.Length != 1)
-                continue;
-
-            if (parameters[0].ParameterType != typeof(string))
-                continue;
-
-            if (!typeof(BallSkinData).IsAssignableFrom(method.ReturnType))
-                continue;
-
-            try
-            {
-                object result = method.Invoke(database, new object[] { skinUniqueId });
-                if (result is BallSkinData directSkin && directSkin != null)
-                {
-                    if (string.Equals(directSkin.skinUniqueId, skinUniqueId, StringComparison.Ordinal))
-                        return directSkin;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        FieldInfo[] fields = dbType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        for (int i = 0; i < fields.Length; i++)
-        {
-            object value = fields[i].GetValue(database);
-            if (value == null)
-                continue;
-
-            if (value is IEnumerable enumerable)
-            {
-                foreach (object item in enumerable)
-                {
-                    if (item is BallSkinData candidate &&
-                        candidate != null &&
-                        string.Equals(candidate.skinUniqueId, skinUniqueId, StringComparison.Ordinal))
-                    {
-                        return candidate;
-                    }
-                }
-            }
-        }
-
-        return null;
+        if (logDebug)
+            Debug.Log("[FusionNetworkBall] Skin applied -> " + skinUniqueId, this);
     }
 
     private void RegisterIntoLocalGameplay()
     {
-        BallTurnSpawner spawner = null;
-
 #if UNITY_2023_1_OR_NEWER
-        spawner = FindFirstObjectByType<BallTurnSpawner>();
+        BallTurnSpawner spawner = FindFirstObjectByType<BallTurnSpawner>();
 #else
-        spawner = FindObjectOfType<BallTurnSpawner>();
+        BallTurnSpawner spawner = FindObjectOfType<BallTurnSpawner>();
 #endif
 
         if (spawner != null)

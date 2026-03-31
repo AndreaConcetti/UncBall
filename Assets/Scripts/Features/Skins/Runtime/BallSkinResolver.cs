@@ -50,29 +50,53 @@ public static class BallSkinResolver
         BallColorLibrary.ColorEntry baseEntry = database.baseColorLibrary.GetById(data.baseColorId);
         if (baseEntry == null)
         {
-            Debug.LogError("[BallSkinResolver] Base color ID non trovato: " + data.baseColorId);
-            return false;
+            if (database.baseColorLibrary.Colors != null && database.baseColorLibrary.Colors.Count > 0)
+            {
+                baseEntry = database.baseColorLibrary.Colors[0];
+                Debug.LogWarning("[BallSkinResolver] Base color ID non trovato: " + data.baseColorId + " -> fallback al primo colore disponibile.");
+            }
+            else
+            {
+                Debug.LogError("[BallSkinResolver] Nessun colore base disponibile.");
+                return false;
+            }
         }
 
         BallPatternLibrary.PatternEntry patternEntry = database.patternLibrary.GetById(data.patternId);
         if (patternEntry == null)
         {
-            Debug.LogError("[BallSkinResolver] Pattern ID non trovato: " + data.patternId);
-            return false;
+            if (database.patternLibrary.Patterns != null && database.patternLibrary.Patterns.Count > 0)
+            {
+                patternEntry = database.patternLibrary.Patterns[0];
+                Debug.LogWarning("[BallSkinResolver] Pattern ID non trovato: " + data.patternId + " -> fallback al primo pattern disponibile.");
+            }
+            else
+            {
+                Debug.LogError("[BallSkinResolver] Nessun pattern disponibile.");
+                return false;
+            }
         }
 
         BallColorLibrary.ColorEntry patternColorEntry = database.patternColorLibrary.GetById(data.patternColorId);
         if (patternColorEntry == null)
         {
-            Debug.LogError("[BallSkinResolver] Pattern color ID non trovato: " + data.patternColorId);
-            return false;
+            if (database.patternColorLibrary.Colors != null && database.patternColorLibrary.Colors.Count > 0)
+            {
+                patternColorEntry = database.patternColorLibrary.Colors[0];
+                Debug.LogWarning("[BallSkinResolver] Pattern color ID non trovato: " + data.patternColorId + " -> fallback al primo colore pattern disponibile.");
+            }
+            else
+            {
+                Debug.LogError("[BallSkinResolver] Nessun colore pattern disponibile.");
+                return false;
+            }
         }
 
         baseColor = baseEntry.color;
         patternTexture = patternEntry.texture;
         patternColor = patternColorEntry.color;
-        patternIntensity = data.patternIntensity;
-        patternScale = data.patternScale;
+        patternIntensity = Mathf.Max(0f, data.patternIntensity);
+        patternScale = Mathf.Max(0.01f, data.patternScale);
 
         return true;
     }

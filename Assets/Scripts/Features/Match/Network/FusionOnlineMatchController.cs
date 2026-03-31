@@ -1,17 +1,28 @@
 using Fusion;
 using UnityEngine;
 
+[RequireComponent(typeof(NetworkObject))]
 public class FusionOnlineMatchController : NetworkBehaviour
 {
-    [Header("Resolved Scene References")]
+    private enum MidMatchBreakReason : byte
+    {
+        None = 0,
+        TimeHalftime = 1,
+        ScoreHalfPoint = 2
+    }
+
+    [Header("Scene References")]
     [SerializeField] private BallTurnSpawner ballTurnSpawner;
     [SerializeField] private OnlineGameplayAuthority onlineGameplayAuthority;
     [SerializeField] private ScoreManager scoreManager;
     [SerializeField] private FusionOnlineMatchHUD hud;
+    [SerializeField] private BottomBarOrderSwapper bottomBarOrderSwapper;
+    [SerializeField] private ShotScorePopupUI shotScorePopupUI;
 
-    [Header("Online Rules")]
+    [Header("Rules")]
     [SerializeField] private float defaultTurnDuration = 15f;
-    [SerializeField] private float defaultMatchDuration = 360f;
+    [SerializeField] private float defaultBreakDuration = 8f;
+    [SerializeField] private float postShotPanelDelay = 1.5f;
     [SerializeField] private bool enableStuckBallCheck = true;
     [SerializeField] private float stuckTimeout = 2.5f;
     [SerializeField] private float stuckVelocityThreshold = 0.05f;
@@ -19,52 +30,82 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
+    [Networked] private byte NetMatchModeRaw { get; set; }
+    [Networked] private int NetPointsToWin { get; set; }
+    [Networked] private float NetConfiguredMatchDuration { get; set; }
+
     [Networked] private byte NetCurrentTurnOwnerRaw { get; set; }
     [Networked] private float NetTurnTimeRemaining { get; set; }
     [Networked] private float NetMatchTimeRemaining { get; set; }
+
     [Networked] private int NetScoreP1 { get; set; }
     [Networked] private int NetScoreP2 { get; set; }
+
     [Networked] private NetworkBool NetMatchStarted { get; set; }
     [Networked] private NetworkBool NetMatchEnded { get; set; }
+
+    [Networked] private NetworkBool NetBreakTriggered { get; set; }
+    [Networked] private NetworkBool NetBreakActive { get; set; }
+    [Networked] private float NetBreakTimeRemaining { get; set; }
+    [Networked] private byte NetBreakReasonRaw { get; set; }
+
+    [Networked] private byte NetWinnerRaw { get; set; }
+    [Networked] private NetworkBool NetShotInFlight { get; set; }
     [Networked] private NetworkId NetActiveBallId { get; set; }
+
+    [Networked] private NetworkBool NetPlayer1OnLeft { get; set; }
+
+    [Networked] private NetworkBool NetPendingBreakAfterShot { get; set; }
+    [Networked] private NetworkBool NetPendingEndAfterShot { get; set; }
+    [Networked] private float NetPostShotDelayRemaining { get; set; }
+
+    [Networked, Capacity(64)] private NetworkString<_64> NetPlayer1DisplayName { get; set; }
+    [Networked, Capacity(64)] private NetworkString<_64> NetPlayer2DisplayName { get; set; }
+    [Networked, Capacity(64)] private NetworkString<_64> NetPlayer1SkinId { get; set; }
+    [Networked, Capacity(64)] private NetworkString<_64> NetPlayer2SkinId { get; set; }
+
+    [Networked] private int NetShotPopupSequence { get; set; }
+    [Networked] private int NetShotPopupCombo { get; set; }
+    [Networked] private int NetShotPopupPoints { get; set; }
+    [Networked] private Vector3 NetShotPopupWorldPosition { get; set; }
 
     private BallPhysics watchedBall;
     private Rigidbody watchedBallRb;
     private float stuckTimer;
     private bool currentPlayerScoredThisTurn;
-    private bool subscribedToScore;
+    private bool scoreSubscribed;
+    private bool localPresentationSubmitted;
+    private int lastConsumedShotPopupSequence = -1;
+
+    public MatchMode CurrentMatchMode => (MatchMode)NetMatchModeRaw;
+    public int PointsToWin => NetPointsToWin;
+    public float ConfiguredMatchDuration => NetConfiguredMatchDuration;
 
     public PlayerID CurrentTurnOwner => (PlayerID)NetCurrentTurnOwnerRaw;
     public float CurrentTurnTimeRemaining => NetTurnTimeRemaining;
     public float CurrentMatchTimeRemaining => NetMatchTimeRemaining;
-    public int ScoreP1 => NetScoreP1;
-    public int ScoreP2 => NetScoreP2;
+
     public bool MatchStarted => NetMatchStarted;
     public bool MatchEnded => NetMatchEnded;
 
-    public PlayerID EffectiveLocalPlayerId
-    {
-        get
-        {
-            if (Runner != null)
-                return Runner.IsServer ? PlayerID.Player1 : PlayerID.Player2;
+    public bool MidMatchBreakActive => NetBreakActive;
+    public float CurrentBreakTimeRemaining => NetBreakTimeRemaining;
+    public bool IsTimeHalftimeActive => NetBreakActive && (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.TimeHalftime;
+    public bool IsHalfPointActive => NetBreakActive && (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.ScoreHalfPoint;
 
-            if (onlineGameplayAuthority != null)
-                return onlineGameplayAuthority.LocalPlayerId;
+    public int ScoreP1 => NetScoreP1;
+    public int ScoreP2 => NetScoreP2;
 
-            return PlayerID.Player1;
-        }
-    }
+    public PlayerID Winner => (PlayerID)NetWinnerRaw;
 
-    public PlayerID EffectiveRemotePlayerId
-    {
-        get
-        {
-            return EffectiveLocalPlayerId == PlayerID.Player1
-                ? PlayerID.Player2
-                : PlayerID.Player1;
-        }
-    }
+    public string Player1DisplayName => string.IsNullOrWhiteSpace(NetPlayer1DisplayName.ToString()) ? "Player 1" : NetPlayer1DisplayName.ToString();
+    public string Player2DisplayName => string.IsNullOrWhiteSpace(NetPlayer2DisplayName.ToString()) ? "Player 2" : NetPlayer2DisplayName.ToString();
+
+    public string Player1SkinId => NetPlayer1SkinId.ToString();
+    public string Player2SkinId => NetPlayer2SkinId.ToString();
+
+    public PlayerID EffectiveLocalPlayerId => Runner != null && Runner.IsServer ? PlayerID.Player1 : PlayerID.Player2;
+    public PlayerID EffectiveRemotePlayerId => EffectiveLocalPlayerId == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
 
     public BallPhysics CurrentBall
     {
@@ -73,34 +114,24 @@ public class FusionOnlineMatchController : NetworkBehaviour
             if (Runner == null || NetActiveBallId == default)
                 return null;
 
-            if (Runner.TryFindObject(NetActiveBallId, out NetworkObject obj))
-                return obj != null ? obj.GetComponent<BallPhysics>() : null;
+            if (!Runner.TryFindObject(NetActiveBallId, out NetworkObject obj))
+                return null;
 
-            return null;
+            return obj != null ? obj.GetComponent<BallPhysics>() : null;
         }
     }
 
     public override void Spawned()
     {
-        ResolveSceneReferences();
-        ResolveAndApplyLocalIdentity();
-        RegisterLocalAuthority();
+        ResolveReferences();
+        RegisterAuthorityLocally();
         SubscribeToScoreIfNeeded();
 
         if (Object.HasStateAuthority)
-            InitializeAuthoritativeMatch();
+            InitializeAuthorityState();
 
+        SubmitLocalPresentationIfNeeded();
         ApplyReplicaToLocalSystems();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[FusionOnlineMatchController] Spawned -> " +
-                "HasStateAuthority=" + Object.HasStateAuthority +
-                " | EffectiveLocalPlayer=" + EffectiveLocalPlayerId,
-                this
-            );
-        }
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
@@ -110,16 +141,28 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        ResolveSceneReferences();
-        ResolveAndApplyLocalIdentity();
+        ResolveReferences();
+
+        if (Object.HasStateAuthority)
+            RefreshAuthoritativePresentationFromSession();
+
+        RegisterAuthorityLocally();
 
         if (Object.HasStateAuthority)
             TickAuthority();
 
-        ApplyReplicaToLocalSystems();
+        SubmitLocalPresentationIfNeeded();
     }
 
-    private void ResolveSceneReferences()
+    public override void Render()
+    {
+        ResolveReferences();
+        RegisterAuthorityLocally();
+        ApplyReplicaToLocalSystems();
+        ConsumeReplicatedShotPopupIfNeeded();
+    }
+
+    private void ResolveReferences()
     {
         if (ballTurnSpawner == null)
         {
@@ -131,13 +174,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
 
         if (onlineGameplayAuthority == null)
-        {
-#if UNITY_2023_1_OR_NEWER
-            onlineGameplayAuthority = FindFirstObjectByType<OnlineGameplayAuthority>();
-#else
-            onlineGameplayAuthority = FindObjectOfType<OnlineGameplayAuthority>();
-#endif
-        }
+            onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
 
         if (scoreManager == null)
             scoreManager = ScoreManager.Instance;
@@ -150,99 +187,196 @@ public class FusionOnlineMatchController : NetworkBehaviour
             hud = FindObjectOfType<FusionOnlineMatchHUD>();
 #endif
         }
+
+        if (bottomBarOrderSwapper == null)
+        {
+#if UNITY_2023_1_OR_NEWER
+            bottomBarOrderSwapper = FindFirstObjectByType<BottomBarOrderSwapper>();
+#else
+            bottomBarOrderSwapper = FindObjectOfType<BottomBarOrderSwapper>();
+#endif
+        }
+
+        if (shotScorePopupUI == null)
+        {
+#if UNITY_2023_1_OR_NEWER
+            shotScorePopupUI = FindFirstObjectByType<ShotScorePopupUI>();
+#else
+            shotScorePopupUI = FindObjectOfType<ShotScorePopupUI>();
+#endif
+        }
     }
 
-    private void ResolveAndApplyLocalIdentity()
+    private void RefreshAuthoritativePresentationFromSession()
+    {
+        OnlineMatchSession session = OnlineMatchSession.Instance;
+        if (session == null || !session.HasPreparedSession || session.CurrentSession == null)
+            return;
+
+        OnlineMatchSessionData s = session.CurrentSession;
+
+        if (!string.IsNullOrWhiteSpace(s.hostDisplayName))
+            NetPlayer1DisplayName = s.hostDisplayName.Trim();
+
+        if (s.hasRemoteJoiner && !string.IsNullOrWhiteSpace(s.joinDisplayName))
+            NetPlayer2DisplayName = s.joinDisplayName.Trim();
+
+        if (!string.IsNullOrWhiteSpace(s.player1SkinUniqueId))
+            NetPlayer1SkinId = s.player1SkinUniqueId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(s.player2SkinUniqueId))
+            NetPlayer2SkinId = s.player2SkinUniqueId.Trim();
+    }
+
+    private void RegisterAuthorityLocally()
     {
         if (onlineGameplayAuthority == null)
             return;
 
-        PlayerID localPlayer = EffectiveLocalPlayerId;
-        PlayerID remotePlayer = EffectiveRemotePlayerId;
+        string localName = EffectiveLocalPlayerId == PlayerID.Player1 ? Player1DisplayName : Player2DisplayName;
+        string remoteName = EffectiveLocalPlayerId == PlayerID.Player1 ? Player2DisplayName : Player1DisplayName;
 
-        string p1Name = "Player 1";
-        string p2Name = "Player 2";
+        onlineGameplayAuthority.ConfigureOnline(
+            EffectiveLocalPlayerId,
+            EffectiveRemotePlayerId,
+            Object != null && Object.HasStateAuthority,
+            localName,
+            remoteName,
+            CurrentTurnOwner == PlayerID.None ? PlayerID.Player1 : CurrentTurnOwner
+        );
 
-        OnlineMatchSession session = OnlineMatchSession.Instance;
-        if (session != null && session.HasPreparedSession)
-        {
-            p1Name = session.CurrentSession.hostDisplayName;
-            p2Name = session.CurrentSession.joinDisplayName;
-        }
-        else
-        {
-            MatchRuntimeConfig runtimeConfig = MatchRuntimeConfig.Instance;
-            if (runtimeConfig != null)
-            {
-                p1Name = runtimeConfig.SelectedPlayer1Name;
-                p2Name = runtimeConfig.SelectedPlayer2Name;
-            }
-        }
-
-        string localName = localPlayer == PlayerID.Player1 ? p1Name : p2Name;
-        string remoteName = localPlayer == PlayerID.Player1 ? p2Name : p1Name;
-
-        onlineGameplayAuthority.SetResolvedLocalPlayer(localPlayer, remotePlayer, localName, remoteName);
+        onlineGameplayAuthority.SetOnlineMatchController(this);
         onlineGameplayAuthority.SetStateAuthority(Object != null && Object.HasStateAuthority);
-    }
-
-    private void RegisterLocalAuthority()
-    {
-        if (onlineGameplayAuthority != null)
-        {
-            onlineGameplayAuthority.SetOnlineMatchController(this);
-            onlineGameplayAuthority.SetStateAuthority(Object != null && Object.HasStateAuthority);
-        }
+        onlineGameplayAuthority.SetCurrentTurnOwner(CurrentTurnOwner);
     }
 
     private void SubscribeToScoreIfNeeded()
     {
-        if (subscribedToScore || scoreManager == null)
+        if (scoreSubscribed || scoreManager == null)
             return;
 
         scoreManager.onPointsScored.AddListener(OnScoreManagerPointsScored);
-        subscribedToScore = true;
+        scoreManager.onShotScoreDetailed.AddListener(OnShotScoreDetailed);
+        scoreSubscribed = true;
     }
 
     private void UnsubscribeFromScore()
     {
-        if (!subscribedToScore || scoreManager == null)
+        if (!scoreSubscribed || scoreManager == null)
             return;
 
         scoreManager.onPointsScored.RemoveListener(OnScoreManagerPointsScored);
-        subscribedToScore = false;
+        scoreManager.onShotScoreDetailed.RemoveListener(OnShotScoreDetailed);
+        scoreSubscribed = false;
     }
 
-    private void InitializeAuthoritativeMatch()
+    private void InitializeAuthorityState()
     {
-        float resolvedMatchDuration = defaultMatchDuration;
+        MatchRuntimeConfig config = MatchRuntimeConfig.Instance;
 
-        MatchRuntimeConfig runtimeConfig = MatchRuntimeConfig.Instance;
-        if (runtimeConfig != null)
-            resolvedMatchDuration = Mathf.Max(1f, runtimeConfig.SelectedMatchDuration);
+        MatchMode resolvedMatchMode = config != null ? config.SelectedMatchMode : MatchMode.TimeLimit;
+        int resolvedPointsToWin = config != null ? Mathf.Max(1, config.SelectedPointsToWin) : 16;
+        float resolvedMatchDuration = config != null ? Mathf.Max(1f, config.SelectedMatchDuration) : 180f;
+
+        NetMatchModeRaw = (byte)resolvedMatchMode;
+        NetPointsToWin = resolvedPointsToWin;
+        NetConfiguredMatchDuration = resolvedMatchDuration;
 
         NetCurrentTurnOwnerRaw = (byte)PlayerID.Player1;
         NetTurnTimeRemaining = defaultTurnDuration;
         NetMatchTimeRemaining = resolvedMatchDuration;
+
         NetScoreP1 = 0;
         NetScoreP2 = 0;
+
         NetMatchStarted = true;
         NetMatchEnded = false;
+
+        NetBreakTriggered = false;
+        NetBreakActive = false;
+        NetBreakTimeRemaining = defaultBreakDuration;
+        NetBreakReasonRaw = (byte)MidMatchBreakReason.None;
+
+        NetWinnerRaw = (byte)PlayerID.None;
+        NetShotInFlight = false;
         NetActiveBallId = default;
+
+        NetPlayer1OnLeft = true;
+
+        NetPendingBreakAfterShot = false;
+        NetPendingEndAfterShot = false;
+        NetPostShotDelayRemaining = 0f;
+
+        NetPlayer1DisplayName = ResolveDisplayNameForPlayer(PlayerID.Player1);
+        NetPlayer2DisplayName = ResolveDisplayNameForPlayer(PlayerID.Player2);
+
+        NetPlayer1SkinId = ResolveInitialSkinIdForPlayer(PlayerID.Player1);
+        NetPlayer2SkinId = ResolveInitialSkinIdForPlayer(PlayerID.Player2);
+
+        NetShotPopupSequence = 0;
+        NetShotPopupCombo = 0;
+        NetShotPopupPoints = 0;
+        NetShotPopupWorldPosition = Vector3.zero;
 
         if (scoreManager != null)
             scoreManager.StartMatch();
 
-        SpawnNewActiveBallAuthority(PlayerID.Player1);
+        if (ballTurnSpawner != null)
+            ballTurnSpawner.SetPlayer1Side(true);
 
-        if (logDebug)
+        if (ballTurnSpawner != null)
+            SpawnNewActiveBallAuthority(PlayerID.Player1);
+
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SetOrder(true);
+    }
+
+    private void SubmitLocalPresentationIfNeeded()
+    {
+        if (localPresentationSubmitted)
+            return;
+
+        string localName = ResolveLocalDisplayName();
+        string localSkinId = ResolveLocalEquippedSkinId();
+
+        if (Object.HasStateAuthority)
         {
-            Debug.Log(
-                "[FusionOnlineMatchController] InitializeAuthoritativeMatch -> " +
-                "MatchDuration=" + resolvedMatchDuration +
-                " | TurnDuration=" + defaultTurnDuration,
-                this
-            );
+            ApplyPresentationForPlayer(EffectiveLocalPlayerId, localName, localSkinId);
+            localPresentationSubmitted = true;
+            return;
+        }
+
+        RPC_SubmitLocalPresentation((byte)EffectiveLocalPlayerId, localName, localSkinId);
+        localPresentationSubmitted = true;
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_SubmitLocalPresentation(byte playerRaw, string displayName, string skinId)
+    {
+        ApplyPresentationForPlayer((PlayerID)playerRaw, displayName, skinId);
+    }
+
+    private void ApplyPresentationForPlayer(PlayerID player, string displayName, string skinId)
+    {
+        string safeName = string.IsNullOrWhiteSpace(displayName)
+            ? (player == PlayerID.Player1 ? "Player 1" : "Player 2")
+            : displayName.Trim();
+
+        string safeSkin = string.IsNullOrWhiteSpace(skinId)
+            ? string.Empty
+            : skinId.Trim();
+
+        if (player == PlayerID.Player1)
+        {
+            NetPlayer1DisplayName = safeName;
+            if (!string.IsNullOrWhiteSpace(safeSkin))
+                NetPlayer1SkinId = safeSkin;
+        }
+        else if (player == PlayerID.Player2)
+        {
+            NetPlayer2DisplayName = safeName;
+            if (!string.IsNullOrWhiteSpace(safeSkin))
+                NetPlayer2SkinId = safeSkin;
         }
     }
 
@@ -251,26 +385,130 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (!NetMatchStarted || NetMatchEnded)
             return;
 
-        NetTurnTimeRemaining -= Runner.DeltaTime;
-        NetMatchTimeRemaining -= Runner.DeltaTime;
-
-        if (NetTurnTimeRemaining < 0f)
-            NetTurnTimeRemaining = 0f;
-
-        if (NetMatchTimeRemaining < 0f)
-            NetMatchTimeRemaining = 0f;
-
-        RefreshWatchedBallCache();
-
-        if (NetMatchTimeRemaining <= 0f)
+        if (NetPostShotDelayRemaining > 0f)
         {
-            EndMatchAuthority();
+            NetPostShotDelayRemaining -= Runner.DeltaTime;
+            if (NetPostShotDelayRemaining < 0f)
+                NetPostShotDelayRemaining = 0f;
+
+            if (NetPostShotDelayRemaining <= 0f)
+            {
+                if (NetPendingBreakAfterShot)
+                {
+                    NetPendingBreakAfterShot = false;
+                    StartMidMatchBreakAuthority();
+                    return;
+                }
+
+                if (NetPendingEndAfterShot)
+                {
+                    NetPendingEndAfterShot = false;
+                    EndMatchAuthority();
+                    return;
+                }
+            }
+        }
+
+        if (NetBreakActive)
+        {
+            NetBreakTimeRemaining -= Runner.DeltaTime;
+            if (NetBreakTimeRemaining < 0f)
+                NetBreakTimeRemaining = 0f;
+
+            if (NetBreakTimeRemaining <= 0f)
+                ResumeAfterMidMatchBreakAuthority();
+
             return;
         }
 
-        if (NetTurnTimeRemaining <= 0f)
+        float halftimeThreshold = NetConfiguredMatchDuration * 0.5f;
+
+        if (CurrentMatchMode == MatchMode.TimeLimit)
         {
-            ResolveMissAndAdvanceAuthority();
+            if (NetShotInFlight)
+            {
+                if (!NetBreakTriggered)
+                {
+                    float nextTime = NetMatchTimeRemaining - Runner.DeltaTime;
+
+                    if (nextTime <= halftimeThreshold)
+                    {
+                        NetMatchTimeRemaining = halftimeThreshold;
+                        NetPendingBreakAfterShot = true;
+                    }
+                    else
+                    {
+                        NetMatchTimeRemaining = nextTime;
+                    }
+                }
+                else
+                {
+                    float nextTime = NetMatchTimeRemaining - Runner.DeltaTime;
+
+                    if (nextTime <= 0f)
+                    {
+                        NetMatchTimeRemaining = 0f;
+                        NetPendingEndAfterShot = true;
+                    }
+                    else
+                    {
+                        NetMatchTimeRemaining = nextTime;
+                    }
+                }
+            }
+            else
+            {
+                NetMatchTimeRemaining -= Runner.DeltaTime;
+                if (NetMatchTimeRemaining < 0f)
+                    NetMatchTimeRemaining = 0f;
+            }
+        }
+
+        if (!NetShotInFlight)
+        {
+            NetTurnTimeRemaining -= Runner.DeltaTime;
+            if (NetTurnTimeRemaining < 0f)
+                NetTurnTimeRemaining = 0f;
+        }
+
+        RefreshWatchedBallCache();
+
+        if (!NetShotInFlight)
+        {
+            if (CurrentMatchMode == MatchMode.TimeLimit)
+            {
+                if (!NetBreakTriggered && NetMatchTimeRemaining <= halftimeThreshold)
+                {
+                    NetMatchTimeRemaining = halftimeThreshold;
+                    StartMidMatchBreakAuthority();
+                    return;
+                }
+
+                if (NetBreakTriggered && NetMatchTimeRemaining <= 0f)
+                {
+                    NetMatchTimeRemaining = 0f;
+                    EndMatchAuthority();
+                    return;
+                }
+            }
+            else
+            {
+                if (ShouldEndMatchNow())
+                {
+                    EndMatchAuthority();
+                    return;
+                }
+
+                if (!NetBreakTriggered && ShouldTriggerMidMatchBreak())
+                {
+                    StartMidMatchBreakAuthority();
+                    return;
+                }
+            }
+
+            if (NetTurnTimeRemaining <= 0f)
+                ResolveIdleTimeoutAuthority();
+
             return;
         }
 
@@ -283,9 +521,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
                 if (stuckTimer >= stuckTimeout)
                 {
                     if (currentPlayerScoredThisTurn)
-                        ResolveSuccessfulShotAndContinueAuthority();
+                        ResolveScoringTurnCompletedAuthority();
                     else
-                        ResolveMissAndAdvanceAuthority();
+                        ResolveMissTurnCompletedAuthority();
                 }
             }
             else
@@ -295,113 +533,216 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
     }
 
-    private void RefreshWatchedBallCache()
+    private bool ShouldEndMatchNow()
     {
-        BallPhysics current = CurrentBall;
-        watchedBall = current;
-        watchedBallRb = watchedBall != null ? watchedBall.GetComponent<Rigidbody>() : null;
+        if (CurrentMatchMode == MatchMode.TimeLimit)
+            return NetBreakTriggered && NetMatchTimeRemaining <= 0f;
+
+        if (NetScoreP1 >= NetPointsToWin || NetScoreP2 >= NetPointsToWin)
+            return true;
+
+        if (scoreManager != null && scoreManager.AreAllBoardsFull())
+            return !NetShotInFlight;
+
+        return false;
     }
 
-    private void ApplyReplicaToLocalSystems()
+    private bool ShouldTriggerMidMatchBreak()
     {
-        if (onlineGameplayAuthority != null)
+        if (NetBreakTriggered)
+            return false;
+
+        if (NetShotInFlight)
+            return false;
+
+        if (CurrentMatchMode == MatchMode.TimeLimit)
         {
-            onlineGameplayAuthority.SetCurrentTurnOwner(CurrentTurnOwner);
-            onlineGameplayAuthority.SetStateAuthority(Object != null && Object.HasStateAuthority);
-            onlineGameplayAuthority.SetOnlineMatchController(this);
+            float threshold = NetConfiguredMatchDuration * 0.5f;
+            return NetMatchTimeRemaining <= threshold;
         }
+
+        int halfTarget = Mathf.Max(1, Mathf.CeilToInt(NetPointsToWin * 0.5f));
+        return NetScoreP1 >= halfTarget || NetScoreP2 >= halfTarget;
+    }
+
+    private void StartMidMatchBreakAuthority()
+    {
+        if (!Object.HasStateAuthority || NetMatchEnded || NetBreakTriggered)
+            return;
+
+        NetBreakTriggered = true;
+        NetBreakActive = true;
+        NetBreakTimeRemaining = defaultBreakDuration;
+        NetBreakReasonRaw = (byte)(CurrentMatchMode == MatchMode.TimeLimit
+            ? MidMatchBreakReason.TimeHalftime
+            : MidMatchBreakReason.ScoreHalfPoint);
+
+        NetShotInFlight = false;
+        NetPendingBreakAfterShot = false;
+        NetPostShotDelayRemaining = 0f;
+
+        DespawnActiveBallAuthority();
 
         if (scoreManager != null)
-            scoreManager.SetReplicatedScores(NetScoreP1, NetScoreP2);
+            scoreManager.BeginHalftime();
+
+        NetPlayer1OnLeft = !NetPlayer1OnLeft;
 
         if (ballTurnSpawner != null)
-        {
-            ballTurnSpawner.TryBindCurrentOnlineBallForLocalControl(CurrentBall, CurrentTurnOwner);
-            ballTurnSpawner.ClearOnlineLauncherBindingIfNeeded(CurrentTurnOwner);
-        }
+            ballTurnSpawner.SetPlayer1Side(NetPlayer1OnLeft);
 
-        if (hud != null)
-        {
-            hud.ApplyState(
-                CurrentTurnOwner,
-                NetTurnTimeRemaining,
-                NetMatchTimeRemaining,
-                NetScoreP1,
-                NetScoreP2,
-                NetMatchStarted,
-                NetMatchEnded
-            );
-        }
+        if (ballTurnSpawner != null)
+            ballTurnSpawner.ClearAllBallsInScene();
+
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SetOrder(NetPlayer1OnLeft);
     }
 
-    private void SpawnNewActiveBallAuthority(PlayerID owner)
+    public void RequestResumeAfterHalftime()
     {
-        if (!Object.HasStateAuthority || ballTurnSpawner == null)
+        if (!NetBreakActive || NetMatchEnded)
             return;
 
-        BallPhysics spawned = ballTurnSpawner.SpawnOnlineBallForOwner(owner);
-        if (spawned == null)
+        if (Object.HasStateAuthority)
         {
-            Debug.LogError("[FusionOnlineMatchController] Failed spawning online ball for owner " + owner, this);
+            ResumeAfterMidMatchBreakAuthority();
             return;
         }
 
-        NetworkObject netObj = spawned.GetComponent<NetworkObject>();
-        NetActiveBallId = netObj != null ? netObj.Id : default;
+        RPC_RequestResumeAfterHalftime();
+    }
 
-        watchedBall = spawned;
-        watchedBallRb = spawned.GetComponent<Rigidbody>();
-        stuckTimer = 0f;
-        currentPlayerScoredThisTurn = false;
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestResumeAfterHalftime()
+    {
+        ResumeAfterMidMatchBreakAuthority();
+    }
 
-        NetCurrentTurnOwnerRaw = (byte)owner;
+    private void ResumeAfterMidMatchBreakAuthority()
+    {
+        if (!Object.HasStateAuthority || !NetBreakActive || NetMatchEnded)
+            return;
+
+        NetBreakActive = false;
+        NetBreakTimeRemaining = defaultBreakDuration;
+        NetBreakReasonRaw = (byte)MidMatchBreakReason.None;
         NetTurnTimeRemaining = defaultTurnDuration;
+        NetCurrentTurnOwnerRaw = (byte)PlayerID.Player2;
+        NetShotInFlight = false;
 
-        if (logDebug)
-            Debug.Log("[FusionOnlineMatchController] SpawnNewActiveBallAuthority -> " + owner, this);
+        if (scoreManager != null)
+            scoreManager.EndHalftime();
+
+        SpawnNewActiveBallAuthority(PlayerID.Player2);
+
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SetOrder(NetPlayer1OnLeft);
     }
 
-    private void DespawnActiveBallAuthority()
+    private void ResolveIdleTimeoutAuthority()
     {
-        BallPhysics current = CurrentBall;
-        if (current == null)
+        if (!Object.HasStateAuthority || NetMatchEnded)
+            return;
+
+        PlayerID nextOwner = CurrentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
+
+        DespawnActiveBallAuthority();
+        NetShotInFlight = false;
+        SpawnNewActiveBallAuthority(nextOwner);
+    }
+
+    private void ResolveScoringTurnCompletedAuthority()
+    {
+        if (!Object.HasStateAuthority || NetMatchEnded)
+            return;
+
+        ReleaseCurrentBallFromTurnTrackingAuthority();
+
+        if (NetPendingEndAfterShot)
         {
-            NetActiveBallId = default;
-            watchedBall = null;
-            watchedBallRb = null;
-            stuckTimer = 0f;
+            NetPostShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
             return;
         }
 
-        NetworkObject netObj = current.GetComponent<NetworkObject>();
-        if (netObj != null && Runner != null && Runner.IsServer)
-            Runner.Despawn(netObj);
+        if (NetPendingBreakAfterShot)
+        {
+            NetPostShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
 
-        NetActiveBallId = default;
+        PlayerID sameOwner = CurrentTurnOwner;
+
+        if (CurrentMatchMode == MatchMode.ScoreTarget)
+        {
+            if (ShouldEndMatchNow())
+            {
+                EndMatchAuthority();
+                return;
+            }
+
+            if (!NetBreakTriggered && ShouldTriggerMidMatchBreak())
+            {
+                StartMidMatchBreakAuthority();
+                return;
+            }
+        }
+
+        SpawnNewActiveBallAuthority(sameOwner);
+    }
+
+    private void ResolveMissTurnCompletedAuthority()
+    {
+        if (!Object.HasStateAuthority || NetMatchEnded)
+            return;
+
+        ReleaseCurrentBallFromTurnTrackingAuthority();
+
+        if (NetPendingEndAfterShot)
+        {
+            NetPostShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
+        if (NetPendingBreakAfterShot)
+        {
+            NetPostShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
+        PlayerID nextOwner = CurrentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
+
+        if (CurrentMatchMode == MatchMode.ScoreTarget)
+        {
+            if (ShouldEndMatchNow())
+            {
+                EndMatchAuthority();
+                return;
+            }
+
+            if (!NetBreakTriggered && ShouldTriggerMidMatchBreak())
+            {
+                StartMidMatchBreakAuthority();
+                return;
+            }
+        }
+
+        SpawnNewActiveBallAuthority(nextOwner);
+    }
+
+    private void ReleaseCurrentBallFromTurnTrackingAuthority()
+    {
+        NetShotInFlight = false;
+        NetTurnTimeRemaining = defaultTurnDuration;
         watchedBall = null;
         watchedBallRb = null;
         stuckTimer = 0f;
-    }
-
-    private void FreezeCurrentBallInPlaceAuthority()
-    {
-        BallPhysics current = CurrentBall;
-        if (current == null)
-            return;
-
-        Rigidbody rb = current.GetComponent<Rigidbody>();
-        if (rb == null)
-            return;
-
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
-        rb.constraints = RigidbodyConstraints.FreezeAll;
-        rb.isKinematic = true;
+        currentPlayerScoredThisTurn = false;
+        NetActiveBallId = default;
     }
 
     public void RequestLaunchCurrentBall(Vector3 direction, float force)
     {
-        if (!NetMatchStarted || NetMatchEnded)
+        if (!NetMatchStarted || NetMatchEnded || NetBreakActive || NetPostShotDelayRemaining > 0f)
             return;
 
         if (Object.HasStateAuthority)
@@ -416,16 +757,19 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestLaunch(Vector3 direction, float force, RpcInfo info = default)
     {
-        PlayerID requester = EffectiveRemotePlayerId;
-
-        if (Runner != null && Runner.IsServer)
-        {
-            requester = info.Source == Runner.LocalPlayer
-                ? EffectiveLocalPlayerId
-                : EffectiveRemotePlayerId;
-        }
-
+        PlayerID requester = ResolvePlayerIdFromRpc(info);
         ApplyLaunchAuthority(requester, direction, force);
+    }
+
+    private PlayerID ResolvePlayerIdFromRpc(RpcInfo info)
+    {
+        if (Runner == null)
+            return PlayerID.None;
+
+        if (info.Source == Runner.LocalPlayer)
+            return Runner.IsServer ? PlayerID.Player1 : PlayerID.Player2;
+
+        return Runner.IsServer ? PlayerID.Player2 : PlayerID.Player1;
     }
 
     private void ApplyLaunchAuthority(PlayerID requester, Vector3 direction, float force)
@@ -434,19 +778,14 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return;
 
         if (requester != CurrentTurnOwner)
-        {
-            if (logDebug)
-                Debug.LogWarning("[FusionOnlineMatchController] Launch rejected for requester " + requester, this);
-
             return;
-        }
 
         BallPhysics ball = CurrentBall;
         if (ball == null)
             return;
 
         BallOwnership ownership = ball.GetComponent<BallOwnership>();
-        if (ownership == null || ownership.Owner != CurrentTurnOwner)
+        if (ownership == null || ownership.Owner != requester)
             return;
 
         Rigidbody rb = ball.GetComponent<Rigidbody>();
@@ -461,24 +800,16 @@ public class FusionOnlineMatchController : NetworkBehaviour
             RigidbodyConstraints.FreezeRotationX |
             RigidbodyConstraints.FreezeRotationZ;
 
-        Vector3 launchDirection = direction.normalized;
-        launchDirection.y = 0f;
-        force = Mathf.Max(0f, force);
+        Vector3 launchDir = direction.normalized;
+        launchDir.y = 0f;
 
-        ball.Launch(launchDirection * force);
+        ball.Launch(launchDir * Mathf.Max(0f, force));
 
         watchedBall = ball;
         watchedBallRb = rb;
         stuckTimer = 0f;
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[FusionOnlineMatchController] Launch accepted -> Owner=" + requester +
-                " | Force=" + force,
-                this
-            );
-        }
+        currentPlayerScoredThisTurn = false;
+        NetShotInFlight = true;
     }
 
     public void NotifyAuthoritativeBallLost(BallPhysics ball)
@@ -486,54 +817,189 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (!Object.HasStateAuthority || NetMatchEnded)
             return;
 
-        if (ball == null || ball != CurrentBall)
+        if (ball == null)
             return;
 
-        ResolveMissAndAdvanceAuthority();
-    }
+        bool wasActiveBall = ball == CurrentBall;
 
-    private void ResolveSuccessfulShotAndContinueAuthority()
-    {
-        if (!Object.HasStateAuthority || NetMatchEnded)
+        NetworkObject netObj = ball.GetComponent<NetworkObject>();
+        if (netObj != null && Runner != null && Runner.IsServer)
+            Runner.Despawn(netObj);
+
+        if (!wasActiveBall)
             return;
 
-        FreezeCurrentBallInPlaceAuthority();
-
-        PlayerID sameOwner = CurrentTurnOwner;
-
+        PlayerID nextOwner = CurrentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
+        NetShotInFlight = false;
+        NetTurnTimeRemaining = defaultTurnDuration;
         watchedBall = null;
         watchedBallRb = null;
         stuckTimer = 0f;
+        currentPlayerScoredThisTurn = false;
         NetActiveBallId = default;
 
-        SpawnNewActiveBallAuthority(sameOwner);
-    }
-
-    private void ResolveMissAndAdvanceAuthority()
-    {
-        if (!Object.HasStateAuthority || NetMatchEnded)
+        if (NetPendingEndAfterShot)
+        {
+            NetPostShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
             return;
+        }
 
-        DespawnActiveBallAuthority();
+        if (NetPendingBreakAfterShot)
+        {
+            NetPostShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
 
-        PlayerID nextOwner = CurrentTurnOwner == PlayerID.Player1
-            ? PlayerID.Player2
-            : PlayerID.Player1;
+        if (CurrentMatchMode == MatchMode.ScoreTarget && ShouldEndMatchNow())
+        {
+            EndMatchAuthority();
+            return;
+        }
 
         SpawnNewActiveBallAuthority(nextOwner);
     }
 
+    private void ApplyReplicaToLocalSystems()
+    {
+        if (ballTurnSpawner != null)
+            ballTurnSpawner.SetPlayer1Side(NetPlayer1OnLeft);
+
+        if (onlineGameplayAuthority != null)
+        {
+            onlineGameplayAuthority.SetOnlineMatchController(this);
+            onlineGameplayAuthority.SetStateAuthority(Object != null && Object.HasStateAuthority);
+            onlineGameplayAuthority.SetCurrentTurnOwner(CurrentTurnOwner);
+        }
+
+        if (scoreManager != null)
+            scoreManager.SetReplicatedScores(NetScoreP1, NetScoreP2);
+
+        if (ballTurnSpawner != null)
+        {
+            ballTurnSpawner.TryBindCurrentOnlineBallForLocalControl(CurrentBall, CurrentTurnOwner);
+            ballTurnSpawner.ClearOnlineLauncherBindingIfNeeded(CurrentTurnOwner);
+        }
+
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SetOrder(NetPlayer1OnLeft);
+
+        if (hud != null)
+        {
+            hud.ApplyState(
+                CurrentMatchMode,
+                PointsToWin,
+                ConfiguredMatchDuration,
+                CurrentTurnOwner,
+                NetTurnTimeRemaining,
+                NetMatchTimeRemaining,
+                NetScoreP1,
+                NetScoreP2,
+                NetMatchStarted,
+                NetMatchEnded,
+                NetBreakActive,
+                IsTimeHalftimeActive,
+                IsHalfPointActive,
+                NetBreakTimeRemaining,
+                Player1DisplayName,
+                Player2DisplayName,
+                Winner,
+                NetPlayer1OnLeft
+            );
+        }
+    }
+
+    private void ConsumeReplicatedShotPopupIfNeeded()
+    {
+        if (shotScorePopupUI == null)
+            return;
+
+        if (NetShotPopupSequence <= 0)
+            return;
+
+        if (lastConsumedShotPopupSequence == NetShotPopupSequence)
+            return;
+
+        lastConsumedShotPopupSequence = NetShotPopupSequence;
+        shotScorePopupUI.PlayReplicatedPopup(
+            NetShotPopupCombo,
+            NetShotPopupPoints,
+            NetShotPopupWorldPosition
+        );
+    }
+
+    private void SpawnNewActiveBallAuthority(PlayerID owner)
+    {
+        if (!Object.HasStateAuthority || ballTurnSpawner == null)
+            return;
+
+        string skinId = owner == PlayerID.Player1 ? Player1SkinId : Player2SkinId;
+
+        BallPhysics spawned = ballTurnSpawner.SpawnOnlineBallForOwner(owner, skinId);
+        if (spawned == null)
+        {
+            Debug.LogError("[FusionOnlineMatchController] Failed to spawn online ball.", this);
+            return;
+        }
+
+        NetworkObject netObj = spawned.GetComponent<NetworkObject>();
+        NetActiveBallId = netObj != null ? netObj.Id : default;
+
+        watchedBall = spawned;
+        watchedBallRb = spawned.GetComponent<Rigidbody>();
+        stuckTimer = 0f;
+        currentPlayerScoredThisTurn = false;
+        NetCurrentTurnOwnerRaw = (byte)owner;
+        NetTurnTimeRemaining = defaultTurnDuration;
+        NetShotInFlight = false;
+    }
+
+    private void DespawnActiveBallAuthority()
+    {
+        BallPhysics current = CurrentBall;
+        if (current == null)
+        {
+            NetActiveBallId = default;
+            return;
+        }
+
+        NetworkObject netObj = current.GetComponent<NetworkObject>();
+        if (netObj != null && Runner != null && Runner.IsServer)
+            Runner.Despawn(netObj);
+
+        NetActiveBallId = default;
+        watchedBall = null;
+        watchedBallRb = null;
+        stuckTimer = 0f;
+    }
+
+    private void RefreshWatchedBallCache()
+    {
+        watchedBall = CurrentBall;
+        watchedBallRb = watchedBall != null ? watchedBall.GetComponent<Rigidbody>() : null;
+    }
+
     private void EndMatchAuthority()
     {
-        if (!Object.HasStateAuthority)
+        if (!Object.HasStateAuthority || NetMatchEnded)
             return;
 
         NetMatchEnded = true;
         NetMatchStarted = false;
-        DespawnActiveBallAuthority();
+        NetBreakActive = false;
+        NetShotInFlight = false;
+        NetPendingEndAfterShot = false;
+        NetPostShotDelayRemaining = 0f;
+        NetBreakReasonRaw = (byte)MidMatchBreakReason.None;
 
-        if (logDebug)
-            Debug.Log("[FusionOnlineMatchController] Match ended.", this);
+        if (NetScoreP1 > NetScoreP2)
+            NetWinnerRaw = (byte)PlayerID.Player1;
+        else if (NetScoreP2 > NetScoreP1)
+            NetWinnerRaw = (byte)PlayerID.Player2;
+        else
+            NetWinnerRaw = (byte)PlayerID.None;
+
+        if (scoreManager != null)
+            scoreManager.EndMatch((PlayerID)NetWinnerRaw);
     }
 
     private void OnScoreManagerPointsScored(PlayerID player, int newTotal)
@@ -545,19 +1011,93 @@ public class FusionOnlineMatchController : NetworkBehaviour
         NetScoreP2 = scoreManager.ScoreP2;
 
         if (player == CurrentTurnOwner)
-        {
             currentPlayerScoredThisTurn = true;
+    }
 
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[FusionOnlineMatchController] Score registered -> " +
-                    "Player=" + player +
-                    " | ScoreP1=" + NetScoreP1 +
-                    " | ScoreP2=" + NetScoreP2,
-                    this
-                );
-            }
+    private void OnShotScoreDetailed(ShotScoreData data)
+    {
+        if (!Object.HasStateAuthority || data == null)
+            return;
+
+        NetShotPopupCombo = Mathf.Max(0, data.comboStreak);
+        NetShotPopupPoints = Mathf.Max(0, data.shotPoints);
+        NetShotPopupWorldPosition = data.slotWorldPosition;
+        NetShotPopupSequence += 1;
+    }
+
+    private string ResolveDisplayNameForPlayer(PlayerID player)
+    {
+        OnlineMatchSession session = OnlineMatchSession.Instance;
+        if (session != null && session.HasPreparedSession)
+        {
+            if (player == PlayerID.Player1 && !string.IsNullOrWhiteSpace(session.CurrentSession.hostDisplayName))
+                return session.CurrentSession.hostDisplayName.Trim();
+
+            if (player == PlayerID.Player2 && !string.IsNullOrWhiteSpace(session.CurrentSession.joinDisplayName))
+                return session.CurrentSession.joinDisplayName.Trim();
         }
+
+        MatchRuntimeConfig config = MatchRuntimeConfig.Instance;
+        if (config != null)
+        {
+            if (player == PlayerID.Player1 && !string.IsNullOrWhiteSpace(config.SelectedPlayer1Name))
+                return config.SelectedPlayer1Name.Trim();
+
+            if (player == PlayerID.Player2 && !string.IsNullOrWhiteSpace(config.SelectedPlayer2Name))
+                return config.SelectedPlayer2Name.Trim();
+        }
+
+        return player == PlayerID.Player1 ? "Player 1" : "Player 2";
+    }
+
+    private string ResolveInitialSkinIdForPlayer(PlayerID player)
+    {
+        MatchRuntimeConfig config = MatchRuntimeConfig.Instance;
+        if (config != null)
+        {
+            string configSkin = player == PlayerID.Player1
+                ? config.Player1SkinUniqueId
+                : config.Player2SkinUniqueId;
+
+            if (!string.IsNullOrWhiteSpace(configSkin))
+                return configSkin.Trim();
+        }
+
+        OnlineMatchSession session = OnlineMatchSession.Instance;
+        if (session != null && session.HasPreparedSession)
+        {
+            string sessionSkin = player == PlayerID.Player1
+                ? session.CurrentSession.player1SkinUniqueId
+                : session.CurrentSession.player2SkinUniqueId;
+
+            if (!string.IsNullOrWhiteSpace(sessionSkin))
+                return sessionSkin.Trim();
+        }
+
+        return string.Empty;
+    }
+
+    private string ResolveLocalDisplayName()
+    {
+        MatchRuntimeConfig config = MatchRuntimeConfig.Instance;
+        if (config != null && !string.IsNullOrWhiteSpace(config.SelectedLocalDisplayName))
+            return config.SelectedLocalDisplayName.Trim();
+
+        return EffectiveLocalPlayerId == PlayerID.Player1 ? "Player 1" : "Player 2";
+    }
+
+    private string ResolveLocalEquippedSkinId()
+    {
+        if (PlayerSkinLoadout.Instance == null)
+            return string.Empty;
+
+        BallSkinData skin = EffectiveLocalPlayerId == PlayerID.Player1
+            ? PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer1()
+            : PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer2();
+
+        if (skin == null || string.IsNullOrWhiteSpace(skin.skinUniqueId))
+            return string.Empty;
+
+        return skin.skinUniqueId.Trim();
     }
 }

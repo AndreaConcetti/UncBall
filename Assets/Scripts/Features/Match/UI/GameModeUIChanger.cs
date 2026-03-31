@@ -1,198 +1,139 @@
-using UnityEngine;
 using TMPro;
+using UnityEngine;
 
 public class GameModeUIChanger : MonoBehaviour
 {
-    [Header("References")]
-    public StartEndController startEndController;
-    public TurnManager turnManager;
-    public BallLauncher launcher;
-    public MatchRuntimeConfig matchRuntimeConfig;
-    public TutorialPromptSettings tutorialPromptSettings;
+    [Header("Dependencies")]
+    [SerializeField] private MatchRuntimeConfig matchRuntimeConfig;
+    [SerializeField] private FusionOnlineMatchController onlineMatchController;
+    [SerializeField] private OnlineGameplayAuthority onlineGameplayAuthority;
+    [SerializeField] private BallLauncher launcher;
 
-    [Header("Auto Apply")]
-    public bool applyOnStart = true;
+    [Header("Mode Objects")]
+    [SerializeField] private GameObject[] timeModeObjects;
+    [SerializeField] private GameObject[] scoreModeObjects;
 
-    [Header("Objects for Time Mode")]
-    public GameObject[] timeModeObjects;
+    [Header("Texts")]
+    [SerializeField] private TMP_Text[] targetScoreTexts;
+    [SerializeField] private TMP_Text[] player1NameTexts;
+    [SerializeField] private TMP_Text[] player2NameTexts;
+    [SerializeField] private TMP_Text matchTimerText;
+    [SerializeField] private TMP_Text[] winnerTexts;
 
-    [Header("Objects for Score Mode")]
-    public GameObject[] scoreModeObjects;
+    [Header("Turn Objects")]
+    [SerializeField] private GameObject player1TurnActiveObject;
+    [SerializeField] private GameObject player2TurnActiveObject;
 
-    [Header("Score Target Texts")]
-    public TMP_Text[] targetScoreTexts;
+    [Header("Launcher Phase")]
+    [SerializeField] private GameObject placementPhaseObject;
+    [SerializeField] private GameObject aimReadyPhaseObject;
 
-    [Header("Timer Text")]
-    public TMP_Text matchTimerText;
-    public bool useMinutesSecondsFormat = true;
+    [Header("Config")]
+    [SerializeField] private bool applyOnStart = true;
+    [SerializeField] private string player1FallbackName = "Player 1";
+    [SerializeField] private string player2FallbackName = "Player 2";
+    [SerializeField] private string winnerSuffix = " Wins!";
 
-    [Header("Player Name Texts")]
-    public TMP_Text[] player1NameTexts;
-    public TMP_Text[] player2NameTexts;
-
-    [Header("Turn Active UI")]
-    public GameObject player1TurnActiveObject;
-    public GameObject player2TurnActiveObject;
-
-    [Header("Launcher Phase UI")]
-    [Tooltip("Attivo solo durante la fase di placement della ball")]
-    public GameObject placementPhaseObject;
-
-    [Tooltip("Attivo solo durante la fase di aim dopo il lock del placement")]
-    public GameObject aimReadyPhaseObject;
-
-    [Header("Tutorial Prompt Toggle UI")]
-    [Tooltip("Oggetto visibile quando il tutorial prompt è ON")]
-    public GameObject tutorialPromptOnButton;
-
-    [Tooltip("Oggetto visibile quando il tutorial prompt è OFF")]
-    public GameObject tutorialPromptOffButton;
-
-    [Header("End Game Winner Texts")]
-    public TMP_Text[] winnerTexts;
-    public string player1FallbackName = "Player 1";
-    public string player2FallbackName = "Player 2";
-    public string winnerSuffix = " Wins!";
-
-    void Start()
+    private void Start()
     {
-#if UNITY_2023_1_OR_NEWER
-        if (startEndController == null)
-            startEndController = FindFirstObjectByType<StartEndController>();
-
-        if (turnManager == null)
-            turnManager = FindFirstObjectByType<TurnManager>();
-
-        if (launcher == null)
-            launcher = FindFirstObjectByType<BallLauncher>();
-
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
-
-        if (tutorialPromptSettings == null)
-            tutorialPromptSettings = FindFirstObjectByType<TutorialPromptSettings>();
-#else
-        if (startEndController == null)
-            startEndController = FindObjectOfType<StartEndController>();
-
-        if (turnManager == null)
-            turnManager = FindObjectOfType<TurnManager>();
-
-        if (launcher == null)
-            launcher = FindObjectOfType<BallLauncher>();
-
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
-
-        if (tutorialPromptSettings == null)
-            tutorialPromptSettings = FindObjectOfType<TutorialPromptSettings>();
-#endif
+        ResolveDependencies();
 
         if (applyOnStart)
             ApplyCurrentMode();
 
-        RefreshTurnActiveUI();
-        RefreshLauncherPhaseUI();
-        RefreshTutorialPromptButtons();
-        RefreshTimerText();
+        RefreshAll();
     }
 
-    void Update()
+    private void Update()
     {
-        RefreshTurnActiveUI();
-        RefreshLauncherPhaseUI();
-        RefreshTimerText();
+        RefreshAll();
     }
 
     public void ApplyCurrentMode()
     {
-        StartEndController.MatchMode currentMode = GetCurrentMatchMode();
+        ResolveDependencies();
 
-        bool isTimeMode = currentMode == StartEndController.MatchMode.TimeLimit;
-        bool isScoreMode = currentMode == StartEndController.MatchMode.ScoreTarget;
+        MatchMode mode = matchRuntimeConfig != null
+            ? matchRuntimeConfig.SelectedMatchMode
+            : MatchMode.ScoreTarget;
+
+        bool isTimeMode = mode == MatchMode.TimeLimit;
+        bool isScoreMode = mode == MatchMode.ScoreTarget;
 
         SetObjectsActive(timeModeObjects, isTimeMode);
         SetObjectsActive(scoreModeObjects, isScoreMode);
 
         RefreshPlayerNameTexts();
         RefreshTargetScoreTexts();
+    }
+
+    public void RefreshAll()
+    {
+        RefreshPlayerNameTexts();
+        RefreshTargetScoreTexts();
         RefreshTimerText();
         RefreshTurnActiveUI();
         RefreshLauncherPhaseUI();
-        RefreshTutorialPromptButtons();
     }
 
     public void RefreshPlayerNameTexts()
     {
-        string player1Name = GetPlayer1Name();
-        string player2Name = GetPlayer2Name();
+        string p1 = GetPlayer1Name();
+        string p2 = GetPlayer2Name();
 
-        SetTextArray(player1NameTexts, player1Name);
-        SetTextArray(player2NameTexts, player2Name);
-
-        if (turnManager != null)
-            turnManager.ApplyPlayerNames(player1Name, player2Name);
+        SetTextArray(player1NameTexts, p1);
+        SetTextArray(player2NameTexts, p2);
     }
 
     public void RefreshTargetScoreTexts()
     {
-        if (startEndController == null)
+        if (matchRuntimeConfig == null)
             return;
 
-        string textValue = startEndController.targetScore.ToString();
-        SetTextArray(targetScoreTexts, textValue);
+        SetTextArray(targetScoreTexts, matchRuntimeConfig.SelectedPointsToWin.ToString());
     }
 
     public void RefreshTimerText()
     {
-        if (matchTimerText == null || startEndController == null)
+        if (matchTimerText == null)
             return;
 
-        float currentTime = startEndController.CurrentMatchTimer;
+        ResolveDependencies();
 
-        if (useMinutesSecondsFormat)
-        {
-            int totalSeconds = Mathf.CeilToInt(currentTime);
-            int minutes = totalSeconds / 60;
-            int seconds = totalSeconds % 60;
-            matchTimerText.text = minutes.ToString("00") + ":" + seconds.ToString("00");
-        }
-        else
-        {
-            matchTimerText.text = Mathf.CeilToInt(currentTime).ToString();
-        }
+        float seconds = 0f;
+
+        if (onlineMatchController != null)
+            seconds = onlineMatchController.CurrentMatchTimeRemaining;
+        else if (matchRuntimeConfig != null)
+            seconds = matchRuntimeConfig.SelectedMatchDuration;
+
+        int totalSeconds = Mathf.CeilToInt(Mathf.Max(0f, seconds));
+        int minutes = totalSeconds / 60;
+        int secs = totalSeconds % 60;
+
+        matchTimerText.text = minutes.ToString("00") + ":" + secs.ToString("00");
     }
 
     public void RefreshTurnActiveUI()
     {
-        if (turnManager == null)
-            return;
+        ResolveDependencies();
 
-        bool isPlayer1Turn = turnManager.IsPlayer1Turn;
-        bool isPlayer2Turn = turnManager.IsPlayer2Turn;
+        PlayerID currentTurnOwner = PlayerID.None;
+
+        if (onlineMatchController != null)
+            currentTurnOwner = onlineMatchController.CurrentTurnOwner;
+        else if (onlineGameplayAuthority != null)
+            currentTurnOwner = onlineGameplayAuthority.CurrentTurnOwner;
 
         if (player1TurnActiveObject != null)
-            player1TurnActiveObject.SetActive(isPlayer1Turn);
+            player1TurnActiveObject.SetActive(currentTurnOwner == PlayerID.Player1);
 
         if (player2TurnActiveObject != null)
-            player2TurnActiveObject.SetActive(isPlayer2Turn);
+            player2TurnActiveObject.SetActive(currentTurnOwner == PlayerID.Player2);
     }
 
     public void RefreshLauncherPhaseUI()
     {
-        bool promptsEnabled = AreTutorialPromptsEnabled();
-
-        if (!promptsEnabled)
-        {
-            if (placementPhaseObject != null)
-                placementPhaseObject.SetActive(false);
-
-            if (aimReadyPhaseObject != null)
-                aimReadyPhaseObject.SetActive(false);
-
-            return;
-        }
-
         if (launcher == null)
         {
             if (placementPhaseObject != null)
@@ -204,14 +145,11 @@ public class GameModeUIChanger : MonoBehaviour
             return;
         }
 
-        bool showPlacement = launcher.CurrentPhase == BallLauncher.LaunchPhase.Placement;
-        bool showAimReady = launcher.CurrentPhase == BallLauncher.LaunchPhase.AimReady;
-
         if (placementPhaseObject != null)
-            placementPhaseObject.SetActive(showPlacement);
+            placementPhaseObject.SetActive(launcher.CurrentPhase == BallLauncher.LaunchPhase.Placement);
 
         if (aimReadyPhaseObject != null)
-            aimReadyPhaseObject.SetActive(showAimReady);
+            aimReadyPhaseObject.SetActive(launcher.CurrentPhase == BallLauncher.LaunchPhase.AimReady);
     }
 
     public void RefreshWinnerTexts(PlayerID winner)
@@ -223,11 +161,9 @@ public class GameModeUIChanger : MonoBehaviour
             case PlayerID.Player1:
                 winnerName = GetPlayer1Name();
                 break;
-
             case PlayerID.Player2:
                 winnerName = GetPlayer2Name();
                 break;
-
             default:
                 winnerName = "Draw";
                 break;
@@ -240,92 +176,63 @@ public class GameModeUIChanger : MonoBehaviour
         SetTextArray(winnerTexts, finalText);
     }
 
-    public void ApplyTimeModePreview()
+    private string GetPlayer1Name()
     {
-        SetObjectsActive(timeModeObjects, true);
-        SetObjectsActive(scoreModeObjects, false);
+        ResolveDependencies();
+
+        if (onlineMatchController != null)
+            return string.IsNullOrWhiteSpace(onlineMatchController.Player1DisplayName)
+                ? player1FallbackName
+                : onlineMatchController.Player1DisplayName;
+
+        if (matchRuntimeConfig != null && !string.IsNullOrWhiteSpace(matchRuntimeConfig.SelectedPlayer1Name))
+            return matchRuntimeConfig.SelectedPlayer1Name;
+
+        return player1FallbackName;
     }
 
-    public void ApplyScoreModePreview()
+    private string GetPlayer2Name()
     {
-        SetObjectsActive(timeModeObjects, false);
-        SetObjectsActive(scoreModeObjects, true);
+        ResolveDependencies();
+
+        if (onlineMatchController != null)
+            return string.IsNullOrWhiteSpace(onlineMatchController.Player2DisplayName)
+                ? player2FallbackName
+                : onlineMatchController.Player2DisplayName;
+
+        if (matchRuntimeConfig != null && !string.IsNullOrWhiteSpace(matchRuntimeConfig.SelectedPlayer2Name))
+            return matchRuntimeConfig.SelectedPlayer2Name;
+
+        return player2FallbackName;
     }
 
-    public void ToggleTutorialPrompts()
+    private void ResolveDependencies()
     {
-        if (tutorialPromptSettings == null)
-            return;
+        if (matchRuntimeConfig == null)
+            matchRuntimeConfig = MatchRuntimeConfig.Instance;
 
-        tutorialPromptSettings.Toggle();
-        RefreshTutorialPromptButtons();
-        RefreshLauncherPhaseUI();
+        if (onlineGameplayAuthority == null)
+            onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
+
+        if (onlineMatchController == null && onlineGameplayAuthority != null)
+            onlineMatchController = onlineGameplayAuthority.OnlineMatchController;
+
+#if UNITY_2023_1_OR_NEWER
+        if (onlineMatchController == null)
+            onlineMatchController = FindFirstObjectByType<FusionOnlineMatchController>();
+
+        if (launcher == null)
+            launcher = FindFirstObjectByType<BallLauncher>();
+#else
+        if (onlineMatchController == null)
+            onlineMatchController = FindObjectOfType<FusionOnlineMatchController>();
+
+        if (launcher == null)
+            launcher = FindObjectOfType<BallLauncher>();
+#endif
     }
 
-    public void EnableTutorialPrompts()
-    {
-        if (tutorialPromptSettings == null)
-            return;
-
-        tutorialPromptSettings.SetEnabled(true);
-        RefreshTutorialPromptButtons();
-        RefreshLauncherPhaseUI();
-    }
-
-    public void DisableTutorialPrompts()
-    {
-        if (tutorialPromptSettings == null)
-            return;
-
-        tutorialPromptSettings.SetEnabled(false);
-        RefreshTutorialPromptButtons();
-        RefreshLauncherPhaseUI();
-    }
-
-    public bool AreTutorialPromptsEnabled()
-    {
-        if (tutorialPromptSettings == null)
-            return true;
-
-        return tutorialPromptSettings.TutorialPromptsEnabled;
-    }
-
-    public void RefreshTutorialPromptButtons()
-    {
-        bool promptsEnabled = AreTutorialPromptsEnabled();
-
-        if (tutorialPromptOnButton != null)
-            tutorialPromptOnButton.SetActive(promptsEnabled);
-
-        if (tutorialPromptOffButton != null)
-            tutorialPromptOffButton.SetActive(!promptsEnabled);
-    }
-
-    string GetPlayer1Name()
-    {
-        if (matchRuntimeConfig == null || string.IsNullOrWhiteSpace(matchRuntimeConfig.SelectedPlayer1Name))
-            return player1FallbackName;
-
-        return matchRuntimeConfig.SelectedPlayer1Name;
-    }
-
-    string GetPlayer2Name()
-    {
-        if (matchRuntimeConfig == null || string.IsNullOrWhiteSpace(matchRuntimeConfig.SelectedPlayer2Name))
-            return player2FallbackName;
-
-        return matchRuntimeConfig.SelectedPlayer2Name;
-    }
-
-    StartEndController.MatchMode GetCurrentMatchMode()
-    {
-        if (matchRuntimeConfig != null)
-            return matchRuntimeConfig.SelectedMatchMode;
-
-        return StartEndController.MatchMode.ScoreTarget;
-    }
-
-    void SetObjectsActive(GameObject[] objectsToSet, bool activeState)
+    private void SetObjectsActive(GameObject[] objectsToSet, bool activeState)
     {
         if (objectsToSet == null)
             return;
@@ -337,7 +244,7 @@ public class GameModeUIChanger : MonoBehaviour
         }
     }
 
-    void SetTextArray(TMP_Text[] texts, string value)
+    private void SetTextArray(TMP_Text[] texts, string value)
     {
         if (texts == null)
             return;

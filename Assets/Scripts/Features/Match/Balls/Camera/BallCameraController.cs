@@ -1,73 +1,47 @@
 ﻿using UnityEngine;
 
-/// <summary>
-/// Camera controller:
-/// - overview ortografica con viewport + autofit
-/// - aim principalmente basata su CameraAimP1 / CameraAimP2
-/// - piccola compensazione opzionale per viewport stretti
-/// - ritorno alla overview dopo il lancio
-/// </summary>
 public class BallCameraController : MonoBehaviour
 {
     [Header("References")]
-    public Camera cam;
-    public TurnManager turnManager;
-    public BallTurnSpawner ballTurnSpawner;
-    public AutoFitOrthographicCamera autoFit;
-    public CameraViewportFitter viewportFitter;
-    public BallLauncher ballLauncher;
+    [SerializeField] private Camera cam;
+    [SerializeField] private BallTurnSpawner ballTurnSpawner;
+    [SerializeField] private AutoFitOrthographicCamera autoFit;
+    [SerializeField] private CameraViewportFitter viewportFitter;
+    [SerializeField] private BallLauncher ballLauncher;
+    [SerializeField] private OnlineGameplayAuthority onlineAuthority;
 
-    [Header("Camera Positions")]
-    public Transform overviewAnchor;
-    public Transform leftSideAimAnchor;
-    public Transform rightSideAimAnchor;
+    [Header("Strategic Camera")]
+    [SerializeField] private Transform overviewAnchor;
+    [SerializeField] private float overviewOrthoSizeFallback = 4f;
+
+    [Header("Aim Anchors")]
+    [SerializeField] private Transform leftSideAimAnchor;
+    [SerializeField] private Transform rightSideAimAnchor;
 
     [Header("Transition")]
-    [Range(1f, 20f)]
-    public float transitionSpeed = 4.9f;
+    [SerializeField, Range(1f, 20f)] private float transitionSpeed = 5f;
 
-    [Header("Overview Orthographic")]
-    public float overviewOrthoSizeFallback = 4f;
+    [Header("Aim Projection")]
+    [SerializeField] private bool usePerspectiveInAim = true;
+    [SerializeField, Range(10f, 90f)] private float leftAimFieldOfView = 90f;
+    [SerializeField, Range(10f, 90f)] private float rightAimFieldOfView = 90f;
+    [SerializeField] private float aimOrthoSize = 3f;
 
-    [Header("Aim Perspective")]
-    public bool usePerspectiveInAim = true;
+    [Header("Aim Pose")]
+    [SerializeField] private bool useAimAnchorsAsPrimaryPose = true;
+    [SerializeField] private Vector3 leftAimLocalOffset = Vector3.zero;
+    [SerializeField] private Vector3 rightAimLocalOffset = Vector3.zero;
 
-    [Range(10f, 90f)]
-    public float leftAimFieldOfView = 90f;
-
-    [Range(10f, 90f)]
-    public float rightAimFieldOfView = 90f;
-
-    public float aimOrthoSize = 3f;
-
-    [Header("Aim Viewport")]
-    public bool keepViewportInAim = true;
-
-    [Header("Aim Anchor Framing")]
-    [Tooltip("Se attivo, usa direttamente CameraAimP1 / CameraAimP2 come base della posa aim.")]
-    public bool useAimAnchorsAsPrimaryPose = true;
-
-    [Tooltip("Offset locale applicato all'anchor aim sinistro. X = destra/sinistra, Y = alto/basso, Z = avanti/indietro locale.")]
-    public Vector3 leftAimLocalOffset = Vector3.zero;
-
-    [Tooltip("Offset locale applicato all'anchor aim destro. X = destra/sinistra, Y = alto/basso, Z = avanti/indietro locale.")]
-    public Vector3 rightAimLocalOffset = Vector3.zero;
-
-    [Header("Aim Viewport Compensation")]
-    [Tooltip("Aspetto di riferimento per cui gli anchor sono stati calibrati.")]
-    public float referenceAimAspect = 0.5625f;
-
-    [Tooltip("Quanto arretrare localmente l'aim camera quando il viewport utile è più stretto del riferimento.")]
-    public float aimLocalZCompensation = 0f;
-
-    [Tooltip("Quanto alzare localmente l'aim camera quando il viewport utile è più stretto del riferimento.")]
-    public float aimLocalYCompensation = 0f;
+    [Header("Viewport Compensation")]
+    [SerializeField] private bool keepViewportInAim = true;
+    [SerializeField] private float referenceAimAspect = 0.5625f;
+    [SerializeField] private float aimLocalZCompensation = 0f;
+    [SerializeField] private float aimLocalYCompensation = 0f;
 
     [Header("Debug")]
-    public bool debugLogs = false;
+    [SerializeField] private bool debugLogs = false;
 
     private bool isAiming;
-
     private Vector3 targetPosition;
     private Quaternion targetRotation;
 
@@ -80,7 +54,7 @@ public class BallCameraController : MonoBehaviour
     public bool IsAiming => isAiming;
     public bool IsOverview => !isAiming;
 
-    void Awake()
+    private void Awake()
     {
         if (cam == null)
             cam = GetComponent<Camera>();
@@ -90,51 +64,20 @@ public class BallCameraController : MonoBehaviour
             targetPosition = cam.transform.position;
             targetRotation = cam.transform.rotation;
         }
-
-        isAiming = false;
     }
 
-    void Start()
+    private void Start()
     {
-        if (turnManager == null)
-            turnManager = TurnManager.Instance;
-
-#if UNITY_2023_1_OR_NEWER
-        if (ballTurnSpawner == null)
-            ballTurnSpawner = FindFirstObjectByType<BallTurnSpawner>();
-
-        if (autoFit == null)
-            autoFit = FindFirstObjectByType<AutoFitOrthographicCamera>();
-
-        if (viewportFitter == null)
-            viewportFitter = FindFirstObjectByType<CameraViewportFitter>();
-
-        if (ballLauncher == null)
-            ballLauncher = FindFirstObjectByType<BallLauncher>();
-#else
-        if (ballTurnSpawner == null)
-            ballTurnSpawner = FindObjectOfType<BallTurnSpawner>();
-
-        if (autoFit == null)
-            autoFit = FindObjectOfType<AutoFitOrthographicCamera>();
-
-        if (viewportFitter == null)
-            viewportFitter = FindObjectOfType<CameraViewportFitter>();
-
-        if (ballLauncher == null)
-            ballLauncher = FindObjectOfType<BallLauncher>();
-#endif
-
+        ResolveDependencies();
         ApplyOverviewAndCache(true);
     }
 
-    void LateUpdate()
+    private void LateUpdate()
     {
         if (cam == null)
             return;
 
         float t = 1f - Mathf.Exp(-transitionSpeed * Time.deltaTime);
-
         cam.transform.position = Vector3.Lerp(cam.transform.position, targetPosition, t);
         cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, targetRotation, t);
     }
@@ -144,6 +87,7 @@ public class BallCameraController : MonoBehaviour
         if (cam == null)
             return;
 
+        ResolveDependencies();
         isAiming = aiming;
 
         if (!aiming)
@@ -154,31 +98,34 @@ public class BallCameraController : MonoBehaviour
 
         SaveCurrentOverviewPose();
 
-        Transform aimAnchor = GetCurrentAimAnchor(out bool playerIsOnLeft);
+        Transform aimAnchor = GetCurrentAimAnchor(out bool localAimSideIsLeft);
         if (aimAnchor == null)
         {
             ApplyOverviewAndCache(false);
             return;
         }
 
-        ApplyAimProjectionAndViewport(playerIsOnLeft);
+        ApplyAimProjectionAndViewport(localAimSideIsLeft);
 
         if (useAimAnchorsAsPrimaryPose)
         {
-            BuildAimPoseFromAnchor(aimAnchor, playerIsOnLeft, out Vector3 aimPos, out Quaternion aimRot);
+            BuildAimPoseFromAnchor(aimAnchor, localAimSideIsLeft, out Vector3 aimPos, out Quaternion aimRot);
             targetPosition = aimPos;
             targetRotation = aimRot;
-
-            if (debugLogs)
-                Debug.Log($"[BallCameraController] Aim pose from anchor. Pos={aimPos}, Rot={aimRot.eulerAngles}");
         }
         else
         {
             targetPosition = aimAnchor.position;
             targetRotation = aimAnchor.rotation;
+        }
 
-            if (debugLogs)
-                Debug.Log("[BallCameraController] Aim pose using raw anchor transform.");
+        if (debugLogs)
+        {
+            Debug.Log(
+                "[BallCameraController] SetAiming -> " +
+                "LocalAimSideIsLeft=" + localAimSideIsLeft,
+                this
+            );
         }
     }
 
@@ -238,14 +185,10 @@ public class BallCameraController : MonoBehaviour
         {
             cam.transform.position = cachedOverviewPosition;
             cam.transform.rotation = cachedOverviewRotation;
-            targetPosition = cachedOverviewPosition;
-            targetRotation = cachedOverviewRotation;
         }
-        else
-        {
-            targetPosition = cachedOverviewPosition;
-            targetRotation = cachedOverviewRotation;
-        }
+
+        targetPosition = cachedOverviewPosition;
+        targetRotation = cachedOverviewRotation;
     }
 
     private void SaveCurrentOverviewPose()
@@ -260,11 +203,8 @@ public class BallCameraController : MonoBehaviour
         hasCachedOverviewPose = true;
     }
 
-    private void ApplyAimProjectionAndViewport(bool playerIsOnLeft)
+    private void ApplyAimProjectionAndViewport(bool isLeftSide)
     {
-        if (cam == null)
-            return;
-
         if (keepViewportInAim)
         {
             if (viewportFitter != null)
@@ -280,7 +220,7 @@ public class BallCameraController : MonoBehaviour
         if (usePerspectiveInAim)
         {
             cam.orthographic = false;
-            cam.fieldOfView = playerIsOnLeft ? leftAimFieldOfView : rightAimFieldOfView;
+            cam.fieldOfView = isLeftSide ? leftAimFieldOfView : rightAimFieldOfView;
         }
         else
         {
@@ -289,9 +229,9 @@ public class BallCameraController : MonoBehaviour
         }
     }
 
-    private void BuildAimPoseFromAnchor(Transform aimAnchor, bool playerIsOnLeft, out Vector3 builtPosition, out Quaternion builtRotation)
+    private void BuildAimPoseFromAnchor(Transform aimAnchor, bool isLeftSide, out Vector3 builtPosition, out Quaternion builtRotation)
     {
-        Vector3 localOffset = playerIsOnLeft ? leftAimLocalOffset : rightAimLocalOffset;
+        Vector3 localOffset = isLeftSide ? leftAimLocalOffset : rightAimLocalOffset;
         Vector3 compensatedLocalOffset = localOffset + GetViewportCompensationLocalOffset();
 
         builtPosition = aimAnchor.TransformPoint(compensatedLocalOffset);
@@ -309,74 +249,61 @@ public class BallCameraController : MonoBehaviour
             return Vector3.zero;
 
         float t = Mathf.Clamp01((referenceAimAspect - currentAspect) / referenceAimAspect);
-
-        return new Vector3(
-            0f,
-            aimLocalYCompensation * t,
-            -aimLocalZCompensation * t
-        );
+        return new Vector3(0f, aimLocalYCompensation * t, -aimLocalZCompensation * t);
     }
 
     private float GetEffectiveCameraAspect()
     {
-        if (cam == null)
-            return 1f;
-
         Rect rect = cam.rect;
         float pixelWidth = Mathf.Max(1f, Screen.width * rect.width);
         float pixelHeight = Mathf.Max(1f, Screen.height * rect.height);
-
         return pixelWidth / pixelHeight;
     }
 
-    private Transform GetCurrentAimAnchor(out bool playerIsOnLeft)
+    private Transform GetCurrentAimAnchor(out bool localAimSideIsLeft)
     {
-        playerIsOnLeft = true;
+        localAimSideIsLeft = true;
 
-        if (turnManager == null || ballTurnSpawner == null || turnManager.currentPlayer == null)
+        if (ballTurnSpawner == null || onlineAuthority == null)
             return overviewAnchor;
 
-        playerIsOnLeft = ballTurnSpawner.IsPlayerOnLeft(
-            turnManager.currentPlayer,
-            turnManager.player1,
-            turnManager.player2
-        );
+        PlayerID playerToFrame = onlineAuthority.LocalPlayerId;
+        localAimSideIsLeft = ballTurnSpawner.IsPlayerIdOnLeft(playerToFrame);
 
-        if (playerIsOnLeft)
-            return leftSideAimAnchor != null ? leftSideAimAnchor : overviewAnchor;
-
-        return rightSideAimAnchor != null ? rightSideAimAnchor : overviewAnchor;
+        return localAimSideIsLeft
+            ? (leftSideAimAnchor != null ? leftSideAimAnchor : overviewAnchor)
+            : (rightSideAimAnchor != null ? rightSideAimAnchor : overviewAnchor);
     }
 
-#if UNITY_EDITOR
-    void OnDrawGizmosSelected()
+    private void ResolveDependencies()
     {
-        if (overviewAnchor != null)
-        {
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawWireSphere(overviewAnchor.position, 0.2f);
-            Gizmos.DrawRay(overviewAnchor.position, overviewAnchor.forward * 1.5f);
-        }
+        if (onlineAuthority == null)
+            onlineAuthority = OnlineGameplayAuthority.Instance;
 
-        if (leftSideAimAnchor != null)
-        {
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(leftSideAimAnchor.position, 0.2f);
-            Gizmos.DrawRay(leftSideAimAnchor.position, leftSideAimAnchor.forward * 1.5f);
+#if UNITY_2023_1_OR_NEWER
+        if (ballTurnSpawner == null)
+            ballTurnSpawner = FindFirstObjectByType<BallTurnSpawner>();
 
-            Vector3 leftPos = leftSideAimAnchor.TransformPoint(leftAimLocalOffset);
-            Gizmos.DrawWireSphere(leftPos, 0.12f);
-        }
+        if (autoFit == null)
+            autoFit = FindFirstObjectByType<AutoFitOrthographicCamera>();
 
-        if (rightSideAimAnchor != null)
-        {
-            Gizmos.color = Color.magenta;
-            Gizmos.DrawWireSphere(rightSideAimAnchor.position, 0.2f);
-            Gizmos.DrawRay(rightSideAimAnchor.position, rightSideAimAnchor.forward * 1.5f);
+        if (viewportFitter == null)
+            viewportFitter = FindFirstObjectByType<CameraViewportFitter>();
 
-            Vector3 rightPos = rightSideAimAnchor.TransformPoint(rightAimLocalOffset);
-            Gizmos.DrawWireSphere(rightPos, 0.12f);
-        }
-    }
+        if (ballLauncher == null)
+            ballLauncher = FindFirstObjectByType<BallLauncher>();
+#else
+        if (ballTurnSpawner == null)
+            ballTurnSpawner = FindObjectOfType<BallTurnSpawner>();
+
+        if (autoFit == null)
+            autoFit = FindObjectOfType<AutoFitOrthographicCamera>();
+
+        if (viewportFitter == null)
+            viewportFitter = FindObjectOfType<CameraViewportFitter>();
+
+        if (ballLauncher == null)
+            ballLauncher = FindObjectOfType<BallLauncher>();
 #endif
+    }
 }

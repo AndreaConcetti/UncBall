@@ -43,11 +43,11 @@ public class MatchRuntimeConfig : MonoBehaviour
     [SerializeField] private bool dontDestroyOnLoad = true;
 
     [Header("Runtime Config")]
-    [SerializeField] private GameMode selectedGameMode = GameMode.Versus;
-    [SerializeField] private StartEndController.MatchMode selectedMatchMode = StartEndController.MatchMode.ScoreTarget;
-    [SerializeField] private OpponentType selectedOpponentType = OpponentType.LocalGuest;
-    [SerializeField] private MatchSessionType selectedSessionType = MatchSessionType.OfflineLocal;
-    [SerializeField] private MatchAuthorityType selectedAuthorityType = MatchAuthorityType.LocalDevice;
+    [SerializeField] private GameMode selectedGameMode = GameMode.Multiplayer;
+    [SerializeField] private MatchMode selectedMatchMode = MatchMode.ScoreTarget;
+    [SerializeField] private OpponentType selectedOpponentType = OpponentType.RemotePlayer;
+    [SerializeField] private MatchSessionType selectedSessionType = MatchSessionType.OnlinePrivate;
+    [SerializeField] private MatchAuthorityType selectedAuthorityType = MatchAuthorityType.HostClient;
     [SerializeField] private LocalParticipantSlot selectedLocalParticipantSlot = LocalParticipantSlot.Player1;
 
     [SerializeField] private int selectedPointsToWin = 16;
@@ -68,16 +68,20 @@ public class MatchRuntimeConfig : MonoBehaviour
     [SerializeField] private string selectedRoomCode = "";
     [SerializeField] private string selectedRemotePlayerId = "";
 
+    [Header("Player Skins")]
+    [SerializeField] private string player1SkinUniqueId = "";
+    [SerializeField] private string player2SkinUniqueId = "";
+
     [Header("Progression Policy")]
-    [SerializeField] private bool selectedAllowChestRewards = true;
-    [SerializeField] private bool selectedAllowXpRewards = true;
-    [SerializeField] private bool selectedAllowStatsProgression = true;
+    [SerializeField] private bool selectedAllowChestRewards = false;
+    [SerializeField] private bool selectedAllowXpRewards = false;
+    [SerializeField] private bool selectedAllowStatsProgression = false;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
     public GameMode SelectedGameMode => selectedGameMode;
-    public StartEndController.MatchMode SelectedMatchMode => selectedMatchMode;
+    public MatchMode SelectedMatchMode => selectedMatchMode;
     public OpponentType SelectedOpponentType => selectedOpponentType;
     public MatchSessionType SelectedSessionType => selectedSessionType;
     public MatchAuthorityType SelectedAuthorityType => selectedAuthorityType;
@@ -100,6 +104,9 @@ public class MatchRuntimeConfig : MonoBehaviour
     public string SelectedRoomCode => selectedRoomCode;
     public string SelectedRemotePlayerId => selectedRemotePlayerId;
 
+    public string Player1SkinUniqueId => player1SkinUniqueId;
+    public string Player2SkinUniqueId => player2SkinUniqueId;
+
     public bool SelectedAllowChestRewards => selectedAllowChestRewards;
     public bool SelectedAllowXpRewards => selectedAllowXpRewards;
     public bool SelectedAllowStatsProgression => selectedAllowStatsProgression;
@@ -108,10 +115,6 @@ public class MatchRuntimeConfig : MonoBehaviour
         selectedSessionType == MatchSessionType.OnlinePrivate ||
         selectedSessionType == MatchSessionType.OnlineMatchmaking;
 
-    public bool IsOfflineMatch =>
-        selectedSessionType == MatchSessionType.OfflineLocal ||
-        selectedSessionType == MatchSessionType.OfflineBot;
-
     public bool LocalProfileOwnsPlayer1 => selectedLocalParticipantSlot == LocalParticipantSlot.Player1;
     public bool LocalProfileOwnsPlayer2 => selectedLocalParticipantSlot == LocalParticipantSlot.Player2;
 
@@ -119,211 +122,22 @@ public class MatchRuntimeConfig : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
-            DestroyDuplicateRuntimeRoot();
+            GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
+            Destroy(duplicateRoot);
             return;
         }
 
         Instance = this;
-        MarkRuntimeRootPersistentIfNeeded();
 
-        if (logDebug)
+        if (dontDestroyOnLoad)
         {
-            Debug.Log(
-                "[MatchRuntimeConfig] Initialized. " +
-                "GameMode=" + selectedGameMode +
-                " | MatchMode=" + selectedMatchMode +
-                " | OpponentType=" + selectedOpponentType +
-                " | SessionType=" + selectedSessionType +
-                " | AuthorityType=" + selectedAuthorityType +
-                " | LocalSlot=" + selectedLocalParticipantSlot +
-                " | PointsToWin=" + selectedPointsToWin +
-                " | Duration=" + selectedMatchDuration +
-                " | Ranked=" + selectedIsRanked +
-                " | LiveServices=" + selectedUseLiveMultiplayerServices +
-                " | SessionId=" + selectedSessionId +
-                " | RoomCode=" + selectedRoomCode +
-                " | LocalProfileId=" + selectedLocalProfileId +
-                " | P1=" + selectedPlayer1Name +
-                " | P2=" + selectedPlayer2Name,
-                this
-            );
-        }
-    }
-
-    public void ConfigureLocalVersusScoreMode(
-        int pointsToWin,
-        string localProfileId,
-        string localDisplayName,
-        string guestDisplayName)
-    {
-        selectedGameMode = GameMode.Versus;
-        selectedMatchMode = StartEndController.MatchMode.ScoreTarget;
-        selectedOpponentType = OpponentType.LocalGuest;
-        selectedSessionType = MatchSessionType.OfflineLocal;
-        selectedAuthorityType = MatchAuthorityType.LocalDevice;
-        selectedLocalParticipantSlot = LocalParticipantSlot.Player1;
-        selectedPointsToWin = Mathf.Max(1, pointsToWin);
-        selectedMatchDuration = Mathf.Max(1f, selectedMatchDuration);
-        selectedIsRanked = false;
-
-        selectedLocalProfileId = SanitizeProfileId(localProfileId, "local_player_1");
-        selectedLocalDisplayName = SanitizeName(localDisplayName, "Player 1");
-        selectedOpponentDisplayName = SanitizeName(guestDisplayName, "Player 2");
-
-        selectedUseLiveMultiplayerServices = false;
-        selectedIsHost = false;
-        selectedSessionId = string.Empty;
-        selectedRoomCode = string.Empty;
-        selectedRemotePlayerId = string.Empty;
-
-        selectedAllowChestRewards = true;
-        selectedAllowXpRewards = true;
-        selectedAllowStatsProgression = true;
-
-        ApplyDisplayedPlayerNamesFromLocalSlot();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[MatchRuntimeConfig] ConfigureLocalVersusScoreMode -> " +
-                "PointsToWin=" + selectedPointsToWin +
-                " | LocalProfileId=" + selectedLocalProfileId +
-                " | LocalName=" + selectedLocalDisplayName +
-                " | GuestName=" + selectedOpponentDisplayName,
-                this
-            );
-        }
-    }
-
-    public void ConfigureLocalVersusTimeMode(
-        float matchDuration,
-        int fallbackPointsToWin,
-        string localProfileId,
-        string localDisplayName,
-        string guestDisplayName)
-    {
-        selectedGameMode = GameMode.Versus;
-        selectedMatchMode = StartEndController.MatchMode.TimeLimit;
-        selectedOpponentType = OpponentType.LocalGuest;
-        selectedSessionType = MatchSessionType.OfflineLocal;
-        selectedAuthorityType = MatchAuthorityType.LocalDevice;
-        selectedLocalParticipantSlot = LocalParticipantSlot.Player1;
-        selectedMatchDuration = Mathf.Max(1f, matchDuration);
-        selectedPointsToWin = Mathf.Max(1, fallbackPointsToWin);
-        selectedIsRanked = false;
-
-        selectedLocalProfileId = SanitizeProfileId(localProfileId, "local_player_1");
-        selectedLocalDisplayName = SanitizeName(localDisplayName, "Player 1");
-        selectedOpponentDisplayName = SanitizeName(guestDisplayName, "Player 2");
-
-        selectedUseLiveMultiplayerServices = false;
-        selectedIsHost = false;
-        selectedSessionId = string.Empty;
-        selectedRoomCode = string.Empty;
-        selectedRemotePlayerId = string.Empty;
-
-        selectedAllowChestRewards = true;
-        selectedAllowXpRewards = true;
-        selectedAllowStatsProgression = true;
-
-        ApplyDisplayedPlayerNamesFromLocalSlot();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[MatchRuntimeConfig] ConfigureLocalVersusTimeMode -> " +
-                "Duration=" + selectedMatchDuration +
-                " | LocalProfileId=" + selectedLocalProfileId +
-                " | LocalName=" + selectedLocalDisplayName +
-                " | GuestName=" + selectedOpponentDisplayName,
-                this
-            );
-        }
-    }
-
-    public void ConfigureBotMode(
-        string localProfileId,
-        string localDisplayName,
-        string botDisplayName = "BOT",
-        int pointsToWin = 16,
-        float matchDuration = 180f,
-        StartEndController.MatchMode matchMode = StartEndController.MatchMode.ScoreTarget)
-    {
-        selectedGameMode = GameMode.Bot;
-        selectedMatchMode = matchMode;
-        selectedOpponentType = OpponentType.Bot;
-        selectedSessionType = MatchSessionType.OfflineBot;
-        selectedAuthorityType = MatchAuthorityType.LocalDevice;
-        selectedLocalParticipantSlot = LocalParticipantSlot.Player1;
-        selectedPointsToWin = Mathf.Max(1, pointsToWin);
-        selectedMatchDuration = Mathf.Max(1f, matchDuration);
-        selectedIsRanked = false;
-
-        selectedLocalProfileId = SanitizeProfileId(localProfileId, "local_player_1");
-        selectedLocalDisplayName = SanitizeName(localDisplayName, "Player 1");
-        selectedOpponentDisplayName = SanitizeName(botDisplayName, "BOT");
-
-        selectedUseLiveMultiplayerServices = false;
-        selectedIsHost = false;
-        selectedSessionId = string.Empty;
-        selectedRoomCode = string.Empty;
-        selectedRemotePlayerId = string.Empty;
-
-        selectedAllowChestRewards = true;
-        selectedAllowXpRewards = true;
-        selectedAllowStatsProgression = true;
-
-        ApplyDisplayedPlayerNamesFromLocalSlot();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[MatchRuntimeConfig] ConfigureBotMode -> " +
-                "MatchMode=" + selectedMatchMode +
-                " | LocalProfileId=" + selectedLocalProfileId +
-                " | LocalName=" + selectedLocalDisplayName +
-                " | BotName=" + selectedOpponentDisplayName,
-                this
-            );
+            GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+            DontDestroyOnLoad(runtimeRoot);
         }
     }
 
     public void ConfigureMultiplayerMode(
-        StartEndController.MatchMode matchMode,
-        int pointsToWin,
-        float matchDuration,
-        string localProfileId,
-        string localDisplayName,
-        string remoteDisplayName,
-        bool isRanked,
-        MatchSessionType sessionType = MatchSessionType.OnlinePrivate,
-        MatchAuthorityType authorityType = MatchAuthorityType.DedicatedServer,
-        LocalParticipantSlot localParticipantSlot = LocalParticipantSlot.Player1)
-    {
-        ConfigureMultiplayerMode(
-            matchMode,
-            pointsToWin,
-            matchDuration,
-            localProfileId,
-            localDisplayName,
-            remoteDisplayName,
-            isRanked,
-            sessionType,
-            authorityType,
-            localParticipantSlot,
-            useLiveMultiplayerServices: false,
-            isHost: false,
-            sessionId: string.Empty,
-            roomCode: string.Empty,
-            remotePlayerId: string.Empty,
-            allowChestRewards: false,
-            allowXpRewards: false,
-            allowStatsProgression: false
-        );
-    }
-
-    public void ConfigureMultiplayerMode(
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
         string localProfileId,
@@ -352,15 +166,15 @@ public class MatchRuntimeConfig : MonoBehaviour
         selectedMatchDuration = Mathf.Max(1f, matchDuration);
         selectedIsRanked = isRanked;
 
-        selectedLocalProfileId = SanitizeProfileId(localProfileId, "local_player_1");
-        selectedLocalDisplayName = SanitizeName(localDisplayName, "Player 1");
-        selectedOpponentDisplayName = SanitizeName(remoteDisplayName, "Remote Player");
+        selectedLocalProfileId = Sanitize(localProfileId, "local_player_1");
+        selectedLocalDisplayName = Sanitize(localDisplayName, "Player 1");
+        selectedOpponentDisplayName = Sanitize(remoteDisplayName, "Player 2");
 
         selectedUseLiveMultiplayerServices = useLiveMultiplayerServices;
         selectedIsHost = isHost;
-        selectedSessionId = SanitizeOptionalValue(sessionId);
-        selectedRoomCode = SanitizeOptionalValue(roomCode);
-        selectedRemotePlayerId = SanitizeOptionalValue(remotePlayerId);
+        selectedSessionId = Sanitize(sessionId, string.Empty);
+        selectedRoomCode = Sanitize(roomCode, string.Empty);
+        selectedRemotePlayerId = Sanitize(remotePlayerId, string.Empty);
 
         selectedAllowChestRewards = allowChestRewards;
         selectedAllowXpRewards = allowXpRewards;
@@ -374,22 +188,18 @@ public class MatchRuntimeConfig : MonoBehaviour
                 "[MatchRuntimeConfig] ConfigureMultiplayerMode -> " +
                 "MatchMode=" + selectedMatchMode +
                 " | SessionType=" + selectedSessionType +
-                " | AuthorityType=" + selectedAuthorityType +
                 " | LocalSlot=" + selectedLocalParticipantSlot +
-                " | Ranked=" + selectedIsRanked +
-                " | LiveServices=" + selectedUseLiveMultiplayerServices +
-                " | IsHost=" + selectedIsHost +
-                " | SessionId=" + selectedSessionId +
-                " | RoomCode=" + selectedRoomCode +
-                " | LocalProfileId=" + selectedLocalProfileId +
                 " | LocalName=" + selectedLocalDisplayName +
-                " | RemoteName=" + selectedOpponentDisplayName +
-                " | AllowChestRewards=" + selectedAllowChestRewards +
-                " | AllowXpRewards=" + selectedAllowXpRewards +
-                " | AllowStatsProgression=" + selectedAllowStatsProgression,
+                " | OpponentName=" + selectedOpponentDisplayName,
                 this
             );
         }
+    }
+
+    public void SetPlayerSkinUniqueIds(string p1SkinUniqueId, string p2SkinUniqueId)
+    {
+        player1SkinUniqueId = string.IsNullOrWhiteSpace(p1SkinUniqueId) ? string.Empty : p1SkinUniqueId.Trim();
+        player2SkinUniqueId = string.IsNullOrWhiteSpace(p2SkinUniqueId) ? string.Empty : p2SkinUniqueId.Trim();
     }
 
     public PlayerID GetResolvedLocalPlayerId()
@@ -420,42 +230,11 @@ public class MatchRuntimeConfig : MonoBehaviour
         }
     }
 
-    private string SanitizeName(string value, string fallback)
+    private string Sanitize(string value, string fallback)
     {
         if (string.IsNullOrWhiteSpace(value))
             return fallback;
 
         return value.Trim();
-    }
-
-    private string SanitizeProfileId(string value, string fallback)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return fallback;
-
-        return value.Trim();
-    }
-
-    private string SanitizeOptionalValue(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return string.Empty;
-
-        return value.Trim();
-    }
-
-    private void MarkRuntimeRootPersistentIfNeeded()
-    {
-        if (!dontDestroyOnLoad)
-            return;
-
-        GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
-        DontDestroyOnLoad(runtimeRoot);
-    }
-
-    private void DestroyDuplicateRuntimeRoot()
-    {
-        GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
-        Destroy(duplicateRoot);
     }
 }

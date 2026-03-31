@@ -99,14 +99,14 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1083912485503218811}
-  - component: {fileID: -4921284831390816618}
   - component: {fileID: 29234041871985880}
-  - component: {fileID: 3772464326805955211}
+  - component: {fileID: 1851150385930260626}
   - component: {fileID: 4687596169300800809}
+  - component: {fileID: 3772464326805955211}
   - component: {fileID: 4500738214376203590}
   - component: {fileID: 6232224979371898845}
-  - component: {fileID: 1851150385930260626}
   - component: {fileID: 5473701576492986454}
+  - component: {fileID: 263693355985537803}
   - component: {fileID: -478019704222867622}
   m_Layer: 0
   m_Name: BallPrefabPlayer2
@@ -131,22 +131,6 @@ Transform:
   - {fileID: 1913695989736790824}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &-4921284831390816618
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8f1a77fe17f0d77439b1de899595cdc0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FusionNetworkBall
-  ballPhysics: {fileID: 0}
-  ballOwnership: {fileID: 0}
-  ballSkinApplier: {fileID: 0}
-  logDebug: 0
 --- !u!114 &29234041871985880
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -167,6 +151,35 @@ MonoBehaviour:
   patternIntensityProperty: _PatternIntensity
   patternScaleProperty: _PatternScale
   logDebug: 0
+--- !u!114 &1851150385930260626
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7932768176900474815}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b8b0d5709cce104dbb475538c6c8403, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallOwnership
+  Owner: 2
+--- !u!114 &4687596169300800809
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7932768176900474815}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3014f132a5a2db4480b65098b11e9f8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallPhysics
+  gravityStrength: 2.5
+  gravityDirection: {x: 0, y: 0, z: -1}
+  linearDrag: 0.4
+  maxSpeed: 60
 --- !u!114 &3772464326805955211
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -189,22 +202,6 @@ MonoBehaviour:
   smoothRotationAxis: 1
   axisSmoothingSpeed: 24
   initialLocalEulerAngles: {x: 0, y: 0, z: 0}
---- !u!114 &4687596169300800809
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d3014f132a5a2db4480b65098b11e9f8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallPhysics
-  gravityStrength: 2.5
-  gravityDirection: {x: 0, y: 0, z: -1}
-  linearDrag: 0.4
-  maxSpeed: 60
 --- !u!54 &4500738214376203590
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -253,19 +250,6 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.5
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &1851150385930260626
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7932768176900474815}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8b8b0d5709cce104dbb475538c6c8403, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BallOwnership
-  Owner: 2
 --- !u!114 &5473701576492986454
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -283,9 +267,25 @@ MonoBehaviour:
   Flags: 262145
   NestedObjects: []
   NetworkedBehaviours:
-  - {fileID: -4921284831390816618}
+  - {fileID: 263693355985537803}
   - {fileID: -478019704222867622}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &263693355985537803
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7932768176900474815}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f1a77fe17f0d77439b1de899595cdc0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FusionNetworkBall
+  ballPhysics: {fileID: 0}
+  ballOwnership: {fileID: 0}
+  ballSkinApplier: {fileID: 0}
+  logDebug: 0
 --- !u!114 &-478019704222867622
 MonoBehaviour:
   m_ObjectHideFlags: 0

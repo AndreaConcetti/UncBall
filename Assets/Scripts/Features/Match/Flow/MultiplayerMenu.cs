@@ -1,14 +1,14 @@
 using System;
-using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 [Serializable]
 public class MatchmakingQueuePreset
 {
     public string queueId = "normal";
-    public StartEndController.MatchMode matchMode = StartEndController.MatchMode.ScoreTarget;
+    public MatchMode matchMode = MatchMode.ScoreTarget;
     public int pointsToWin = 16;
     public float matchDuration = 180f;
     public bool isRanked = false;
@@ -24,87 +24,70 @@ public class MultiplayerMenu : MonoBehaviour
     [SerializeField] private PlayerProfileManager profileManager;
     [SerializeField] private PhotonFusionSessionController fusionSessionController;
 
-    [Header("Local Player Input - Shared Fallback")]
-    [SerializeField] private TMP_InputField localPlayerNameInputField;
+    [Header("Navigation")]
+    [SerializeField] private string mainMenuSceneName = "MainMenu";
 
-    [Header("Local Player Input - Private Host")]
+    [Header("Inputs")]
     [SerializeField] private TMP_InputField privateHostPlayerNameInputField;
-
-    [Header("Local Player Input - Private Join")]
     [SerializeField] private TMP_InputField privateJoinPlayerNameInputField;
-
-    [Header("Local Player Input - Matchmaking / Online")]
     [SerializeField] private TMP_InputField matchmakingPlayerNameInputField;
+    [SerializeField] private TMP_InputField hostPointsToWinInputField;
+    [SerializeField] private TMP_InputField hostMatchDurationInputField;
+    [SerializeField] private TMP_InputField joinRoomCodeInputField;
 
-    [Header("Local Player Defaults")]
-    [SerializeField] private string defaultHostLocalPlayerName = "HostPlayer";
-    [SerializeField] private string defaultJoinLocalPlayerName = "JoinPlayer";
-    [SerializeField] private string defaultMatchmakingLocalPlayerName = "Player 1";
+    [Header("Host Match Mode UI")]
+    [SerializeField] private TMP_Text hostMatchModeText;
+    [SerializeField] private GameObject hostTimeModeSelectedObject;
+    [SerializeField] private GameObject hostScoreModeSelectedObject;
 
-    [Header("Optional Status UI")]
+    [Header("Main Generic Status")]
     [SerializeField] private TMP_Text statusText;
-    [SerializeField] private TMP_Text generatedRoomCodeText;
-    [SerializeField] private TMP_Text lobbyStatusHostText;
-    [SerializeField] private TMP_Text lobbyStatusJoinText;
-
-    [Header("Waiting Panels")]
-    [SerializeField] private GameObject waitingOpponentPanelHost;
-    [SerializeField] private GameObject waitingOpponentPanelJoin;
-
-    [Header("Waiting Panel Host Texts")]
-    [SerializeField] private TMP_Text waitingHostRoomCodeText;
-    [SerializeField] private TMP_Text waitingHostLobbyStatusText;
-    [SerializeField] private TMP_Text waitingHostPlayerEnteredText;
-
-    [Header("Waiting Panel Join Texts")]
-    [SerializeField] private TMP_Text waitingJoinLobbyStatusText;
-    [SerializeField] private TMP_Text waitingJoinPlayerEnteredText;
-    [SerializeField] private TMP_Text waitingJoinRoomCodeText;
-
-    [Header("Waiting Buttons")]
-    [SerializeField] private Button hostStartMatchButton;
-
-    [Header("Private Lobby Loading UI")]
-    [SerializeField] private GameObject privateLobbyLoadingPanel;
-    [SerializeField] private TMP_Text privateLobbyLoadingText;
-    [SerializeField][TextArea] private string createLobbyLoadingMessage = "Creating lobby...\nIt could take about 30 seconds.";
-    [SerializeField][TextArea] private string joinLobbyLoadingMessage = "Joining lobby...\nIt could take about 30 seconds.";
 
     [Header("Matchmaking Loading UI")]
     [SerializeField] private GameObject matchmakingLoadingPanel;
-    [SerializeField] private TMP_Text matchmakingLoadingText;
-    [SerializeField][TextArea] private string normalMatchmakingLoadingMessage = "SEARCHING NORMAL MATCHMAKING...";
-    [SerializeField][TextArea] private string rankedMatchmakingLoadingMessage = "SEARCHING RANKED MATCHMAKING...";
-    [SerializeField][TextArea] private string defaultSearchingStatusText = "WAITING FOR OPPONENT";
+    [SerializeField] private TMP_Text matchmakingLoadingMessageText;
+    [SerializeField] private TMP_Text matchmakingElapsedTimerText;
 
-    [Header("Match Found Panel")]
+    [Header("Match Found UI")]
     [SerializeField] private GameObject matchFoundPanel;
     [SerializeField] private TMP_Text matchFoundTitleText;
-    [SerializeField] private TMP_Text matchFoundLocalPlayerNameText;
-    [SerializeField] private TMP_Text matchFoundOpponentPlayerNameText;
+    [SerializeField] private TMP_Text matchFoundPlayer1Text;
+    [SerializeField] private TMP_Text matchFoundPlayer2Text;
     [SerializeField] private TMP_Text matchFoundCountdownText;
-    [SerializeField] private float matchFoundCountdownSeconds = 3f;
-    [SerializeField] private bool autoStartMatchmakingMatch = true;
+    [SerializeField] private float matchFoundCountdownDuration = 5f;
 
-    [Header("Host Mode UI")]
-    [SerializeField] private TMP_Text hostModeLabelText;
+    [Header("Private Host Lobby UI")]
+    [SerializeField] private GameObject waitingOpponentPanelHost;
+    [SerializeField] private TMP_Text generatedRoomCodeText;
+    [SerializeField] private TMP_Text joinedPlayerText;
+    [SerializeField] private GameObject joinedPlayerTextRoot;
+    [SerializeField] private TMP_Text lobbyStatusText;
+    [SerializeField] private Button hostStartMatchButton;
 
-    [Header("Private Lobby - Host")]
-    [SerializeField] private TMP_InputField hostPointsToWinInputField;
-    [SerializeField] private TMP_InputField hostMatchDurationInputField;
-    [SerializeField] private Selectable hostPointsToWinSelectable;
-    [SerializeField] private Selectable hostMatchDurationSelectable;
-    [SerializeField] private bool hostUsesTimeMode = true;
+    [Header("Private Join Lobby UI")]
+    [SerializeField] private GameObject waitingOpponentPanelJoin;
+    [SerializeField] private TMP_Text joinLobbyMessageText;
+    [SerializeField] private TMP_Text joinLobbyStatusText;
 
-    [Header("Private Lobby - Join")]
-    [SerializeField] private TMP_InputField joinRoomCodeInputField;
+    [Header("Optional Generic Private Loading")]
+    [SerializeField] private GameObject privateLobbyLoadingPanel;
+    [SerializeField] private TMP_Text privateLobbyLoadingText;
 
-    [Header("Matchmaking Defaults")]
+    [Header("Defaults")]
+    [SerializeField] private int defaultPointsToWin = 16;
+    [SerializeField] private float defaultMatchDuration = 180f;
+    [SerializeField] private bool useLiveMultiplayerServices = true;
+
+    [Header("Host Mode Runtime")]
+    [SerializeField] private MatchMode privateHostMatchMode = MatchMode.ScoreTarget;
+    [SerializeField] private MatchMode privateJoinMatchMode = MatchMode.ScoreTarget;
+
+    [Header("Presets")]
     [SerializeField]
     private MatchmakingQueuePreset normalMatchmakingPreset = new MatchmakingQueuePreset
     {
         queueId = "normal",
-        matchMode = StartEndController.MatchMode.ScoreTarget,
+        matchMode = MatchMode.ScoreTarget,
         pointsToWin = 16,
         matchDuration = 180f,
         isRanked = false,
@@ -117,8 +100,8 @@ public class MultiplayerMenu : MonoBehaviour
     private MatchmakingQueuePreset rankedMatchmakingPreset = new MatchmakingQueuePreset
     {
         queueId = "ranked",
-        matchMode = StartEndController.MatchMode.ScoreTarget,
-        pointsToWin = 21,
+        matchMode = MatchMode.TimeLimit,
+        pointsToWin = 16,
         matchDuration = 180f,
         isRanked = true,
         allowChestRewards = false,
@@ -126,25 +109,23 @@ public class MultiplayerMenu : MonoBehaviour
         allowStatsProgression = false
     };
 
-    [Header("Defaults")]
-    [SerializeField] private int defaultPointsToWin = 16;
-    [SerializeField] private float defaultMatchDuration = 180f;
-    [SerializeField] private bool useLiveMultiplayerServices = true;
-
-    [Header("Progression Safety For Placeholder")]
-    [SerializeField] private bool disableChestRewardsForPlaceholderSessions = true;
-    [SerializeField] private bool disableXpRewardsForPlaceholderSessions = true;
-    [SerializeField] private bool disableStatsProgressionForPlaceholderSessions = true;
+    [Header("Display Strings")]
+    [SerializeField] private string defaultSearchingText = "SEARCHING FOR OPPONENT...";
+    [SerializeField] private string defaultWaitingHostText = "WAITING FOR OPPONENT";
+    [SerializeField] private string defaultJoinWaitingText = "WAITING FOR HOST";
+    [SerializeField] private string defaultLobbyReadyText = "LOBBY READY";
+    [SerializeField] private string defaultStartingText = "STARTING MATCH...";
+    [SerializeField] private string defaultMatchFoundTitle = "MATCH FOUND!";
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
-    private bool isCreatingLobby;
-    private bool isJoiningLobby;
-    private bool isSearchingMatchmaking;
-    private bool isShowingMatchFound;
-    private Coroutine matchFoundCountdownCoroutine;
-    private string currentMatchmakingLoadingBaseMessage = string.Empty;
+    private bool matchmakingTimerRunning;
+    private float matchmakingElapsedSeconds;
+
+    private bool matchFoundCountdownRunning;
+    private float matchFoundCountdownRemaining;
+    private bool autoStartMatchmakingRequested;
 
     private void OnEnable()
     {
@@ -169,233 +150,182 @@ public class MultiplayerMenu : MonoBehaviour
     private void Start()
     {
         ResolveDependencies();
-        InitializeDefaultInputs();
-        RefreshHostModeUI();
-        HideWaitingPanels();
-        HideAllLoading();
-        HideMatchFoundPanel();
-        RefreshLobbyTexts();
-        RefreshButtonsState();
-
-        if (generatedRoomCodeText != null && string.IsNullOrWhiteSpace(generatedRoomCodeText.text))
-            generatedRoomCodeText.text = "-";
-
-        SetStatus("No prepared session");
+        HideAllPanels();
+        StopAndResetMatchmakingTimer();
+        StopMatchFoundCountdown();
+        RefreshHostMatchModeUI();
+        RefreshAllUI();
+        SetGlobalStatus("READY");
     }
 
-    public void SetHostModeTime()
+    private void Update()
     {
-        hostUsesTimeMode = true;
-        RefreshHostModeUI();
-        SetStatus("Host mode set to Time Based");
+        UpdateMatchmakingElapsedTimer();
+        UpdateMatchFoundCountdown();
     }
 
-    public void SetHostModeScore()
+    public void ToggleHostMatchMode()
     {
-        hostUsesTimeMode = false;
-        RefreshHostModeUI();
-        SetStatus("Host mode set to Points Based");
+        privateHostMatchMode = privateHostMatchMode == MatchMode.TimeLimit
+            ? MatchMode.ScoreTarget
+            : MatchMode.TimeLimit;
+
+        RefreshHostMatchModeUI();
     }
 
-    public void ToggleHostMode()
+    public void SetHostMatchModeTime()
     {
-        hostUsesTimeMode = !hostUsesTimeMode;
-        RefreshHostModeUI();
-        SetStatus(hostUsesTimeMode ? "Host mode set to Time Based" : "Host mode set to Points Based");
+        privateHostMatchMode = MatchMode.TimeLimit;
+        RefreshHostMatchModeUI();
     }
 
-    public void RefreshHostModeUI()
+    public void SetHostMatchModePoints()
     {
-        bool useTimeMode = hostUsesTimeMode;
-
-        if (hostModeLabelText != null)
-            hostModeLabelText.text = useTimeMode ? "TIME BASED" : "POINTS BASED";
-
-        SetSelectableInteractable(hostMatchDurationSelectable, useTimeMode);
-        SetSelectableInteractable(hostPointsToWinSelectable, !useTimeMode);
-
-        if (hostMatchDurationInputField != null)
-        {
-            hostMatchDurationInputField.readOnly = !useTimeMode;
-
-            if (hostMatchDurationInputField.textComponent != null)
-                hostMatchDurationInputField.textComponent.alpha = useTimeMode ? 1f : 0.5f;
-        }
-
-        if (hostPointsToWinInputField != null)
-        {
-            hostPointsToWinInputField.readOnly = useTimeMode;
-
-            if (hostPointsToWinInputField.textComponent != null)
-                hostPointsToWinInputField.textComponent.alpha = useTimeMode ? 0.5f : 1f;
-        }
-
-        if (logDebug)
-            Debug.Log("[MultiplayerMenu] RefreshHostModeUI -> HostUsesTimeMode=" + hostUsesTimeMode, this);
+        privateHostMatchMode = MatchMode.ScoreTarget;
+        RefreshHostMatchModeUI();
     }
 
     public void CreateHostLobby()
     {
         ResolveDependencies();
 
-        if (onlineMatchSession == null)
-        {
-            Debug.LogError("[MultiplayerMenu] OnlineMatchSession missing.", this);
-            return;
-        }
-
-        StartEndController.MatchMode matchMode =
-            hostUsesTimeMode
-                ? StartEndController.MatchMode.TimeLimit
-                : StartEndController.MatchMode.ScoreTarget;
-
-        int resolvedPointsToWin = hostUsesTimeMode
-            ? Mathf.Max(1, defaultPointsToWin)
-            : ReadHostPointsToWin();
-
-        float resolvedMatchDuration = hostUsesTimeMode
-            ? ReadHostMatchDuration()
-            : Mathf.Max(1f, defaultMatchDuration);
-
-        string resolvedLocalName = ReadResolvedLocalPlayerName(PlayerNameInputContext.PrivateHost);
-
-        isCreatingLobby = true;
-        isJoiningLobby = false;
-        isSearchingMatchmaking = false;
-        currentMatchmakingLoadingBaseMessage = string.Empty;
-
-        HideWaitingPanels();
-        HideMatchFoundPanel();
-        HideAllLoading();
-        ShowPrivateLobbyLoading(createLobbyLoadingMessage);
-
         onlineMatchSession.PreparePrivateHostSession(
             GetResolvedLocalProfileId(),
-            resolvedLocalName,
+            ReadInput(privateHostPlayerNameInputField, GetResolvedDefaultLocalDisplayName()),
             "Player 2",
-            matchMode,
-            resolvedPointsToWin,
-            resolvedMatchDuration,
-            isRanked: false,
-            useLiveMultiplayerServices: useLiveMultiplayerServices,
-            allowChestRewards: !disableChestRewardsForPlaceholderSessions,
-            allowXpRewards: !disableXpRewardsForPlaceholderSessions,
-            allowStatsProgression: !disableStatsProgressionForPlaceholderSessions,
-            customRoomCode: null
+            privateHostMatchMode,
+            ReadHostPointsToWin(),
+            ReadHostMatchDuration(),
+            false,
+            useLiveMultiplayerServices,
+            false,
+            false,
+            false
         );
 
-        RefreshLobbyTexts();
-        RefreshButtonsState();
-        SetStatus("Creating online lobby...");
+        ShowHostWaiting();
+        StopAndResetMatchmakingTimer();
+        StopMatchFoundCountdown();
+        RefreshAllUI();
+
+        if (logDebug)
+            Debug.Log("[MultiplayerMenu] CreateHostLobby", this);
     }
 
     public void JoinPrivateLobby()
     {
         ResolveDependencies();
 
-        if (onlineMatchSession == null)
-        {
-            Debug.LogError("[MultiplayerMenu] OnlineMatchSession missing.", this);
-            return;
-        }
-
-        string resolvedLocalName = ReadResolvedLocalPlayerName(PlayerNameInputContext.PrivateJoin);
-
-        isCreatingLobby = false;
-        isJoiningLobby = true;
-        isSearchingMatchmaking = false;
-        currentMatchmakingLoadingBaseMessage = string.Empty;
-
-        HideWaitingPanels();
-        HideMatchFoundPanel();
-        HideAllLoading();
-        ShowPrivateLobbyLoading(joinLobbyLoadingMessage);
-
         onlineMatchSession.PreparePrivateJoinSession(
             ReadJoinRoomCode(),
             GetResolvedLocalProfileId(),
-            resolvedLocalName,
+            ReadInput(privateJoinPlayerNameInputField, GetResolvedDefaultLocalDisplayName()),
             "HostPlayer",
-            StartEndController.MatchMode.TimeLimit,
+            privateJoinMatchMode,
             defaultPointsToWin,
             defaultMatchDuration,
-            isRanked: false,
-            useLiveMultiplayerServices: useLiveMultiplayerServices,
-            allowChestRewards: !disableChestRewardsForPlaceholderSessions,
-            allowXpRewards: !disableXpRewardsForPlaceholderSessions,
-            allowStatsProgression: !disableStatsProgressionForPlaceholderSessions
+            false,
+            useLiveMultiplayerServices,
+            false,
+            false,
+            false
         );
 
-        RefreshLobbyTexts();
-        RefreshButtonsState();
-        SetStatus("Joining online lobby...");
+        ShowJoinWaiting();
+        StopAndResetMatchmakingTimer();
+        StopMatchFoundCountdown();
+        RefreshAllUI();
+
+        if (logDebug)
+            Debug.Log("[MultiplayerMenu] JoinPrivateLobby", this);
     }
 
     public void QueueNormalMatchmaking()
     {
-        StartMatchmaking(normalMatchmakingPreset, normalMatchmakingLoadingMessage);
+        StartMatchmaking(normalMatchmakingPreset);
     }
 
     public void QueueRankedMatchmaking()
     {
-        StartMatchmaking(rankedMatchmakingPreset, rankedMatchmakingLoadingMessage);
+        StartMatchmaking(rankedMatchmakingPreset);
     }
 
     public void CancelMatchmakingSearch()
     {
         ResolveDependencies();
 
-        if (onlineMatchSession == null)
-        {
-            Debug.LogError("[MultiplayerMenu] OnlineMatchSession missing.", this);
-            return;
-        }
+        if (onlineMatchSession != null)
+            onlineMatchSession.CancelMatchmakingSearch();
 
+        StopAndResetMatchmakingTimer();
         StopMatchFoundCountdown();
-        HideMatchFoundPanel();
+        HideAllPanels();
+        RefreshAllUI();
+        SetGlobalStatus("MATCHMAKING CANCELLED");
 
-        onlineMatchSession.CancelMatchmakingSearch();
-
-        isCreatingLobby = false;
-        isJoiningLobby = false;
-        isSearchingMatchmaking = false;
-        currentMatchmakingLoadingBaseMessage = string.Empty;
-
-        HideAllLoading();
-        HideWaitingPanels();
-        RefreshLobbyTexts();
-        RefreshButtonsState();
-        SetStatus("Matchmaking cancelled.");
+        if (logDebug)
+            Debug.Log("[MultiplayerMenu] CancelMatchmakingSearch", this);
     }
 
-    private void StartMatchmaking(MatchmakingQueuePreset preset, string loadingMessage)
+    public void LeaveCurrentLobby()
     {
         ResolveDependencies();
 
-        if (onlineMatchSession == null)
+        if (onlineMatchSession != null)
+            onlineMatchSession.LeaveCurrentLobbyOrMatchmaking();
+
+        StopAndResetMatchmakingTimer();
+        StopMatchFoundCountdown();
+        HideAllPanels();
+        RefreshAllUI();
+        SetGlobalStatus("LOBBY CLOSED");
+
+        if (logDebug)
+            Debug.Log("[MultiplayerMenu] LeaveCurrentLobby", this);
+    }
+
+    public void TryHostStartPreparedMatch()
+    {
+        ResolveDependencies();
+
+        if (onlineMatchSession == null || !onlineMatchSession.CanHostStartMatch())
         {
-            Debug.LogError("[MultiplayerMenu] OnlineMatchSession missing.", this);
+            ApplyLobbyStatusText("LOBBY NOT READY");
+            SetGlobalStatus("LOBBY NOT READY");
             return;
         }
 
-        string resolvedLocalName = ReadResolvedLocalPlayerName(PlayerNameInputContext.Matchmaking);
+        if (fusionSessionController == null)
+        {
+            ApplyLobbyStatusText("FUSION CONTROLLER MISSING");
+            SetGlobalStatus("FUSION CONTROLLER MISSING");
+            return;
+        }
 
-        isCreatingLobby = false;
-        isJoiningLobby = false;
-        isSearchingMatchmaking = true;
-        currentMatchmakingLoadingBaseMessage = string.IsNullOrWhiteSpace(loadingMessage)
-            ? (preset.isRanked ? "SEARCHING RANKED MATCHMAKING..." : "SEARCHING NORMAL MATCHMAKING...")
-            : loadingMessage.Trim();
+        fusionSessionController.HostPreparedSession();
+        ApplyLobbyStatusText(defaultStartingText);
+        SetGlobalStatus(defaultStartingText);
 
-        HideWaitingPanels();
-        HideMatchFoundPanel();
-        HideAllLoading();
-        ShowMatchmakingLoading(currentMatchmakingLoadingBaseMessage);
+        if (logDebug)
+            Debug.Log("[MultiplayerMenu] TryHostStartPreparedMatch", this);
+    }
+
+    public void ReturnToMainMenu()
+    {
+        StopAndResetMatchmakingTimer();
+        StopMatchFoundCountdown();
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(mainMenuSceneName);
+    }
+
+    private void StartMatchmaking(MatchmakingQueuePreset preset)
+    {
+        ResolveDependencies();
 
         onlineMatchSession.PrepareMatchmakingSession(
             preset.queueId,
             GetResolvedLocalProfileId(),
-            resolvedLocalName,
+            ReadInput(matchmakingPlayerNameInputField, GetResolvedDefaultLocalDisplayName()),
             preset.matchMode,
             preset.pointsToWin,
             preset.matchDuration,
@@ -406,407 +336,448 @@ public class MultiplayerMenu : MonoBehaviour
             preset.allowStatsProgression
         );
 
-        RefreshLobbyTexts();
-        RefreshButtonsState();
-        SetStatus("Searching matchmaking...");
-    }
+        HideAllPanels();
 
-    public void TryHostStartPreparedMatch()
-    {
-        ResolveDependencies();
+        if (matchmakingLoadingPanel != null)
+            matchmakingLoadingPanel.SetActive(true);
 
-        if (onlineMatchSession == null)
+        RestartMatchmakingTimer();
+        StopMatchFoundCountdown();
+        ApplyMatchmakingStatusText(defaultSearchingText);
+        SetGlobalStatus(defaultSearchingText);
+
+        if (logDebug)
         {
-            Debug.LogError("[MultiplayerMenu] OnlineMatchSession missing.", this);
-            return;
-        }
-
-        if (!onlineMatchSession.CanHostStartMatch())
-        {
-            SetStatus("Cannot start: lobby not ready");
-            RefreshLobbyTexts();
-            RefreshButtonsState();
-            return;
-        }
-
-        if (fusionSessionController == null)
-        {
-            SetStatus("Cannot start: Fusion controller missing");
-            return;
-        }
-
-        fusionSessionController.HostPreparedSession();
-        SetStatus("Starting match...");
-    }
-
-    public void CloseHostWaitingPanel()
-    {
-        if (waitingOpponentPanelHost != null)
-            waitingOpponentPanelHost.SetActive(false);
-    }
-
-    public void CloseJoinWaitingPanel()
-    {
-        if (waitingOpponentPanelJoin != null)
-            waitingOpponentPanelJoin.SetActive(false);
-    }
-
-    public void RefreshLobbyTexts()
-    {
-        string roomCode = "-";
-
-        string hostSummaryStatus = "Lobby not ready";
-        string joinSummaryStatus = "Room not joined";
-
-        string hostWaitingStatus = "LOBBY NOT READY";
-        string joinWaitingStatus = "JOINING LOBBY";
-
-        string hostPlayerEnteredText = "WAITING FOR PLAYER";
-        string joinPlayerEnteredText = "WAITING FOR HOST";
-
-        if (onlineMatchSession != null &&
-            onlineMatchSession.CurrentSession != null &&
-            onlineMatchSession.CurrentSession.hasPreparedSession)
-        {
-            OnlineMatchSessionData session = onlineMatchSession.CurrentSession;
-
-            roomCode = string.IsNullOrWhiteSpace(session.roomCode)
-                ? "-"
-                : session.roomCode;
-
-            if (session.sessionType == MatchRuntimeConfig.MatchSessionType.OnlineMatchmaking)
-            {
-                hostSummaryStatus = session.isRanked ? "Ranked queue" : "Normal queue";
-                joinSummaryStatus = session.lobbyStatusText;
-                hostWaitingStatus = session.isRanked ? "RANKED MATCHMAKING" : "NORMAL MATCHMAKING";
-                joinWaitingStatus = string.IsNullOrWhiteSpace(session.lobbyStatusText)
-                    ? "SEARCHING MATCHMAKING"
-                    : session.lobbyStatusText.ToUpperInvariant();
-
-                hostPlayerEnteredText = "SEARCHING FOR OPPONENT";
-                joinPlayerEnteredText = "YOU ARE " + session.localDisplayName.ToUpperInvariant();
-            }
-            else if (session.isHost)
-            {
-                hostSummaryStatus = session.hasRemoteJoiner ? "Lobby ready" : "Lobby not ready";
-                hostWaitingStatus = session.hasRemoteJoiner ? "LOBBY READY" : "LOBBY NOT READY";
-
-                if (session.hasRemoteJoiner)
-                    hostPlayerEnteredText = BuildHostJoinedMessage(session.remoteDisplayName);
-                else
-                    hostPlayerEnteredText = "WAITING FOR PLAYER";
-
-                joinSummaryStatus = "Share this room code";
-            }
-            else
-            {
-                joinSummaryStatus = session.hasRemoteJoiner ? "Joined lobby / ready" : "Joining lobby";
-                joinWaitingStatus = session.hasRemoteJoiner ? "JOINED LOBBY" : "JOINING LOBBY";
-                joinPlayerEnteredText = BuildJoinLobbyMessage(session.remoteDisplayName);
-
-                hostSummaryStatus = "Host side";
-            }
-        }
-
-        if (generatedRoomCodeText != null)
-            generatedRoomCodeText.text = roomCode;
-
-        if (lobbyStatusHostText != null)
-            lobbyStatusHostText.text = hostSummaryStatus;
-
-        if (lobbyStatusJoinText != null)
-            lobbyStatusJoinText.text = joinSummaryStatus;
-
-        if (waitingHostRoomCodeText != null)
-            waitingHostRoomCodeText.text = roomCode;
-
-        if (waitingJoinRoomCodeText != null)
-            waitingJoinRoomCodeText.text = roomCode;
-
-        if (waitingHostLobbyStatusText != null)
-            waitingHostLobbyStatusText.text = hostWaitingStatus;
-
-        if (waitingJoinLobbyStatusText != null)
-            waitingJoinLobbyStatusText.text = joinWaitingStatus;
-
-        if (waitingHostPlayerEnteredText != null)
-            waitingHostPlayerEnteredText.text = hostPlayerEnteredText;
-
-        if (waitingJoinPlayerEnteredText != null)
-            waitingJoinPlayerEnteredText.text = joinPlayerEnteredText;
-    }
-
-    private void RefreshButtonsState()
-    {
-        if (hostStartMatchButton != null)
-        {
-            bool canStart = false;
-
-            if (onlineMatchSession != null &&
-                onlineMatchSession.CurrentSession != null &&
-                onlineMatchSession.CurrentSession.hasPreparedSession &&
-                onlineMatchSession.CurrentSession.isHost)
-            {
-                canStart = onlineMatchSession.CanHostStartMatch();
-            }
-
-            hostStartMatchButton.interactable = canStart;
-        }
-    }
-
-    private void InitializeDefaultInputs()
-    {
-        SetDefaultIfEmpty(localPlayerNameInputField, defaultHostLocalPlayerName);
-        SetDefaultIfEmpty(privateHostPlayerNameInputField, defaultHostLocalPlayerName);
-        SetDefaultIfEmpty(privateJoinPlayerNameInputField, defaultJoinLocalPlayerName);
-        SetDefaultIfEmpty(matchmakingPlayerNameInputField, defaultMatchmakingLocalPlayerName);
-
-        if (hostPointsToWinInputField != null && string.IsNullOrWhiteSpace(hostPointsToWinInputField.text))
-            hostPointsToWinInputField.text = defaultPointsToWin.ToString();
-
-        if (hostMatchDurationInputField != null && string.IsNullOrWhiteSpace(hostMatchDurationInputField.text))
-            hostMatchDurationInputField.text = Mathf.RoundToInt(defaultMatchDuration).ToString();
-    }
-
-    private void SetDefaultIfEmpty(TMP_InputField field, string fallback)
-    {
-        if (field == null)
-            return;
-
-        if (string.IsNullOrWhiteSpace(field.text))
-            field.text = fallback;
-    }
-
-    private void SetSelectableInteractable(Selectable selectable, bool interactable)
-    {
-        if (selectable == null)
-            return;
-
-        selectable.interactable = interactable;
-
-        Graphic graphic = selectable.targetGraphic;
-        if (graphic != null)
-        {
-            Color c = graphic.color;
-            c.a = interactable ? 1f : 0.5f;
-            graphic.color = c;
+            Debug.Log(
+                "[MultiplayerMenu] StartMatchmaking -> " +
+                "Queue=" + preset.queueId +
+                " | Mode=" + preset.matchMode +
+                " | Ranked=" + preset.isRanked,
+                this
+            );
         }
     }
 
     private void HandleSessionUpdated()
     {
-        if (onlineMatchSession == null ||
-            onlineMatchSession.CurrentSession == null ||
-            !onlineMatchSession.CurrentSession.hasPreparedSession)
-        {
-            RefreshLobbyTexts();
-            RefreshButtonsState();
-            return;
-        }
-
-        OnlineMatchSessionData session = onlineMatchSession.CurrentSession;
-
-        bool hostCreationFinished =
-            isCreatingLobby &&
-            session.isHost &&
-            !string.IsNullOrWhiteSpace(session.roomCode);
-
-        bool joinFinished =
-            isJoiningLobby &&
-            !session.isHost &&
-            !string.IsNullOrWhiteSpace(session.roomCode);
-
-        if (hostCreationFinished)
-        {
-            HideAllLoading();
-            ShowHostWaitingPanel();
-            isCreatingLobby = false;
-        }
-
-        if (joinFinished)
-        {
-            HideAllLoading();
-            ShowJoinWaitingPanel();
-            isJoiningLobby = false;
-        }
-
-        if (session.sessionType == MatchRuntimeConfig.MatchSessionType.OnlineMatchmaking)
-        {
-            if (session.hasRemoteJoiner)
-            {
-                HideAllLoading();
-
-                if (!isShowingMatchFound)
-                    ShowMatchFoundPanel(session);
-
-                isSearchingMatchmaking = false;
-            }
-            else
-            {
-                if (isSearchingMatchmaking)
-                    RefreshMatchmakingLoadingText(session);
-            }
-        }
-
-        RefreshLobbyTexts();
-        RefreshButtonsState();
+        RefreshAllUI();
     }
 
     private void HandleFusionOperationCompleted(bool success, string message)
     {
-        HideAllLoading();
-        isCreatingLobby = false;
-        isJoiningLobby = false;
-        isSearchingMatchmaking = false;
-        currentMatchmakingLoadingBaseMessage = string.Empty;
+        SetGlobalStatus(message);
 
-        RefreshLobbyTexts();
-        RefreshButtonsState();
-        SetStatus(message);
-    }
+        if (onlineMatchSession != null && onlineMatchSession.CurrentSession != null)
+            onlineMatchSession.CurrentSession.lobbyStatusText = message;
 
-    private void SetStatus(string message)
-    {
-        if (statusText != null)
-            statusText.text = message;
+        RefreshAllUI();
 
         if (logDebug)
-            Debug.Log("[MultiplayerMenu] " + message, this);
+            Debug.Log("[MultiplayerMenu] Fusion operation -> " + message, this);
     }
 
-    private void ShowPrivateLobbyLoading(string message)
+    private void RefreshAllUI()
     {
-        if (privateLobbyLoadingPanel != null)
-            privateLobbyLoadingPanel.SetActive(true);
-
-        if (privateLobbyLoadingText != null)
-            privateLobbyLoadingText.text = message;
+        RefreshButtonsState();
+        RefreshHostMatchModeUI();
+        RefreshMatchmakingUI();
+        RefreshPrivateHostUI();
+        RefreshPrivateJoinUI();
+        RefreshPrivateLoadingUI();
     }
 
-    private void ShowMatchmakingLoading(string message)
+    private void RefreshHostMatchModeUI()
     {
+        if (hostMatchModeText != null)
+            hostMatchModeText.text = privateHostMatchMode == MatchMode.TimeLimit ? "TIME" : "POINTS";
+
+        if (hostTimeModeSelectedObject != null)
+            hostTimeModeSelectedObject.SetActive(privateHostMatchMode == MatchMode.TimeLimit);
+
+        if (hostScoreModeSelectedObject != null)
+            hostScoreModeSelectedObject.SetActive(privateHostMatchMode == MatchMode.ScoreTarget);
+    }
+
+    private void RefreshMatchmakingUI()
+    {
+        if (onlineMatchSession == null || onlineMatchSession.CurrentSession == null)
+        {
+            StopAndResetMatchmakingTimer();
+            StopMatchFoundCountdown();
+            SetMatchFoundPanel(false);
+            return;
+        }
+
+        OnlineMatchSessionData session = onlineMatchSession.CurrentSession;
+        bool isSearching = session.isMatchmakingSearch;
+
+        if (!isSearching)
+        {
+            StopAndResetMatchmakingTimer();
+            StopMatchFoundCountdown();
+            SetMatchFoundPanel(false);
+
+            if (matchmakingLoadingPanel != null)
+                matchmakingLoadingPanel.SetActive(false);
+
+            return;
+        }
+
+        bool hasMatchFound = session.hasRemoteJoiner;
+
+        if (hasMatchFound)
+        {
+            StopAndResetMatchmakingTimer();
+
+            if (matchmakingLoadingPanel != null)
+                matchmakingLoadingPanel.SetActive(false);
+
+            SetMatchFoundPanel(true);
+            RefreshMatchFoundPanel(session);
+
+            if (!matchFoundCountdownRunning)
+                StartMatchFoundCountdown();
+
+            return;
+        }
+
+        StopMatchFoundCountdown();
+        SetMatchFoundPanel(false);
+
         if (matchmakingLoadingPanel != null)
             matchmakingLoadingPanel.SetActive(true);
 
-        if (matchmakingLoadingText != null)
-            matchmakingLoadingText.text = message;
+        EnsureMatchmakingTimerRunning();
+
+        string message = ResolveDisplayStatus(session, defaultSearchingText);
+        ApplyMatchmakingStatusText(message);
+        SetGlobalStatus(message);
     }
 
-    private void RefreshMatchmakingLoadingText(OnlineMatchSessionData session)
+    private void RefreshMatchFoundPanel(OnlineMatchSessionData session)
     {
-        if (matchmakingLoadingText == null || session == null)
+        if (session == null)
             return;
 
-        string title = string.IsNullOrWhiteSpace(currentMatchmakingLoadingBaseMessage)
-            ? (session.isRanked ? "SEARCHING RANKED MATCHMAKING..." : "SEARCHING NORMAL MATCHMAKING...")
-            : currentMatchmakingLoadingBaseMessage;
+        if (matchFoundTitleText != null)
+            matchFoundTitleText.text = defaultMatchFoundTitle;
 
-        string normalizedStatus = NormalizeMatchmakingStatus(session.lobbyStatusText);
+        string p1 = string.IsNullOrWhiteSpace(session.hostDisplayName) ? "PLAYER 1" : session.hostDisplayName.ToUpperInvariant();
+        string p2 = string.IsNullOrWhiteSpace(session.joinDisplayName) ? "PLAYER 2" : session.joinDisplayName.ToUpperInvariant();
 
-        matchmakingLoadingText.text = title + "\n" + normalizedStatus;
+        if (matchFoundPlayer1Text != null)
+            matchFoundPlayer1Text.text = p1;
+
+        if (matchFoundPlayer2Text != null)
+            matchFoundPlayer2Text.text = p2;
+
+        if (matchFoundCountdownText != null)
+            matchFoundCountdownText.text = Mathf.CeilToInt(Mathf.Max(0f, matchFoundCountdownRemaining)).ToString();
     }
 
-    private string NormalizeMatchmakingStatus(string rawStatus)
+    private void RefreshPrivateHostUI()
     {
-        if (string.IsNullOrWhiteSpace(rawStatus))
-            return defaultSearchingStatusText;
+        if (onlineMatchSession == null || onlineMatchSession.CurrentSession == null)
+            return;
 
-        string normalized = rawStatus.Trim();
+        OnlineMatchSessionData session = onlineMatchSession.CurrentSession;
+        bool shouldShowHostPanel =
+            session.hasPreparedSession &&
+            session.sessionType == MatchRuntimeConfig.MatchSessionType.OnlinePrivate &&
+            session.isHost &&
+            !session.isMatchmakingSearch;
 
-        if (string.Equals(normalized, "Searching matchmaking", StringComparison.OrdinalIgnoreCase))
-            return "WAITING FOR OPPONENT";
+        if (waitingOpponentPanelHost != null)
+            waitingOpponentPanelHost.SetActive(shouldShowHostPanel);
 
-        if (string.Equals(normalized, "Waiting for opponent", StringComparison.OrdinalIgnoreCase))
-            return "WAITING FOR OPPONENT";
+        if (!shouldShowHostPanel)
+            return;
 
-        if (string.Equals(normalized, "Joined matchmaking lobby", StringComparison.OrdinalIgnoreCase))
-            return "MATCH FOUND";
+        if (generatedRoomCodeText != null)
+        {
+            generatedRoomCodeText.text = string.IsNullOrWhiteSpace(session.roomCode)
+                ? "-"
+                : session.roomCode;
+        }
 
-        if (string.Equals(normalized, "Lobby full / ready", StringComparison.OrdinalIgnoreCase))
-            return "MATCH FOUND";
+        bool hasJoiner = session.hasRemoteJoiner && !string.IsNullOrWhiteSpace(session.joinDisplayName);
 
-        return normalized.ToUpperInvariant();
+        if (joinedPlayerTextRoot != null)
+            joinedPlayerTextRoot.SetActive(hasJoiner);
+        else if (joinedPlayerText != null)
+            joinedPlayerText.gameObject.SetActive(hasJoiner);
+
+        if (joinedPlayerText != null)
+        {
+            if (hasJoiner)
+                joinedPlayerText.text = $"'{session.joinDisplayName.ToUpperInvariant()}' JOINED THE LOBBY";
+            else
+                joinedPlayerText.text = string.Empty;
+        }
+
+        string lobbyStatus = ResolvePrivateHostStatus(session);
+        ApplyLobbyStatusText(lobbyStatus);
+        SetGlobalStatus(lobbyStatus);
     }
 
-    private void HideAllLoading()
+    private void RefreshPrivateJoinUI()
     {
+        if (onlineMatchSession == null || onlineMatchSession.CurrentSession == null)
+            return;
+
+        OnlineMatchSessionData session = onlineMatchSession.CurrentSession;
+        bool shouldShowJoinPanel =
+            session.hasPreparedSession &&
+            session.sessionType == MatchRuntimeConfig.MatchSessionType.OnlinePrivate &&
+            !session.isHost &&
+            !session.isMatchmakingSearch;
+
+        if (waitingOpponentPanelJoin != null)
+            waitingOpponentPanelJoin.SetActive(shouldShowJoinPanel);
+
+        if (!shouldShowJoinPanel)
+            return;
+
+        string hostName = string.IsNullOrWhiteSpace(session.hostDisplayName)
+            ? "HOST"
+            : session.hostDisplayName.ToUpperInvariant();
+
+        if (joinLobbyMessageText != null)
+            joinLobbyMessageText.text = $"YOU JOINED '{hostName}' LOBBY";
+
+        string joinStatus = ResolveDisplayStatus(session, defaultJoinWaitingText);
+
+        if (joinLobbyStatusText != null)
+            joinLobbyStatusText.text = joinStatus;
+
+        SetGlobalStatus(joinStatus);
+    }
+
+    private void RefreshPrivateLoadingUI()
+    {
+        if (privateLobbyLoadingPanel == null)
+            return;
+
+        bool isVisible =
+            (waitingOpponentPanelHost != null && waitingOpponentPanelHost.activeSelf) ||
+            (waitingOpponentPanelJoin != null && waitingOpponentPanelJoin.activeSelf);
+
+        privateLobbyLoadingPanel.SetActive(false);
+
+        if (!isVisible || privateLobbyLoadingText == null || onlineMatchSession == null || onlineMatchSession.CurrentSession == null)
+            return;
+
+        privateLobbyLoadingText.text = ResolveDisplayStatus(onlineMatchSession.CurrentSession, "LOBBY");
+    }
+
+    private void RefreshButtonsState()
+    {
+        if (hostStartMatchButton == null)
+            return;
+
+        hostStartMatchButton.interactable =
+            onlineMatchSession != null &&
+            onlineMatchSession.CanHostStartMatch();
+    }
+
+    private string ResolvePrivateHostStatus(OnlineMatchSessionData session)
+    {
+        if (session == null)
+            return defaultWaitingHostText;
+
+        if (session.matchStarted || session.startRequested)
+            return defaultStartingText;
+
+        if (session.hasRemoteJoiner)
+            return defaultLobbyReadyText;
+
+        return ResolveDisplayStatus(session, defaultWaitingHostText);
+    }
+
+    private string ResolveDisplayStatus(OnlineMatchSessionData session, string fallback)
+    {
+        if (session == null)
+            return fallback;
+
+        if (!string.IsNullOrWhiteSpace(session.lobbyStatusText))
+            return session.lobbyStatusText.Trim().ToUpperInvariant();
+
+        return fallback;
+    }
+
+    private void ApplyMatchmakingStatusText(string value)
+    {
+        if (matchmakingLoadingMessageText != null)
+            matchmakingLoadingMessageText.text = value;
+    }
+
+    private void ApplyLobbyStatusText(string value)
+    {
+        if (lobbyStatusText != null)
+            lobbyStatusText.text = value;
+
+        if (joinLobbyStatusText != null && waitingOpponentPanelJoin != null && waitingOpponentPanelJoin.activeSelf)
+            joinLobbyStatusText.text = value;
+
+        if (privateLobbyLoadingText != null && privateLobbyLoadingPanel != null && privateLobbyLoadingPanel.activeSelf)
+            privateLobbyLoadingText.text = value;
+    }
+
+    private void SetGlobalStatus(string value)
+    {
+        if (statusText != null)
+            statusText.text = value;
+
+        if (logDebug)
+            Debug.Log("[MultiplayerMenu] STATUS -> " + value, this);
+    }
+
+    private void HideAllPanels()
+    {
+        if (waitingOpponentPanelHost != null)
+            waitingOpponentPanelHost.SetActive(false);
+
+        if (waitingOpponentPanelJoin != null)
+            waitingOpponentPanelJoin.SetActive(false);
+
         if (privateLobbyLoadingPanel != null)
             privateLobbyLoadingPanel.SetActive(false);
 
         if (matchmakingLoadingPanel != null)
             matchmakingLoadingPanel.SetActive(false);
+
+        SetMatchFoundPanel(false);
     }
 
-    private void ShowMatchFoundPanel(OnlineMatchSessionData session)
+    private void ShowHostWaiting()
     {
-        if (session == null)
-            return;
+        HideAllPanels();
 
-        isShowingMatchFound = true;
-
-        if (matchFoundPanel != null)
-            matchFoundPanel.SetActive(true);
-
-        if (matchFoundTitleText != null)
-            matchFoundTitleText.text = "MATCH FOUND";
-
-        if (matchFoundLocalPlayerNameText != null)
-            matchFoundLocalPlayerNameText.text = BuildDisplayName(session.localDisplayName, "PLAYER 1");
-
-        if (matchFoundOpponentPlayerNameText != null)
-            matchFoundOpponentPlayerNameText.text = BuildDisplayName(session.remoteDisplayName, "PLAYER 2");
-
-        if (matchFoundCountdownText != null)
-            matchFoundCountdownText.text = Mathf.CeilToInt(matchFoundCountdownSeconds).ToString();
-
-        StopMatchFoundCountdown();
-        matchFoundCountdownCoroutine = StartCoroutine(MatchFoundCountdownRoutine());
+        if (waitingOpponentPanelHost != null)
+            waitingOpponentPanelHost.SetActive(true);
     }
 
-    private void HideMatchFoundPanel()
+    private void ShowJoinWaiting()
+    {
+        HideAllPanels();
+
+        if (waitingOpponentPanelJoin != null)
+            waitingOpponentPanelJoin.SetActive(true);
+    }
+
+    private void SetMatchFoundPanel(bool visible)
     {
         if (matchFoundPanel != null)
-            matchFoundPanel.SetActive(false);
+            matchFoundPanel.SetActive(visible);
+    }
 
-        isShowingMatchFound = false;
+    private void StartMatchFoundCountdown()
+    {
+        matchFoundCountdownRunning = true;
+        matchFoundCountdownRemaining = matchFoundCountdownDuration;
+        autoStartMatchmakingRequested = false;
     }
 
     private void StopMatchFoundCountdown()
     {
-        if (matchFoundCountdownCoroutine != null)
+        matchFoundCountdownRunning = false;
+        matchFoundCountdownRemaining = 0f;
+        autoStartMatchmakingRequested = false;
+
+        if (matchFoundCountdownText != null)
+            matchFoundCountdownText.text = string.Empty;
+    }
+
+    private void UpdateMatchFoundCountdown()
+    {
+        if (!matchFoundCountdownRunning)
+            return;
+
+        if (onlineMatchSession == null || onlineMatchSession.CurrentSession == null)
         {
-            StopCoroutine(matchFoundCountdownCoroutine);
-            matchFoundCountdownCoroutine = null;
+            StopMatchFoundCountdown();
+            return;
+        }
+
+        OnlineMatchSessionData session = onlineMatchSession.CurrentSession;
+        if (!session.isMatchmakingSearch || !session.hasRemoteJoiner)
+        {
+            StopMatchFoundCountdown();
+            return;
+        }
+
+        matchFoundCountdownRemaining -= Time.unscaledDeltaTime;
+        if (matchFoundCountdownRemaining < 0f)
+            matchFoundCountdownRemaining = 0f;
+
+        RefreshMatchFoundPanel(session);
+
+        if (matchFoundCountdownRemaining > 0f)
+            return;
+
+        if (autoStartMatchmakingRequested)
+            return;
+
+        autoStartMatchmakingRequested = true;
+        matchFoundCountdownRunning = false;
+
+        if (session.isHost)
+        {
+            if (fusionSessionController != null)
+            {
+                fusionSessionController.HostPreparedSession();
+                SetGlobalStatus(defaultStartingText);
+            }
         }
     }
 
-    private IEnumerator MatchFoundCountdownRoutine()
+    private void RestartMatchmakingTimer()
     {
-        float remaining = Mathf.Max(1f, matchFoundCountdownSeconds);
+        matchmakingElapsedSeconds = 0f;
+        matchmakingTimerRunning = true;
+        RefreshMatchmakingTimerText();
+    }
 
-        while (remaining > 0f)
+    private void EnsureMatchmakingTimerRunning()
+    {
+        if (matchmakingTimerRunning)
+            return;
+
+        matchmakingTimerRunning = true;
+        RefreshMatchmakingTimerText();
+    }
+
+    private void StopAndResetMatchmakingTimer()
+    {
+        matchmakingTimerRunning = false;
+        matchmakingElapsedSeconds = 0f;
+        RefreshMatchmakingTimerText();
+    }
+
+    private void UpdateMatchmakingElapsedTimer()
+    {
+        if (!matchmakingTimerRunning)
+            return;
+
+        matchmakingElapsedSeconds += Time.unscaledDeltaTime;
+        RefreshMatchmakingTimerText();
+    }
+
+    private void RefreshMatchmakingTimerText()
+    {
+        if (matchmakingElapsedTimerText == null)
+            return;
+
+        if (!matchmakingTimerRunning && matchmakingElapsedSeconds <= 0f)
         {
-            if (matchFoundCountdownText != null)
-                matchFoundCountdownText.text = Mathf.CeilToInt(remaining).ToString();
-
-            yield return new WaitForSecondsRealtime(1f);
-            remaining -= 1f;
+            matchmakingElapsedTimerText.text = "00:00";
+            return;
         }
 
-        if (matchFoundCountdownText != null)
-            matchFoundCountdownText.text = "0";
-
-        if (autoStartMatchmakingMatch &&
-            onlineMatchSession != null &&
-            onlineMatchSession.CurrentSession != null &&
-            onlineMatchSession.CurrentSession.sessionType == MatchRuntimeConfig.MatchSessionType.OnlineMatchmaking &&
-            onlineMatchSession.CurrentSession.hasRemoteJoiner &&
-            onlineMatchSession.CurrentSession.isHost)
-        {
-            TryHostStartPreparedMatch();
-        }
-
-        matchFoundCountdownCoroutine = null;
+        int totalSeconds = Mathf.FloorToInt(Mathf.Max(0f, matchmakingElapsedSeconds));
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        matchmakingElapsedTimerText.text = minutes.ToString("00") + ":" + seconds.ToString("00");
     }
 
     private void ResolveDependencies()
@@ -819,26 +790,6 @@ public class MultiplayerMenu : MonoBehaviour
 
         if (fusionSessionController == null)
             fusionSessionController = PhotonFusionSessionController.Instance;
-
-#if UNITY_2023_1_OR_NEWER
-        if (onlineMatchSession == null)
-            onlineMatchSession = FindFirstObjectByType<OnlineMatchSession>();
-
-        if (profileManager == null)
-            profileManager = FindFirstObjectByType<PlayerProfileManager>();
-
-        if (fusionSessionController == null)
-            fusionSessionController = FindFirstObjectByType<PhotonFusionSessionController>();
-#else
-        if (onlineMatchSession == null)
-            onlineMatchSession = FindObjectOfType<OnlineMatchSession>();
-
-        if (profileManager == null)
-            profileManager = FindObjectOfType<PlayerProfileManager>();
-
-        if (fusionSessionController == null)
-            fusionSessionController = FindObjectOfType<PhotonFusionSessionController>();
-#endif
     }
 
     private string GetResolvedLocalProfileId()
@@ -849,165 +800,49 @@ public class MultiplayerMenu : MonoBehaviour
         return "local_player_1";
     }
 
-    private enum PlayerNameInputContext
+    private string GetResolvedDefaultLocalDisplayName()
     {
-        PrivateHost,
-        PrivateJoin,
-        Matchmaking
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveDisplayName))
+            return profileManager.ActiveDisplayName;
+
+        return "Player 1";
     }
 
-    private string ReadResolvedLocalPlayerName(PlayerNameInputContext context)
+    private string ReadInput(TMP_InputField field, string fallback)
     {
-        TMP_InputField sourceField = GetInputFieldForContext(context);
-        string fallback = GetFallbackNameForContext(context);
-
-        if (sourceField == null)
+        if (field == null || string.IsNullOrWhiteSpace(field.text))
             return fallback;
 
-        string value = sourceField.text != null ? sourceField.text.Trim() : string.Empty;
-
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            sourceField.text = fallback;
-            return fallback;
-        }
-
-        return value;
-    }
-
-    private TMP_InputField GetInputFieldForContext(PlayerNameInputContext context)
-    {
-        switch (context)
-        {
-            case PlayerNameInputContext.PrivateHost:
-                if (privateHostPlayerNameInputField != null)
-                    return privateHostPlayerNameInputField;
-                break;
-
-            case PlayerNameInputContext.PrivateJoin:
-                if (privateJoinPlayerNameInputField != null)
-                    return privateJoinPlayerNameInputField;
-                break;
-
-            case PlayerNameInputContext.Matchmaking:
-                if (matchmakingPlayerNameInputField != null)
-                    return matchmakingPlayerNameInputField;
-                break;
-        }
-
-        return localPlayerNameInputField;
-    }
-
-    private string GetFallbackNameForContext(PlayerNameInputContext context)
-    {
-        switch (context)
-        {
-            case PlayerNameInputContext.PrivateHost:
-                return defaultHostLocalPlayerName;
-
-            case PlayerNameInputContext.PrivateJoin:
-                return defaultJoinLocalPlayerName;
-
-            case PlayerNameInputContext.Matchmaking:
-                return defaultMatchmakingLocalPlayerName;
-
-            default:
-                return defaultHostLocalPlayerName;
-        }
+        return field.text.Trim();
     }
 
     private int ReadHostPointsToWin()
     {
         if (hostPointsToWinInputField == null)
-            return Mathf.Max(1, defaultPointsToWin);
+            return defaultPointsToWin;
 
-        if (int.TryParse(hostPointsToWinInputField.text, out int parsed))
-        {
-            parsed = Mathf.Max(1, parsed);
-            hostPointsToWinInputField.text = parsed.ToString();
-            return parsed;
-        }
+        if (int.TryParse(hostPointsToWinInputField.text, out int value))
+            return Mathf.Max(1, value);
 
-        hostPointsToWinInputField.text = defaultPointsToWin.ToString();
-        return Mathf.Max(1, defaultPointsToWin);
+        return defaultPointsToWin;
     }
 
     private float ReadHostMatchDuration()
     {
         if (hostMatchDurationInputField == null)
-            return Mathf.Max(1f, defaultMatchDuration);
+            return defaultMatchDuration;
 
-        if (float.TryParse(hostMatchDurationInputField.text, out float parsed))
-        {
-            parsed = Mathf.Max(1f, parsed);
-            hostMatchDurationInputField.text = Mathf.RoundToInt(parsed).ToString();
-            return parsed;
-        }
+        if (float.TryParse(hostMatchDurationInputField.text, out float value))
+            return Mathf.Max(1f, value);
 
-        hostMatchDurationInputField.text = Mathf.RoundToInt(defaultMatchDuration).ToString();
-        return Mathf.Max(1f, defaultMatchDuration);
+        return defaultMatchDuration;
     }
 
     private string ReadJoinRoomCode()
     {
-        if (joinRoomCodeInputField == null)
+        if (joinRoomCodeInputField == null || string.IsNullOrWhiteSpace(joinRoomCodeInputField.text))
             return "ROOM01";
 
-        string value = joinRoomCodeInputField.text.Trim().ToUpperInvariant();
-
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            joinRoomCodeInputField.text = "ROOM01";
-            return "ROOM01";
-        }
-
-        return value;
-    }
-
-    private string BuildJoinLobbyMessage(string hostName)
-    {
-        string resolvedHostName = string.IsNullOrWhiteSpace(hostName) ? "HOSTPLAYER" : hostName.Trim().ToUpperInvariant();
-        return "YOU JOINED " + resolvedHostName + " LOBBY";
-    }
-
-    private string BuildHostJoinedMessage(string joinName)
-    {
-        string resolvedJoinName = string.IsNullOrWhiteSpace(joinName) ? "PLAYER" : joinName.Trim().ToUpperInvariant();
-        return resolvedJoinName + " JOINED THE LOBBY";
-    }
-
-    private string BuildDisplayName(string value, string fallback)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return fallback;
-
-        return value.Trim().ToUpperInvariant();
-    }
-
-    private void ShowHostWaitingPanel()
-    {
-        if (waitingOpponentPanelHost != null)
-            waitingOpponentPanelHost.SetActive(true);
-
-        if (waitingOpponentPanelJoin != null)
-            waitingOpponentPanelJoin.SetActive(false);
-    }
-
-    private void ShowJoinWaitingPanel()
-    {
-        if (waitingOpponentPanelHost != null)
-            waitingOpponentPanelHost.SetActive(false);
-
-        if (waitingOpponentPanelJoin != null)
-            waitingOpponentPanelJoin.SetActive(true);
-    }
-
-    private void HideWaitingPanels()
-    {
-        if (waitingOpponentPanelHost != null)
-            waitingOpponentPanelHost.SetActive(false);
-
-        if (waitingOpponentPanelJoin != null)
-            waitingOpponentPanelJoin.SetActive(false);
+        return joinRoomCodeInputField.text.Trim().ToUpperInvariant();
     }
 }

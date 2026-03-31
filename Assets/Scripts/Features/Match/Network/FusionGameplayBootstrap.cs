@@ -11,10 +11,6 @@ public class FusionGameplayBootstrap : MonoBehaviour
     [SerializeField] private OnlineGameplayAuthority onlineGameplayAuthority;
     [SerializeField] private OnlineMatchSession onlineMatchSession;
 
-    [Header("Legacy Components To Disable In Online")]
-    [SerializeField] private TurnManager turnManager;
-    [SerializeField] private StartEndController startEndController;
-
     [Header("Online Controller Prefab")]
     [SerializeField] private FusionOnlineMatchController onlineMatchControllerPrefab;
 
@@ -34,8 +30,6 @@ public class FusionGameplayBootstrap : MonoBehaviour
 
         if (onlineGameplayAuthority != null)
             onlineGameplayAuthority.ForceOfflineDisabledState();
-
-        DisableLegacyAuthoritativeFlow();
 
         if (!bootstrapStarted)
         {
@@ -57,50 +51,6 @@ public class FusionGameplayBootstrap : MonoBehaviour
 
         if (onlineMatchSession == null)
             onlineMatchSession = OnlineMatchSession.Instance;
-
-        if (turnManager == null)
-            turnManager = TurnManager.Instance;
-
-        if (startEndController == null)
-            startEndController = StartEndController.InstanceOrFind();
-
-#if UNITY_2023_1_OR_NEWER
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
-
-        if (runnerManager == null)
-            runnerManager = FindFirstObjectByType<PhotonFusionRunnerManager>();
-
-        if (onlineGameplayAuthority == null)
-            onlineGameplayAuthority = FindFirstObjectByType<OnlineGameplayAuthority>();
-
-        if (onlineMatchSession == null)
-            onlineMatchSession = FindFirstObjectByType<OnlineMatchSession>();
-
-        if (turnManager == null)
-            turnManager = FindFirstObjectByType<TurnManager>();
-
-        if (startEndController == null)
-            startEndController = FindFirstObjectByType<StartEndController>();
-#else
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
-
-        if (runnerManager == null)
-            runnerManager = FindObjectOfType<PhotonFusionRunnerManager>();
-
-        if (onlineGameplayAuthority == null)
-            onlineGameplayAuthority = FindObjectOfType<OnlineGameplayAuthority>();
-
-        if (onlineMatchSession == null)
-            onlineMatchSession = FindObjectOfType<OnlineMatchSession>();
-
-        if (turnManager == null)
-            turnManager = FindObjectOfType<TurnManager>();
-
-        if (startEndController == null)
-            startEndController = FindObjectOfType<StartEndController>();
-#endif
     }
 
     private bool ShouldRunOnlineBootstrap()
@@ -115,15 +65,6 @@ public class FusionGameplayBootstrap : MonoBehaviour
             return true;
 
         return false;
-    }
-
-    private void DisableLegacyAuthoritativeFlow()
-    {
-        if (turnManager != null)
-            turnManager.enabled = false;
-
-        if (startEndController != null)
-            startEndController.enabled = false;
     }
 
     private IEnumerator BootstrapOnlineRoutine()
@@ -180,9 +121,7 @@ public class FusionGameplayBootstrap : MonoBehaviour
         }
 
         if (isServer)
-        {
             yield return StartCoroutine(EnsureOnlineControllerSpawned(runner));
-        }
 
         bootstrapCompleted = true;
 

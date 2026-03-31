@@ -19,18 +19,12 @@ public class FusionLobbyService : OnlineLobbyServiceBase
     private const string MatchDurationPropertyKey = "md";
     private const string RankedPropertyKey = "rk";
 
-    [Header("Persistence")]
     [SerializeField] private bool dontDestroyOnLoad = true;
-
-    [Header("Dependencies")]
     [SerializeField] private PhotonFusionRunnerManager runnerManager;
-
-    [Header("Lobby Config")]
     [SerializeField] private string customLobbyName = "uncball_private_lobby";
     [SerializeField] private string matchmakingLobbyName = "uncball_matchmaking_lobby";
     [SerializeField] private int maxPlayers = 2;
     [SerializeField] private float sessionPropertyPollInterval = 0.25f;
-
     [SerializeField] private OnlineLobbyState currentLobbyState = new OnlineLobbyState();
 
     private string pendingLocalPlayerId = string.Empty;
@@ -100,7 +94,7 @@ public class FusionLobbyService : OnlineLobbyServiceBase
     public override async void CreateLobby(
         string localPlayerId,
         string localDisplayName,
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
         bool isRanked)
@@ -127,26 +121,19 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         string roomCode = GenerateRoomCode();
 
         currentLobbyState.Clear();
-        currentLobbyState.hasLobby = false;
         currentLobbyState.sessionId = roomCode;
         currentLobbyState.roomCode = roomCode;
         currentLobbyState.hostPlayerId = pendingLocalPlayerId;
+        currentLobbyState.matchMode = matchMode;
+        currentLobbyState.pointsToWin = Mathf.Max(1, pointsToWin);
+        currentLobbyState.matchDuration = Mathf.Max(1f, matchDuration);
+        currentLobbyState.isRanked = isRanked;
+        currentLobbyState.statusText = "Creating lobby";
 
         currentLobbyState.hostPlayer.playerId = pendingLocalPlayerId;
         currentLobbyState.hostPlayer.displayName = pendingLocalDisplayName;
         currentLobbyState.hostPlayer.isHost = true;
         currentLobbyState.hostPlayer.isReady = true;
-        currentLobbyState.hostPlayer.isConnected = false;
-
-        currentLobbyState.joinPlayer = new OnlineLobbyPlayerData();
-
-        currentLobbyState.matchMode = matchMode;
-        currentLobbyState.pointsToWin = Mathf.Max(1, pointsToWin);
-        currentLobbyState.matchDuration = Mathf.Max(1f, matchDuration);
-        currentLobbyState.isRanked = isRanked;
-        currentLobbyState.startRequested = false;
-        currentLobbyState.matchStarted = false;
-        currentLobbyState.statusText = "Creating lobby";
 
         Dictionary<string, SessionProperty> sessionProps = BuildSessionProperties(
             pendingLocalPlayerId,
@@ -178,10 +165,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         }
 
         currentLobbyState.hasLobby = true;
-        currentLobbyState.roomCode = GetResolvedSessionName(roomCode);
-        currentLobbyState.sessionId = currentLobbyState.roomCode;
-        currentLobbyState.statusText = "Waiting for opponent";
         currentLobbyState.hostPlayer.isConnected = true;
+        currentLobbyState.statusText = "Waiting for opponent";
 
         PublishHostProperties();
         SyncNamesAndMetaFromSessionProperties();
@@ -218,22 +203,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         byte[] token = BuildConnectionToken(pendingLocalPlayerId, pendingLocalDisplayName);
 
         currentLobbyState.Clear();
-        currentLobbyState.hasLobby = false;
-        currentLobbyState.sessionId = sanitizedRoomCode;
         currentLobbyState.roomCode = sanitizedRoomCode;
-        currentLobbyState.hostPlayerId = string.Empty;
-
-        currentLobbyState.hostPlayer.displayName = "HostPlayer";
-        currentLobbyState.hostPlayer.isHost = true;
-        currentLobbyState.hostPlayer.isReady = true;
-        currentLobbyState.hostPlayer.isConnected = false;
-
-        currentLobbyState.joinPlayer.playerId = pendingLocalPlayerId;
-        currentLobbyState.joinPlayer.displayName = pendingLocalDisplayName;
-        currentLobbyState.joinPlayer.isHost = false;
-        currentLobbyState.joinPlayer.isReady = true;
-        currentLobbyState.joinPlayer.isConnected = false;
-
+        currentLobbyState.sessionId = sanitizedRoomCode;
         currentLobbyState.statusText = "Joining lobby";
 
         bool ok = await runnerManager.StartClientLobbyAsync(
@@ -254,9 +225,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         }
 
         currentLobbyState.hasLobby = true;
-        currentLobbyState.roomCode = GetResolvedSessionName(sanitizedRoomCode);
-        currentLobbyState.sessionId = currentLobbyState.roomCode;
-        currentLobbyState.hostPlayer.isConnected = true;
+        currentLobbyState.joinPlayer.playerId = pendingLocalPlayerId;
+        currentLobbyState.joinPlayer.displayName = pendingLocalDisplayName;
         currentLobbyState.joinPlayer.isConnected = true;
         currentLobbyState.statusText = "Joined lobby / waiting host";
 
@@ -269,7 +239,7 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         string queueId,
         string localPlayerId,
         string localDisplayName,
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
         bool isRanked)
@@ -304,12 +274,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         byte[] token = BuildConnectionToken(pendingLocalPlayerId, pendingLocalDisplayName);
 
         currentLobbyState.Clear();
-        currentLobbyState.hasLobby = false;
         currentLobbyState.sessionId = bucketSessionName;
         currentLobbyState.roomCode = bucketSessionName;
-        currentLobbyState.hostPlayerId = string.Empty;
-        currentLobbyState.hostPlayer.displayName = "Searching...";
-        currentLobbyState.joinPlayer.displayName = pendingLocalDisplayName;
         currentLobbyState.matchMode = matchMode;
         currentLobbyState.pointsToWin = Mathf.Max(1, pointsToWin);
         currentLobbyState.matchDuration = Mathf.Max(1f, matchDuration);
@@ -347,8 +313,6 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         }
 
         currentLobbyState.hasLobby = true;
-        currentLobbyState.roomCode = GetResolvedSessionName(bucketSessionName);
-        currentLobbyState.sessionId = currentLobbyState.roomCode;
 
         if (runnerManager.IsCurrentRunnerServer())
         {
@@ -360,8 +324,6 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             currentLobbyState.hostPlayer.isHost = true;
             currentLobbyState.hostPlayer.isReady = true;
             currentLobbyState.hostPlayer.isConnected = true;
-
-            currentLobbyState.joinPlayer = new OnlineLobbyPlayerData();
             currentLobbyState.statusText = "Waiting for opponent";
 
             PublishHostProperties();
@@ -458,9 +420,6 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         if (pendingLocalIsHost)
         {
             currentLobbyState.hostPlayer.isConnected = true;
-            currentLobbyState.hostPlayer.playerId = Sanitize(currentLobbyState.hostPlayer.playerId, pendingLocalPlayerId);
-            currentLobbyState.hostPlayer.displayName = Sanitize(currentLobbyState.hostPlayer.displayName, pendingLocalDisplayName);
-            currentLobbyState.hostPlayerId = currentLobbyState.hostPlayer.playerId;
 
             if (count >= 2)
             {
@@ -483,7 +442,6 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         }
         else
         {
-            currentLobbyState.hostPlayer.isConnected = true;
             currentLobbyState.joinPlayer.playerId = pendingLocalPlayerId;
             currentLobbyState.joinPlayer.displayName = pendingLocalDisplayName;
             currentLobbyState.joinPlayer.isHost = false;
@@ -546,31 +504,22 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         }
 
         if (TryReadSessionPropertyString(HostNamePropertyKey, out string hostName))
-        {
             currentLobbyState.hostPlayer.displayName = Sanitize(hostName, "HostPlayer");
-            currentLobbyState.hostPlayer.isConnected = !string.IsNullOrWhiteSpace(currentLobbyState.hostPlayer.playerId);
+
+        if (TryReadSessionPropertyString(JoinIdPropertyKey, out string joinId) && !string.IsNullOrWhiteSpace(joinId))
+        {
+            currentLobbyState.joinPlayer.playerId = Sanitize(joinId, currentLobbyState.joinPlayer.playerId);
+            currentLobbyState.joinPlayer.isConnected = true;
         }
 
-        if (TryReadSessionPropertyString(JoinIdPropertyKey, out string joinId))
+        if (TryReadSessionPropertyString(JoinNamePropertyKey, out string joinName) && !string.IsNullOrWhiteSpace(joinName))
         {
-            if (!string.IsNullOrWhiteSpace(joinId))
-            {
-                currentLobbyState.joinPlayer.playerId = Sanitize(joinId, currentLobbyState.joinPlayer.playerId);
-                currentLobbyState.joinPlayer.isConnected = true;
-            }
-        }
-
-        if (TryReadSessionPropertyString(JoinNamePropertyKey, out string joinName))
-        {
-            if (!string.IsNullOrWhiteSpace(joinName))
-            {
-                currentLobbyState.joinPlayer.displayName = Sanitize(joinName, "JoinPlayer");
-                currentLobbyState.joinPlayer.isConnected = true;
-            }
+            currentLobbyState.joinPlayer.displayName = Sanitize(joinName, "JoinPlayer");
+            currentLobbyState.joinPlayer.isConnected = true;
         }
 
         if (TryReadSessionPropertyInt(MatchModePropertyKey, out int matchModeValue))
-            currentLobbyState.matchMode = (StartEndController.MatchMode)Mathf.Clamp(matchModeValue, 0, 1);
+            currentLobbyState.matchMode = (MatchMode)Mathf.Clamp(matchModeValue, 0, 1);
 
         if (TryReadSessionPropertyInt(PointsToWinPropertyKey, out int pointsToWin))
             currentLobbyState.pointsToWin = Mathf.Max(1, pointsToWin);
@@ -645,7 +594,7 @@ public class FusionLobbyService : OnlineLobbyServiceBase
 
     private string BuildDeterministicMatchmakingBucket(
         string queueId,
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
         bool isRanked)
@@ -703,14 +652,6 @@ public class FusionLobbyService : OnlineLobbyServiceBase
     {
         if (runnerManager == null)
             runnerManager = PhotonFusionRunnerManager.Instance;
-
-#if UNITY_2023_1_OR_NEWER
-        if (runnerManager == null)
-            runnerManager = FindFirstObjectByType<PhotonFusionRunnerManager>();
-#else
-        if (runnerManager == null)
-            runnerManager = FindObjectOfType<PhotonFusionRunnerManager>();
-#endif
     }
 
     private Dictionary<string, SessionProperty> BuildSessionProperties(
@@ -719,7 +660,7 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         string joinId,
         string joinName,
         string queueId,
-        StartEndController.MatchMode matchMode,
+        MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
         bool isRanked)
@@ -736,18 +677,6 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             { MatchDurationPropertyKey, Mathf.RoundToInt(Mathf.Max(1f, matchDuration)) },
             { RankedPropertyKey, isRanked ? 1 : 0 }
         };
-    }
-
-    private string GetResolvedSessionName(string fallback)
-    {
-        if (runnerManager != null)
-        {
-            string sessionName = runnerManager.GetCurrentSessionName();
-            if (!string.IsNullOrWhiteSpace(sessionName))
-                return sessionName.Trim().ToUpperInvariant();
-        }
-
-        return fallback;
     }
 
     private string GenerateRoomCode()
