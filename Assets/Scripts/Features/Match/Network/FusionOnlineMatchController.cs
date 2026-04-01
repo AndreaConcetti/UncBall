@@ -11,6 +11,14 @@ public class FusionOnlineMatchController : NetworkBehaviour
         ScoreHalfPoint = 2
     }
 
+    private enum RematchState : byte
+    {
+        None = 0,
+        Pending = 1,
+        Accepted = 2,
+        Declined = 3
+    }
+
     [Header("Scene References")]
     [SerializeField] private BallTurnSpawner ballTurnSpawner;
     [SerializeField] private OnlineGameplayAuthority onlineGameplayAuthority;
@@ -64,10 +72,17 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [Networked, Capacity(64)] private NetworkString<_64> NetPlayer1SkinId { get; set; }
     [Networked, Capacity(64)] private NetworkString<_64> NetPlayer2SkinId { get; set; }
 
+    [Networked] private NetworkBool NetPlayer1PresentationLocked { get; set; }
+    [Networked] private NetworkBool NetPlayer2PresentationLocked { get; set; }
+
     [Networked] private int NetShotPopupSequence { get; set; }
     [Networked] private int NetShotPopupCombo { get; set; }
     [Networked] private int NetShotPopupPoints { get; set; }
     [Networked] private Vector3 NetShotPopupWorldPosition { get; set; }
+
+    [Networked] private int NetRematchNonce { get; set; }
+    [Networked] private byte NetRematchRequesterRaw { get; set; }
+    [Networked] private byte NetRematchStateRaw { get; set; }
 
     private BallPhysics watchedBall;
     private Rigidbody watchedBallRb;
@@ -77,41 +92,85 @@ public class FusionOnlineMatchController : NetworkBehaviour
     private bool localPresentationSubmitted;
     private int lastConsumedShotPopupSequence = -1;
 
-    public MatchMode CurrentMatchMode => (MatchMode)NetMatchModeRaw;
-    public int PointsToWin => NetPointsToWin;
-    public float ConfiguredMatchDuration => NetConfiguredMatchDuration;
+    private bool hasSpawnedNetworkState;
+    private bool hasInitializedAuthorityState;
 
-    public PlayerID CurrentTurnOwner => (PlayerID)NetCurrentTurnOwnerRaw;
-    public float CurrentTurnTimeRemaining => NetTurnTimeRemaining;
-    public float CurrentMatchTimeRemaining => NetMatchTimeRemaining;
+    public bool HasSpawnedNetworkState => hasSpawnedNetworkState;
+    public bool IsNetworkStateReadable =>
+        hasSpawnedNetworkState &&
+        Object != null &&
+        Object.IsValid &&
+        Runner != null;
 
-    public bool MatchStarted => NetMatchStarted;
-    public bool MatchEnded => NetMatchEnded;
+    public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : MatchMode.TimeLimit;
+    public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : 0;
+    public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : 0f;
 
-    public bool MidMatchBreakActive => NetBreakActive;
-    public float CurrentBreakTimeRemaining => NetBreakTimeRemaining;
-    public bool IsTimeHalftimeActive => NetBreakActive && (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.TimeHalftime;
-    public bool IsHalfPointActive => NetBreakActive && (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.ScoreHalfPoint;
+    public PlayerID CurrentTurnOwner => IsNetworkStateReadable ? (PlayerID)NetCurrentTurnOwnerRaw : PlayerID.None;
+    public float CurrentTurnTimeRemaining => IsNetworkStateReadable ? NetTurnTimeRemaining : 0f;
+    public float CurrentMatchTimeRemaining => IsNetworkStateReadable ? NetMatchTimeRemaining : 0f;
 
-    public int ScoreP1 => NetScoreP1;
-    public int ScoreP2 => NetScoreP2;
+    public bool MatchStarted => IsNetworkStateReadable && NetMatchStarted;
+    public bool MatchEnded => IsNetworkStateReadable && NetMatchEnded;
 
-    public PlayerID Winner => (PlayerID)NetWinnerRaw;
+    public bool MidMatchBreakActive => IsNetworkStateReadable && NetBreakActive;
+    public float CurrentBreakTimeRemaining => IsNetworkStateReadable ? NetBreakTimeRemaining : 0f;
+    public bool IsTimeHalftimeActive =>
+        IsNetworkStateReadable &&
+        NetBreakActive &&
+        (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.TimeHalftime;
 
-    public string Player1DisplayName => string.IsNullOrWhiteSpace(NetPlayer1DisplayName.ToString()) ? "Player 1" : NetPlayer1DisplayName.ToString();
-    public string Player2DisplayName => string.IsNullOrWhiteSpace(NetPlayer2DisplayName.ToString()) ? "Player 2" : NetPlayer2DisplayName.ToString();
+    public bool IsHalfPointActive =>
+        IsNetworkStateReadable &&
+        NetBreakActive &&
+        (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.ScoreHalfPoint;
 
-    public string Player1SkinId => NetPlayer1SkinId.ToString();
-    public string Player2SkinId => NetPlayer2SkinId.ToString();
+    public int ScoreP1 => IsNetworkStateReadable ? NetScoreP1 : 0;
+    public int ScoreP2 => IsNetworkStateReadable ? NetScoreP2 : 0;
+
+    public PlayerID Winner => IsNetworkStateReadable ? (PlayerID)NetWinnerRaw : PlayerID.None;
+
+    public string Player1DisplayName
+    {
+        get
+        {
+            if (!IsNetworkStateReadable)
+                return "Player 1";
+
+            string value = NetPlayer1DisplayName.ToString();
+            return string.IsNullOrWhiteSpace(value) ? "Player 1" : value;
+        }
+    }
+
+    public string Player2DisplayName
+    {
+        get
+        {
+            if (!IsNetworkStateReadable)
+                return "Player 2";
+
+            string value = NetPlayer2DisplayName.ToString();
+            return string.IsNullOrWhiteSpace(value) ? "Player 2" : value;
+        }
+    }
+
+    public string Player1SkinId => IsNetworkStateReadable ? NetPlayer1SkinId.ToString() : string.Empty;
+    public string Player2SkinId => IsNetworkStateReadable ? NetPlayer2SkinId.ToString() : string.Empty;
 
     public PlayerID EffectiveLocalPlayerId => Runner != null && Runner.IsServer ? PlayerID.Player1 : PlayerID.Player2;
     public PlayerID EffectiveRemotePlayerId => EffectiveLocalPlayerId == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
+
+    public int RematchNonce => IsNetworkStateReadable ? NetRematchNonce : 0;
+    public PlayerID RematchRequester => IsNetworkStateReadable ? (PlayerID)NetRematchRequesterRaw : PlayerID.None;
+    public bool HasPendingRematchRequest => IsNetworkStateReadable && (RematchState)NetRematchStateRaw == RematchState.Pending;
+    public bool RematchAccepted => IsNetworkStateReadable && (RematchState)NetRematchStateRaw == RematchState.Accepted;
+    public bool RematchDeclined => IsNetworkStateReadable && (RematchState)NetRematchStateRaw == RematchState.Declined;
 
     public BallPhysics CurrentBall
     {
         get
         {
-            if (Runner == null || NetActiveBallId == default)
+            if (!IsNetworkStateReadable || NetActiveBallId == default)
                 return null;
 
             if (!Runner.TryFindObject(NetActiveBallId, out NetworkObject obj))
@@ -123,12 +182,17 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public override void Spawned()
     {
+        hasSpawnedNetworkState = true;
+
         ResolveReferences();
         RegisterAuthorityLocally();
         SubscribeToScoreIfNeeded();
 
-        if (Object.HasStateAuthority)
+        if (Object.HasStateAuthority && !hasInitializedAuthorityState)
+        {
             InitializeAuthorityState();
+            hasInitializedAuthorityState = true;
+        }
 
         SubmitLocalPresentationIfNeeded();
         ApplyReplicaToLocalSystems();
@@ -136,12 +200,16 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
+        hasSpawnedNetworkState = false;
         UnsubscribeFromScore();
     }
 
     public override void FixedUpdateNetwork()
     {
         ResolveReferences();
+
+        if (!IsNetworkStateReadable)
+            return;
 
         if (Object.HasStateAuthority)
             RefreshAuthoritativePresentationFromSession();
@@ -157,9 +225,175 @@ public class FusionOnlineMatchController : NetworkBehaviour
     public override void Render()
     {
         ResolveReferences();
+
+        if (!IsNetworkStateReadable)
+            return;
+
         RegisterAuthorityLocally();
         ApplyReplicaToLocalSystems();
         ConsumeReplicatedShotPopupIfNeeded();
+    }
+
+    public void RequestLocalRematch()
+    {
+        if (!MatchEnded)
+            return;
+
+        if (Object.HasStateAuthority)
+        {
+            AuthorityStartRematchRequest(EffectiveLocalPlayerId);
+            return;
+        }
+
+        RPC_RequestRematch((byte)EffectiveLocalPlayerId);
+    }
+
+    public void AcceptLocalRematch()
+    {
+        if (!MatchEnded)
+            return;
+
+        if (Object.HasStateAuthority)
+        {
+            AuthorityAcceptRematch(EffectiveLocalPlayerId);
+            return;
+        }
+
+        RPC_AcceptRematch((byte)EffectiveLocalPlayerId);
+    }
+
+    public void DeclineLocalRematch()
+    {
+        if (!MatchEnded)
+            return;
+
+        if (Object.HasStateAuthority)
+        {
+            AuthorityDeclineRematch(EffectiveLocalPlayerId);
+            return;
+        }
+
+        RPC_DeclineRematch((byte)EffectiveLocalPlayerId);
+    }
+
+    public void RequestSetCurrentBallPlacement(Vector3 targetWorldPosition)
+    {
+        if (!IsNetworkStateReadable)
+            return;
+
+        if (!MatchStarted || MatchEnded || MidMatchBreakActive || NetShotInFlight || NetPostShotDelayRemaining > 0f)
+            return;
+
+        PlayerID requester = EffectiveLocalPlayerId;
+        BallPhysics currentBall = CurrentBall;
+        if (currentBall == null)
+            return;
+
+        BallOwnership ownership = currentBall.GetComponent<BallOwnership>();
+        if (ownership == null || ownership.Owner != requester)
+            return;
+
+        Vector3 sanitizedTarget = SanitizePlacementTarget(targetWorldPosition);
+
+        if (Object.HasStateAuthority)
+        {
+            ApplyPlacementAuthority(requester, sanitizedTarget);
+            return;
+        }
+
+        RPC_RequestSetPlacement(sanitizedTarget);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestSetPlacement(Vector3 targetWorldPosition, RpcInfo info = default)
+    {
+        PlayerID requester = ResolvePlayerIdFromRpc(info);
+        ApplyPlacementAuthority(requester, SanitizePlacementTarget(targetWorldPosition));
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestRematch(byte requesterRaw)
+    {
+        AuthorityStartRematchRequest((PlayerID)requesterRaw);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_AcceptRematch(byte accepterRaw)
+    {
+        AuthorityAcceptRematch((PlayerID)accepterRaw);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_DeclineRematch(byte declinerRaw)
+    {
+        AuthorityDeclineRematch((PlayerID)declinerRaw);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_SubmitLocalPresentation(byte playerRaw, string displayName, string skinId)
+    {
+        ApplyPresentationForPlayer((PlayerID)playerRaw, displayName, skinId);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestLaunch(Vector3 direction, float force, RpcInfo info = default)
+    {
+        PlayerID requester = ResolvePlayerIdFromRpc(info);
+        ApplyLaunchAuthority(requester, direction, force);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestResumeAfterHalftime()
+    {
+        ResumeAfterMidMatchBreakAuthority();
+    }
+
+    private void AuthorityStartRematchRequest(PlayerID requester)
+    {
+        if (!Object.HasStateAuthority || !MatchEnded)
+            return;
+
+        if ((RematchState)NetRematchStateRaw == RematchState.Pending ||
+            (RematchState)NetRematchStateRaw == RematchState.Accepted)
+            return;
+
+        NetRematchNonce += 1;
+        NetRematchRequesterRaw = (byte)requester;
+        NetRematchStateRaw = (byte)RematchState.Pending;
+
+        if (logDebug)
+            Debug.Log("[FusionOnlineMatchController] Rematch requested by " + requester, this);
+    }
+
+    private void AuthorityAcceptRematch(PlayerID accepter)
+    {
+        if (!Object.HasStateAuthority || !MatchEnded)
+            return;
+
+        if ((RematchState)NetRematchStateRaw != RematchState.Pending)
+            return;
+
+        if (accepter == (PlayerID)NetRematchRequesterRaw)
+            return;
+
+        NetRematchStateRaw = (byte)RematchState.Accepted;
+
+        if (logDebug)
+            Debug.Log("[FusionOnlineMatchController] Rematch accepted by " + accepter, this);
+    }
+
+    private void AuthorityDeclineRematch(PlayerID decliner)
+    {
+        if (!Object.HasStateAuthority || !MatchEnded)
+            return;
+
+        if ((RematchState)NetRematchStateRaw == RematchState.Declined)
+            return;
+
+        NetRematchStateRaw = (byte)RematchState.Declined;
+
+        if (logDebug)
+            Debug.Log("[FusionOnlineMatchController] Rematch declined by " + decliner, this);
     }
 
     private void ResolveReferences()
@@ -215,17 +449,23 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         OnlineMatchSessionData s = session.CurrentSession;
 
-        if (!string.IsNullOrWhiteSpace(s.hostDisplayName))
-            NetPlayer1DisplayName = s.hostDisplayName.Trim();
+        if (!NetPlayer1PresentationLocked)
+        {
+            if (!string.IsNullOrWhiteSpace(s.hostDisplayName))
+                NetPlayer1DisplayName = s.hostDisplayName.Trim();
 
-        if (s.hasRemoteJoiner && !string.IsNullOrWhiteSpace(s.joinDisplayName))
-            NetPlayer2DisplayName = s.joinDisplayName.Trim();
+            if (!string.IsNullOrWhiteSpace(s.player1SkinUniqueId))
+                NetPlayer1SkinId = s.player1SkinUniqueId.Trim();
+        }
 
-        if (!string.IsNullOrWhiteSpace(s.player1SkinUniqueId))
-            NetPlayer1SkinId = s.player1SkinUniqueId.Trim();
+        if (!NetPlayer2PresentationLocked)
+        {
+            if (s.hasRemoteJoiner && !string.IsNullOrWhiteSpace(s.joinDisplayName))
+                NetPlayer2DisplayName = s.joinDisplayName.Trim();
 
-        if (!string.IsNullOrWhiteSpace(s.player2SkinUniqueId))
-            NetPlayer2SkinId = s.player2SkinUniqueId.Trim();
+            if (!string.IsNullOrWhiteSpace(s.player2SkinUniqueId))
+                NetPlayer2SkinId = s.player2SkinUniqueId.Trim();
+        }
     }
 
     private void RegisterAuthorityLocally()
@@ -313,10 +553,17 @@ public class FusionOnlineMatchController : NetworkBehaviour
         NetPlayer1SkinId = ResolveInitialSkinIdForPlayer(PlayerID.Player1);
         NetPlayer2SkinId = ResolveInitialSkinIdForPlayer(PlayerID.Player2);
 
+        NetPlayer1PresentationLocked = false;
+        NetPlayer2PresentationLocked = false;
+
         NetShotPopupSequence = 0;
         NetShotPopupCombo = 0;
         NetShotPopupPoints = 0;
         NetShotPopupWorldPosition = Vector3.zero;
+
+        NetRematchNonce = 0;
+        NetRematchRequesterRaw = (byte)PlayerID.None;
+        NetRematchStateRaw = (byte)RematchState.None;
 
         if (scoreManager != null)
             scoreManager.StartMatch();
@@ -333,11 +580,22 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void SubmitLocalPresentationIfNeeded()
     {
-        if (localPresentationSubmitted)
+        if (localPresentationSubmitted || !IsNetworkStateReadable)
             return;
 
         string localName = ResolveLocalDisplayName();
         string localSkinId = ResolveLocalEquippedSkinId();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchController] SubmitLocalPresentationIfNeeded -> " +
+                "EffectiveLocalPlayerId=" + EffectiveLocalPlayerId +
+                " | LocalName=" + localName +
+                " | LocalSkinId=" + localSkinId,
+                this
+            );
+        }
 
         if (Object.HasStateAuthority)
         {
@@ -348,12 +606,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         RPC_SubmitLocalPresentation((byte)EffectiveLocalPlayerId, localName, localSkinId);
         localPresentationSubmitted = true;
-    }
-
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_SubmitLocalPresentation(byte playerRaw, string displayName, string skinId)
-    {
-        ApplyPresentationForPlayer((PlayerID)playerRaw, displayName, skinId);
     }
 
     private void ApplyPresentationForPlayer(PlayerID player, string displayName, string skinId)
@@ -369,14 +621,31 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (player == PlayerID.Player1)
         {
             NetPlayer1DisplayName = safeName;
+
             if (!string.IsNullOrWhiteSpace(safeSkin))
                 NetPlayer1SkinId = safeSkin;
+
+            NetPlayer1PresentationLocked = true;
         }
         else if (player == PlayerID.Player2)
         {
             NetPlayer2DisplayName = safeName;
+
             if (!string.IsNullOrWhiteSpace(safeSkin))
                 NetPlayer2SkinId = safeSkin;
+
+            NetPlayer2PresentationLocked = true;
+        }
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchController] ApplyPresentationForPlayer -> " +
+                "Player=" + player +
+                " | Name=" + safeName +
+                " | SkinId=" + safeSkin,
+                this
+            );
         }
     }
 
@@ -600,7 +869,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void RequestResumeAfterHalftime()
     {
-        if (!NetBreakActive || NetMatchEnded)
+        if (!MidMatchBreakActive || MatchEnded)
             return;
 
         if (Object.HasStateAuthority)
@@ -610,12 +879,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
 
         RPC_RequestResumeAfterHalftime();
-    }
-
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_RequestResumeAfterHalftime()
-    {
-        ResumeAfterMidMatchBreakAuthority();
     }
 
     private void ResumeAfterMidMatchBreakAuthority()
@@ -742,6 +1005,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void RequestLaunchCurrentBall(Vector3 direction, float force)
     {
+        if (!IsNetworkStateReadable)
+            return;
+
         if (!NetMatchStarted || NetMatchEnded || NetBreakActive || NetPostShotDelayRemaining > 0f)
             return;
 
@@ -754,13 +1020,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
         RPC_RequestLaunch(direction, force);
     }
 
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_RequestLaunch(Vector3 direction, float force, RpcInfo info = default)
-    {
-        PlayerID requester = ResolvePlayerIdFromRpc(info);
-        ApplyLaunchAuthority(requester, direction, force);
-    }
-
     private PlayerID ResolvePlayerIdFromRpc(RpcInfo info)
     {
         if (Runner == null)
@@ -770,6 +1029,71 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return Runner.IsServer ? PlayerID.Player1 : PlayerID.Player2;
 
         return Runner.IsServer ? PlayerID.Player2 : PlayerID.Player1;
+    }
+
+    private void ApplyPlacementAuthority(PlayerID requester, Vector3 targetWorldPosition)
+    {
+        if (!Object.HasStateAuthority || !IsNetworkStateReadable)
+            return;
+
+        if (!MatchStarted || MatchEnded || MidMatchBreakActive || NetShotInFlight || NetPostShotDelayRemaining > 0f)
+            return;
+
+        if (requester != CurrentTurnOwner)
+            return;
+
+        BallPhysics ball = CurrentBall;
+        if (ball == null)
+            return;
+
+        BallOwnership ownership = ball.GetComponent<BallOwnership>();
+        if (ownership == null || ownership.Owner != requester)
+            return;
+
+        Rigidbody rb = ball.GetComponent<Rigidbody>();
+        Vector3 finalTarget = SanitizePlacementTarget(targetWorldPosition);
+
+        if (rb != null)
+        {
+            rb.isKinematic = true;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.constraints = RigidbodyConstraints.FreezeAll;
+            rb.position = finalTarget;
+        }
+        else
+        {
+            ball.transform.position = finalTarget;
+        }
+    }
+
+    private Vector3 SanitizePlacementTarget(Vector3 targetWorldPosition)
+    {
+        BallPhysics ball = CurrentBall;
+        if (ball == null)
+            return targetWorldPosition;
+
+        Vector3 safe = targetWorldPosition;
+        safe.y = ball.transform.position.y;
+
+        if (ballTurnSpawner == null)
+            return safe;
+
+        BoxCollider placementArea = ballTurnSpawner.GetPlacementAreaForOwner(CurrentTurnOwner);
+        if (placementArea == null)
+            return safe;
+
+        Vector3 local = placementArea.transform.InverseTransformPoint(safe);
+        Vector3 half = placementArea.size * 0.5f;
+        Vector3 center = placementArea.center;
+
+        local.x = Mathf.Clamp(local.x, center.x - half.x, center.x + half.x);
+
+        Vector3 currentLocal = placementArea.transform.InverseTransformPoint(ball.transform.position);
+        local.y = currentLocal.y;
+        local.z = currentLocal.z;
+
+        return placementArea.transform.TransformPoint(local);
     }
 
     private void ApplyLaunchAuthority(PlayerID requester, Vector3 direction, float force)
@@ -861,6 +1185,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ApplyReplicaToLocalSystems()
     {
+        if (!IsNetworkStateReadable)
+            return;
+
         if (ballTurnSpawner != null)
             ballTurnSpawner.SetPlayer1Side(NetPlayer1OnLeft);
 
@@ -910,7 +1237,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ConsumeReplicatedShotPopupIfNeeded()
     {
-        if (shotScorePopupUI == null)
+        if (shotScorePopupUI == null || !IsNetworkStateReadable)
             return;
 
         if (NetShotPopupSequence <= 0)
@@ -951,6 +1278,16 @@ public class FusionOnlineMatchController : NetworkBehaviour
         NetCurrentTurnOwnerRaw = (byte)owner;
         NetTurnTimeRemaining = defaultTurnDuration;
         NetShotInFlight = false;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchController] SpawnNewActiveBallAuthority -> " +
+                "Owner=" + owner +
+                " | SkinId=" + skinId,
+                this
+            );
+        }
     }
 
     private void DespawnActiveBallAuthority()
@@ -1091,12 +1428,19 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (PlayerSkinLoadout.Instance == null)
             return string.Empty;
 
-        BallSkinData skin = EffectiveLocalPlayerId == PlayerID.Player1
-            ? PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer1()
-            : PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer2();
+        BallSkinData skin = PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer1();
 
         if (skin == null || string.IsNullOrWhiteSpace(skin.skinUniqueId))
             return string.Empty;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchController] ResolveLocalEquippedSkinId -> " +
+                "Using local primary loadout skin = " + skin.skinUniqueId,
+                this
+            );
+        }
 
         return skin.skinUniqueId.Trim();
     }

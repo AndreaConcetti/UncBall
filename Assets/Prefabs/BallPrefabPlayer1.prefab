@@ -202,6 +202,7 @@ MonoBehaviour:
   smoothRotationAxis: 1
   axisSmoothingSpeed: 24
   initialLocalEulerAngles: {x: 0, y: 0, z: 0}
+  useTransformDeltaWhenKinematic: 1
 --- !u!54 &4500738214376203590
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -285,7 +286,9 @@ MonoBehaviour:
   ballPhysics: {fileID: 0}
   ballOwnership: {fileID: 0}
   ballSkinApplier: {fileID: 0}
-  logDebug: 0
+  ballVisualRoll: {fileID: 0}
+  fallbackDatabase: {fileID: 0}
+  logDebug: 1
 --- !u!114 &-938309530733399801
 MonoBehaviour:
   m_ObjectHideFlags: 0

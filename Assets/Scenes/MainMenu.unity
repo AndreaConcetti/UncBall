@@ -29531,8 +29531,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RewardManager
   playerChestSlotInventory: {fileID: 1726694513}
   enableMatchWinChestReward: 1
-  onlyGrantForPlayer1Wins: 1
-  defaultWinChestType: 4
+  defaultWinChestType: 0
   logDebug: 1
 --- !u!114 &1801468261
 MonoBehaviour:
@@ -29652,6 +29651,7 @@ MonoBehaviour:
   onlineMatchSession: {fileID: 1801468263}
   matchRuntimeConfig: {fileID: 1801468262}
   gameplaySceneName: Gameplay
+  mainMenuSceneName: MainMenu
   logDebug: 1
 --- !u!114 &1801468266
 MonoBehaviour:
@@ -29714,6 +29714,7 @@ MonoBehaviour:
     startRequested: 0
     matchStarted: 0
     statusText: 
+  logDebug: 1
 --- !u!1 &1805039842
 GameObject:
   m_ObjectHideFlags: 0
@@ -32577,14 +32578,14 @@ MonoBehaviour:
     queueId: ranked
     matchMode: 1
     pointsToWin: 0
-    matchDuration: 60
+    matchDuration: 30
     isRanked: 1
     allowChestRewards: 1
     allowXpRewards: 1
     allowStatsProgression: 1
   defaultSearchingText: SEARCHING FOR OPPONENT...
   defaultWaitingHostText: WAITING FOR OPPONENT
-  defaultJoinWaitingText: WAITING FOR HOST
+  defaultJoinWaitingText: SEARCHING THE LOBBY...
   defaultLobbyReadyText: LOBBY READY
   defaultStartingText: STARTING MATCH...
   defaultMatchFoundTitle: MATCH FOUND!

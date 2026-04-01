@@ -20,7 +20,6 @@ public class RewardManager : MonoBehaviour
 
     [Header("Reward Rules")]
     [SerializeField] private bool enableMatchWinChestReward = true;
-    [SerializeField] private bool onlyGrantForPlayer1Wins = true;
     [SerializeField] private ChestType defaultWinChestType = ChestType.Random;
 
     [Header("Debug")]
@@ -103,12 +102,6 @@ public class RewardManager : MonoBehaviour
         if (winner == PlayerID.None)
         {
             result.reason = "no_winner";
-            return result;
-        }
-
-        if (onlyGrantForPlayer1Wins && winner != PlayerID.Player1)
-        {
-            result.reason = "winner_not_local_reward_target";
             return result;
         }
 

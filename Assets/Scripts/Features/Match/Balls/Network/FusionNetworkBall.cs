@@ -9,6 +9,10 @@ public class FusionNetworkBall : NetworkBehaviour
     [SerializeField] private BallPhysics ballPhysics;
     [SerializeField] private BallOwnership ballOwnership;
     [SerializeField] private BallSkinApplier ballSkinApplier;
+    [SerializeField] private BallVisualRoll ballVisualRoll;
+
+    [Header("Fallback")]
+    [SerializeField] private BallSkinDatabase fallbackDatabase;
 
     [Header("Networked")]
     [Networked] private byte NetOwnerRaw { get; set; }
@@ -18,7 +22,10 @@ public class FusionNetworkBall : NetworkBehaviour
     [SerializeField] private bool logDebug = true;
 
     private string lastAppliedSkinUniqueId = string.Empty;
-    private bool initialApplyAttempted;
+    private bool missingSkinLogged;
+    private bool missingDatabaseLogged;
+    private bool missingApplierLogged;
+    private bool parseFailureLogged;
 
     public BallPhysics BallPhysics => ballPhysics;
     public PlayerID OwnerPlayerId => (PlayerID)NetOwnerRaw;
@@ -29,7 +36,8 @@ public class FusionNetworkBall : NetworkBehaviour
         ResolveReferences();
         ApplyOwnerToLocalComponents();
         ForcePlacementFrozenState();
-        TryApplySkin();
+        ResetVisualLayer();
+        TryApplySkin("Spawned");
         RegisterIntoLocalGameplay();
 
         if (logDebug)
@@ -37,7 +45,8 @@ public class FusionNetworkBall : NetworkBehaviour
             Debug.Log(
                 "[FusionNetworkBall] Spawned -> " +
                 "Owner=" + OwnerPlayerId +
-                " | SkinId=" + SkinUniqueId,
+                " | SkinId=" + SkinUniqueId +
+                " | HasApplier=" + (ballSkinApplier != null),
                 this
             );
         }
@@ -47,12 +56,12 @@ public class FusionNetworkBall : NetworkBehaviour
     {
         ResolveReferences();
         ApplyOwnerToLocalComponents();
-        TryApplySkin();
+        TryApplySkin("Render");
     }
 
     private void LateUpdate()
     {
-        TryApplySkin();
+        TryApplySkin("LateUpdate");
     }
 
     public void SetOwnerAndSkin(PlayerID owner, string skinUniqueId)
@@ -88,6 +97,9 @@ public class FusionNetworkBall : NetworkBehaviour
 
         if (ballSkinApplier == null)
             ballSkinApplier = GetComponent<BallSkinApplier>();
+
+        if (ballVisualRoll == null)
+            ballVisualRoll = GetComponent<BallVisualRoll>();
     }
 
     private void ApplyOwnerToLocalComponents()
@@ -104,27 +116,77 @@ public class FusionNetworkBall : NetworkBehaviour
             ballPhysics.Deactivate();
     }
 
-    private void TryApplySkin()
+    private void ResetVisualLayer()
+    {
+        if (ballVisualRoll != null)
+            ballVisualRoll.ResetVisualRotation();
+    }
+
+    private void TryApplySkin(string caller)
     {
         ResolveReferences();
 
         string skinUniqueId = NetSkinUniqueId.ToString();
 
         if (string.IsNullOrWhiteSpace(skinUniqueId))
+        {
+            if (logDebug && !missingSkinLogged)
+            {
+                Debug.LogWarning(
+                    "[FusionNetworkBall] TryApplySkin skipped because NetSkinUniqueId is empty. " +
+                    "Caller=" + caller +
+                    " | Owner=" + OwnerPlayerId,
+                    this
+                );
+                missingSkinLogged = true;
+            }
+
             return;
+        }
+
+        missingSkinLogged = false;
 
         if (string.Equals(lastAppliedSkinUniqueId, skinUniqueId, StringComparison.Ordinal))
             return;
 
         if (ballSkinApplier == null)
-            return;
+        {
+            if (logDebug && !missingApplierLogged)
+            {
+                Debug.LogWarning(
+                    "[FusionNetworkBall] TryApplySkin skipped because BallSkinApplier is missing. " +
+                    "Caller=" + caller +
+                    " | Owner=" + OwnerPlayerId +
+                    " | SkinId=" + skinUniqueId,
+                    this
+                );
+                missingApplierLogged = true;
+            }
 
-        if (PlayerSkinLoadout.Instance == null)
             return;
+        }
 
-        BallSkinDatabase database = PlayerSkinLoadout.Instance.Database;
+        missingApplierLogged = false;
+
+        BallSkinDatabase database = ResolveDatabase();
         if (database == null)
+        {
+            if (logDebug && !missingDatabaseLogged)
+            {
+                Debug.LogWarning(
+                    "[FusionNetworkBall] TryApplySkin skipped because BallSkinDatabase is null. " +
+                    "Caller=" + caller +
+                    " | Owner=" + OwnerPlayerId +
+                    " | SkinId=" + skinUniqueId,
+                    this
+                );
+                missingDatabaseLogged = true;
+            }
+
             return;
+        }
+
+        missingDatabaseLogged = false;
 
         BallSkinData parsedData = null;
 
@@ -134,30 +196,70 @@ public class FusionNetworkBall : NetworkBehaviour
 
         if (!parsed || parsedData == null)
         {
-            if (logDebug && !initialApplyAttempted)
+            if (logDebug && !parseFailureLogged)
             {
                 Debug.LogWarning(
-                    "[FusionNetworkBall] Cannot parse skinUniqueId: " + skinUniqueId,
+                    "[FusionNetworkBall] Cannot parse skinUniqueId. " +
+                    "Caller=" + caller +
+                    " | Owner=" + OwnerPlayerId +
+                    " | SkinId=" + skinUniqueId,
                     this
                 );
+                parseFailureLogged = true;
             }
 
-            initialApplyAttempted = true;
             return;
         }
+
+        parseFailureLogged = false;
 
         bool applied = ballSkinApplier.ApplySkinData(database, parsedData);
         if (!applied)
         {
-            initialApplyAttempted = true;
+            if (logDebug)
+            {
+                Debug.LogWarning(
+                    "[FusionNetworkBall] ApplySkinData returned false. " +
+                    "Caller=" + caller +
+                    " | Owner=" + OwnerPlayerId +
+                    " | SkinId=" + skinUniqueId,
+                    this
+                );
+            }
+
             return;
         }
 
         lastAppliedSkinUniqueId = skinUniqueId;
-        initialApplyAttempted = true;
 
         if (logDebug)
-            Debug.Log("[FusionNetworkBall] Skin applied -> " + skinUniqueId, this);
+        {
+            Debug.Log(
+                "[FusionNetworkBall] Skin applied -> " +
+                "Caller=" + caller +
+                " | Owner=" + OwnerPlayerId +
+                " | SkinId=" + skinUniqueId,
+                this
+            );
+        }
+    }
+
+    private BallSkinDatabase ResolveDatabase()
+    {
+        if (PlayerSkinLoadout.Instance != null && PlayerSkinLoadout.Instance.Database != null)
+            return PlayerSkinLoadout.Instance.Database;
+
+        if (fallbackDatabase != null)
+            return fallbackDatabase;
+
+        BallSkinDatabase[] loadedDatabases = Resources.FindObjectsOfTypeAll<BallSkinDatabase>();
+        if (loadedDatabases != null && loadedDatabases.Length > 0)
+        {
+            fallbackDatabase = loadedDatabases[0];
+            return fallbackDatabase;
+        }
+
+        return null;
     }
 
     private void RegisterIntoLocalGameplay()

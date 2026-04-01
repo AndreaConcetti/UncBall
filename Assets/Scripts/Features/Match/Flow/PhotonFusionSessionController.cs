@@ -1,5 +1,7 @@
 using System;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class PhotonFusionSessionController : MonoBehaviour
 {
@@ -9,14 +11,18 @@ public class PhotonFusionSessionController : MonoBehaviour
     [SerializeField] private PhotonFusionRunnerManager runnerManager;
     [SerializeField] private OnlineMatchSession onlineMatchSession;
     [SerializeField] private MatchRuntimeConfig matchRuntimeConfig;
+    [SerializeField] private FusionLobbyService fusionLobbyService;
 
     [Header("Config")]
     [SerializeField] private string gameplaySceneName = "Gameplay";
+    [SerializeField] private string mainMenuSceneName = "MainMenu";
+    [SerializeField] private int hostStartSceneLoadDelayMs = 800;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
     public bool IsBusy { get; private set; }
+    public bool IsShuttingDown { get; private set; }
 
     public event Action<bool, string> OnOperationCompleted;
 
@@ -32,9 +38,18 @@ public class PhotonFusionSessionController : MonoBehaviour
         Instance = this;
     }
 
-    public void HostPreparedSession()
+    public void ForceResetLocalState(string reason = "Forced reset")
     {
-        if (IsBusy)
+        IsBusy = false;
+        IsShuttingDown = false;
+
+        if (logDebug)
+            Debug.Log("[PhotonFusionSessionController] ForceResetLocalState -> " + reason, this);
+    }
+
+    public async void HostPreparedSession()
+    {
+        if (IsBusy || IsShuttingDown)
             return;
 
         ResolveDependencies();
@@ -80,6 +95,20 @@ public class PhotonFusionSessionController : MonoBehaviour
             return;
         }
 
+        await Task.Delay(Mathf.Max(100, hostStartSceneLoadDelayMs));
+
+        if (IsShuttingDown)
+        {
+            Complete(false, "Cancelled while starting match.");
+            return;
+        }
+
+        if (runnerManager == null || !runnerManager.IsRunning)
+        {
+            Complete(false, "Fusion runner is no longer active.");
+            return;
+        }
+
         bool loaded = runnerManager.LoadNetworkScene(gameplaySceneName);
         if (!loaded)
         {
@@ -90,9 +119,39 @@ public class PhotonFusionSessionController : MonoBehaviour
         Complete(true, "Gameplay scene loading started.");
     }
 
+    public bool LoadGameplaySceneOnActiveRunner()
+    {
+        ResolveDependencies();
+
+        if (IsShuttingDown)
+        {
+            Complete(false, "Cannot load gameplay scene while shutting down.");
+            return false;
+        }
+
+        if (runnerManager == null || !runnerManager.IsRunning)
+        {
+            Complete(false, "Fusion runner is not active.");
+            return false;
+        }
+
+        bool loaded = runnerManager.LoadNetworkScene(gameplaySceneName);
+        if (!loaded)
+        {
+            Complete(false, "Failed to load gameplay scene.");
+            return false;
+        }
+
+        Complete(true, "Gameplay scene reload started.");
+        return true;
+    }
+
     public async void ShutdownSession()
     {
         ResolveDependencies();
+
+        if (IsShuttingDown)
+            return;
 
         if (runnerManager == null)
         {
@@ -101,8 +160,58 @@ public class PhotonFusionSessionController : MonoBehaviour
         }
 
         IsBusy = true;
-        await runnerManager.ShutdownRunnerAsync();
-        Complete(true, "Fusion runner stopped.");
+        IsShuttingDown = true;
+
+        try
+        {
+            await runnerManager.ShutdownRunnerAsync();
+            fusionLobbyService?.ForceResetRuntimeState("ShutdownSession");
+            Complete(true, "Fusion runner stopped.");
+        }
+        catch (Exception ex)
+        {
+            Complete(false, "Shutdown failed: " + ex.Message);
+        }
+        finally
+        {
+            IsShuttingDown = false;
+        }
+    }
+
+    public async void ShutdownSessionAndReturnToMenu(bool clearPreparedSession = true)
+    {
+        ResolveDependencies();
+
+        if (IsShuttingDown)
+            return;
+
+        IsBusy = true;
+        IsShuttingDown = true;
+
+        try
+        {
+            if (runnerManager != null)
+                await runnerManager.ShutdownRunnerAsync();
+
+            fusionLobbyService?.ForceResetRuntimeState("ReturnToMenu");
+
+            if (clearPreparedSession && onlineMatchSession != null)
+                onlineMatchSession.ClearPreparedSession();
+
+            ForceResetLocalState("Before loading main menu");
+
+            Time.timeScale = 1f;
+            SceneManager.LoadScene(mainMenuSceneName);
+            Complete(true, "Fusion runner stopped and returned to menu.");
+        }
+        catch (Exception ex)
+        {
+            Complete(false, "Shutdown and return failed: " + ex.Message);
+        }
+        finally
+        {
+            IsShuttingDown = false;
+        }
     }
 
     private bool ValidateDependencies()
@@ -123,6 +232,9 @@ public class PhotonFusionSessionController : MonoBehaviour
         if (matchRuntimeConfig == null)
             matchRuntimeConfig = MatchRuntimeConfig.Instance;
 
+        if (fusionLobbyService == null)
+            fusionLobbyService = FusionLobbyService.Instance;
+
 #if UNITY_2023_1_OR_NEWER
         if (runnerManager == null)
             runnerManager = FindFirstObjectByType<PhotonFusionRunnerManager>();
@@ -132,6 +244,9 @@ public class PhotonFusionSessionController : MonoBehaviour
 
         if (matchRuntimeConfig == null)
             matchRuntimeConfig = FindFirstObjectByType<MatchRuntimeConfig>();
+
+        if (fusionLobbyService == null)
+            fusionLobbyService = FindFirstObjectByType<FusionLobbyService>();
 #else
         if (runnerManager == null)
             runnerManager = FindObjectOfType<PhotonFusionRunnerManager>();
@@ -141,6 +256,9 @@ public class PhotonFusionSessionController : MonoBehaviour
 
         if (matchRuntimeConfig == null)
             matchRuntimeConfig = FindObjectOfType<MatchRuntimeConfig>();
+
+        if (fusionLobbyService == null)
+            fusionLobbyService = FindObjectOfType<FusionLobbyService>();
 #endif
     }
 

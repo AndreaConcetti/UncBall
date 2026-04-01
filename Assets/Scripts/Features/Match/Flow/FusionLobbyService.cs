@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using UnityEngine;
 
 public class FusionLobbyService : OnlineLobbyServiceBase
@@ -18,6 +19,12 @@ public class FusionLobbyService : OnlineLobbyServiceBase
     private const string PointsToWinPropertyKey = "pt";
     private const string MatchDurationPropertyKey = "md";
     private const string RankedPropertyKey = "rk";
+    private const string RoomStatePropertyKey = "rs";
+
+    private const int RoomStateOpen = 0;
+    private const int RoomStateStarting = 1;
+    private const int RoomStateInGame = 2;
+    private const int RoomStateClosed = 3;
 
     [SerializeField] private bool dontDestroyOnLoad = true;
     [SerializeField] private PhotonFusionRunnerManager runnerManager;
@@ -26,12 +33,25 @@ public class FusionLobbyService : OnlineLobbyServiceBase
     [SerializeField] private int maxPlayers = 2;
     [SerializeField] private float sessionPropertyPollInterval = 0.25f;
     [SerializeField] private OnlineLobbyState currentLobbyState = new OnlineLobbyState();
+    [SerializeField] private bool logDebug = true;
+    [SerializeField] private int staleMatchRetryDelayMs = 1200;
 
     private string pendingLocalPlayerId = string.Empty;
     private string pendingLocalDisplayName = string.Empty;
     private bool pendingLocalIsHost = false;
     private float nextPropertyPollTime = 0f;
     private bool operationInProgress = false;
+
+    private bool lastRequestWasMatchmaking = false;
+    private string lastQueueId = string.Empty;
+    private string lastLocalPlayerId = string.Empty;
+    private string lastLocalDisplayName = string.Empty;
+    private MatchMode lastMatchMode = MatchMode.ScoreTarget;
+    private int lastPointsToWin = 16;
+    private float lastMatchDuration = 180f;
+    private bool lastRanked = false;
+    private bool retryInProgress = false;
+    private int localRoomState = RoomStateOpen;
 
     public override bool HasActiveLobby => currentLobbyState != null && currentLobbyState.hasLobby;
     public override OnlineLobbyState CurrentLobbyState => currentLobbyState;
@@ -63,9 +83,20 @@ public class FusionLobbyService : OnlineLobbyServiceBase
 
         if (runnerManager != null)
         {
+            runnerManager.OnPlayerJoinedEvent -= HandlePlayerJoined;
             runnerManager.OnPlayerJoinedEvent += HandlePlayerJoined;
+
+            runnerManager.OnPlayerLeftEvent -= HandlePlayerLeft;
             runnerManager.OnPlayerLeftEvent += HandlePlayerLeft;
+
+            runnerManager.OnShutdownEvent -= HandleShutdown;
             runnerManager.OnShutdownEvent += HandleShutdown;
+
+            runnerManager.OnSceneLoadStartEvent -= HandleSceneLoadStart;
+            runnerManager.OnSceneLoadStartEvent += HandleSceneLoadStart;
+
+            runnerManager.OnSceneLoadDoneEvent -= HandleSceneLoadDone;
+            runnerManager.OnSceneLoadDoneEvent += HandleSceneLoadDone;
         }
     }
 
@@ -76,6 +107,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             runnerManager.OnPlayerJoinedEvent -= HandlePlayerJoined;
             runnerManager.OnPlayerLeftEvent -= HandlePlayerLeft;
             runnerManager.OnShutdownEvent -= HandleShutdown;
+            runnerManager.OnSceneLoadStartEvent -= HandleSceneLoadStart;
+            runnerManager.OnSceneLoadDoneEvent -= HandleSceneLoadDone;
         }
     }
 
@@ -89,6 +122,16 @@ public class FusionLobbyService : OnlineLobbyServiceBase
 
         nextPropertyPollTime = Time.unscaledTime + Mathf.Max(0.1f, sessionPropertyPollInterval);
         SyncNamesAndMetaFromSessionProperties();
+        ValidateCurrentRoomIfNeeded();
+    }
+
+    public void ForceResetRuntimeState(string reason = "Forced reset")
+    {
+        if (logDebug)
+            Debug.Log("[FusionLobbyService] ForceResetRuntimeState -> " + reason, this);
+
+        ResetInternalLobbyState(reason);
+        RaiseLobbyStateChanged(currentLobbyState);
     }
 
     public override async void CreateLobby(
@@ -117,6 +160,11 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         pendingLocalPlayerId = Sanitize(localPlayerId, "local_player_1");
         pendingLocalDisplayName = Sanitize(localDisplayName, "HostPlayer");
         pendingLocalIsHost = true;
+        nextPropertyPollTime = 0f;
+        localRoomState = RoomStateOpen;
+
+        lastRequestWasMatchmaking = false;
+        retryInProgress = false;
 
         string roomCode = GenerateRoomCode();
 
@@ -144,7 +192,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             matchMode,
             pointsToWin,
             matchDuration,
-            isRanked
+            isRanked,
+            RoomStateOpen
         );
 
         bool ok = await runnerManager.StartHostLobbyAsync(
@@ -173,6 +222,9 @@ public class FusionLobbyService : OnlineLobbyServiceBase
 
         RaiseLobbyInfo("Lobby created");
         RaiseLobbyStateChanged(currentLobbyState);
+
+        if (logDebug)
+            Debug.Log("[FusionLobbyService] CreateLobby success -> RoomCode=" + roomCode, this);
     }
 
     public override async void JoinLobby(
@@ -198,6 +250,11 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         pendingLocalPlayerId = Sanitize(localPlayerId, "local_player_2");
         pendingLocalDisplayName = Sanitize(localDisplayName, "JoinPlayer");
         pendingLocalIsHost = false;
+        nextPropertyPollTime = 0f;
+        localRoomState = RoomStateOpen;
+
+        lastRequestWasMatchmaking = false;
+        retryInProgress = false;
 
         string sanitizedRoomCode = SanitizeRoomCode(roomCode);
         byte[] token = BuildConnectionToken(pendingLocalPlayerId, pendingLocalDisplayName);
@@ -233,6 +290,9 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         SyncNamesAndMetaFromSessionProperties();
         RaiseLobbyInfo("Joined lobby");
         RaiseLobbyStateChanged(currentLobbyState);
+
+        if (logDebug)
+            Debug.Log("[FusionLobbyService] JoinLobby success -> RoomCode=" + sanitizedRoomCode, this);
     }
 
     public override async void BeginMatchmaking(
@@ -262,6 +322,17 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         pendingLocalPlayerId = Sanitize(localPlayerId, "local_player_1");
         pendingLocalDisplayName = Sanitize(localDisplayName, "Player 1");
         pendingLocalIsHost = false;
+        nextPropertyPollTime = 0f;
+        localRoomState = RoomStateOpen;
+
+        lastRequestWasMatchmaking = true;
+        lastQueueId = Sanitize(queueId, "normal");
+        lastLocalPlayerId = pendingLocalPlayerId;
+        lastLocalDisplayName = pendingLocalDisplayName;
+        lastMatchMode = matchMode;
+        lastPointsToWin = Mathf.Max(1, pointsToWin);
+        lastMatchDuration = Mathf.Max(1f, matchDuration);
+        lastRanked = isRanked;
 
         string bucketSessionName = BuildDeterministicMatchmakingBucket(
             queueId,
@@ -291,7 +362,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             matchMode,
             pointsToWin,
             matchDuration,
-            isRanked
+            isRanked,
+            RoomStateOpen
         );
 
         bool ok = await runnerManager.StartMatchmakingAsync(
@@ -325,6 +397,7 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             currentLobbyState.hostPlayer.isReady = true;
             currentLobbyState.hostPlayer.isConnected = true;
             currentLobbyState.statusText = "Waiting for opponent";
+            localRoomState = RoomStateOpen;
 
             PublishHostProperties();
         }
@@ -343,27 +416,33 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         SyncNamesAndMetaFromSessionProperties();
         RaiseLobbyInfo("Matchmaking session ready");
         RaiseLobbyStateChanged(currentLobbyState);
+
+        ValidateCurrentRoomIfNeeded();
+
+        if (logDebug)
+            Debug.Log("[FusionLobbyService] BeginMatchmaking success -> Bucket=" + bucketSessionName, this);
     }
 
     public override async void CancelMatchmaking(string localPlayerId)
     {
+        retryInProgress = false;
         await LeaveInternal();
     }
 
     public override async void LeaveLobby(string localPlayerId)
     {
+        retryInProgress = false;
         await LeaveInternal();
     }
 
-    private async System.Threading.Tasks.Task LeaveInternal()
+    private async Task LeaveInternal()
     {
         ResolveDependencies();
 
         if (runnerManager != null && runnerManager.HasActiveRunner)
             await runnerManager.ShutdownRunnerAsync();
 
-        currentLobbyState.Clear();
-        operationInProgress = false;
+        ResetInternalLobbyState("Lobby closed");
         RaiseLobbyInfo("Lobby closed");
         RaiseLobbyStateChanged(currentLobbyState);
     }
@@ -405,6 +484,9 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         currentLobbyState.startRequested = true;
         currentLobbyState.matchStarted = true;
         currentLobbyState.statusText = "Match starting";
+        localRoomState = RoomStateStarting;
+
+        PublishRoomState(RoomStateStarting);
 
         RaiseLobbyInfo("Match starting");
         RaiseLobbyStateChanged(currentLobbyState);
@@ -431,12 +513,15 @@ public class FusionLobbyService : OnlineLobbyServiceBase
                 currentLobbyState.joinPlayer.isReady = true;
                 currentLobbyState.joinPlayer.isConnected = true;
                 currentLobbyState.statusText = "Lobby full / ready";
+                localRoomState = RoomStateOpen;
 
                 PublishJoinProperties();
+                PublishRoomState(RoomStateOpen);
             }
             else
             {
                 currentLobbyState.statusText = "Waiting for opponent";
+                localRoomState = RoomStateOpen;
                 PublishHostProperties();
             }
         }
@@ -452,6 +537,7 @@ public class FusionLobbyService : OnlineLobbyServiceBase
 
         SyncNamesAndMetaFromSessionProperties();
         RaiseLobbyStateChanged(currentLobbyState);
+        ValidateCurrentRoomIfNeeded();
     }
 
     private void HandlePlayerLeft(PlayerRef player)
@@ -465,13 +551,15 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             currentLobbyState.startRequested = false;
             currentLobbyState.matchStarted = false;
             currentLobbyState.statusText = "Waiting for opponent";
+            localRoomState = RoomStateOpen;
 
             if (runnerManager != null && runnerManager.IsRunning)
             {
                 runnerManager.TryUpdateSessionProperties(new Dictionary<string, SessionProperty>
                 {
                     { JoinIdPropertyKey, string.Empty },
-                    { JoinNamePropertyKey, string.Empty }
+                    { JoinNamePropertyKey, string.Empty },
+                    { RoomStatePropertyKey, RoomStateOpen }
                 });
             }
         }
@@ -485,11 +573,140 @@ public class FusionLobbyService : OnlineLobbyServiceBase
 
     private void HandleShutdown(ShutdownReason reason)
     {
+        ResetInternalLobbyState("Lobby shutdown: " + reason);
+        RaiseLobbyStateChanged(currentLobbyState);
+
+        if (logDebug)
+            Debug.Log("[FusionLobbyService] HandleShutdown -> " + reason, this);
+    }
+
+    private void HandleSceneLoadStart()
+    {
         if (!HasActiveLobby)
             return;
 
-        currentLobbyState.statusText = "Lobby shutdown: " + reason;
+        if (pendingLocalIsHost)
+            return;
+
+        if (!lastRequestWasMatchmaking)
+            return;
+
+        if (currentLobbyState.matchStarted)
+            return;
+
+        if (retryInProgress)
+            return;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionLobbyService] HandleSceneLoadStart -> stale room detected for client matchmaking. " +
+                "MatchStartedLocal=False, forcing retry.",
+                this
+            );
+        }
+
+        _ = RetryMatchmakingBecauseStaleRoom("Unexpected scene load before confirmed match start");
+    }
+
+    private void HandleSceneLoadDone()
+    {
+        if (!HasActiveLobby)
+            return;
+
+        localRoomState = RoomStateInGame;
+    }
+
+    private async Task RetryMatchmakingBecauseStaleRoom(string reason)
+    {
+        if (retryInProgress)
+            return;
+
+        retryInProgress = true;
+
+        if (logDebug)
+            Debug.Log("[FusionLobbyService] RetryMatchmakingBecauseStaleRoom -> " + reason, this);
+
+        RaiseLobbyInfo("Retrying matchmaking...");
         RaiseLobbyStateChanged(currentLobbyState);
+
+        try
+        {
+            if (runnerManager != null && runnerManager.HasActiveRunner)
+                await runnerManager.ShutdownRunnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[FusionLobbyService] Retry shutdown exception: " + ex.Message, this);
+        }
+
+        ResetInternalLobbyState("Retry matchmaking");
+        RaiseLobbyStateChanged(currentLobbyState);
+
+        await Task.Delay(Mathf.Max(250, staleMatchRetryDelayMs));
+
+        retryInProgress = false;
+
+        if (!lastRequestWasMatchmaking)
+            return;
+
+        BeginMatchmaking(
+            lastQueueId,
+            lastLocalPlayerId,
+            lastLocalDisplayName,
+            lastMatchMode,
+            lastPointsToWin,
+            lastMatchDuration,
+            lastRanked
+        );
+    }
+
+    private void ValidateCurrentRoomIfNeeded()
+    {
+        if (!HasActiveLobby || runnerManager == null || !runnerManager.IsRunning)
+            return;
+
+        if (pendingLocalIsHost)
+            return;
+
+        if (!lastRequestWasMatchmaking)
+            return;
+
+        if (retryInProgress)
+            return;
+
+        if (!TryReadSessionPropertyInt(RoomStatePropertyKey, out int roomState))
+            return;
+
+        if (roomState == RoomStateOpen)
+            return;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionLobbyService] ValidateCurrentRoomIfNeeded -> invalid room state for fresh matchmaking. " +
+                "State=" + roomState,
+                this
+            );
+        }
+
+        _ = RetryMatchmakingBecauseStaleRoom("Room state is not OPEN");
+    }
+
+    private void ResetInternalLobbyState(string statusText)
+    {
+        if (currentLobbyState == null)
+            currentLobbyState = new OnlineLobbyState();
+
+        currentLobbyState.Clear();
+        currentLobbyState.statusText = statusText;
+
+        pendingLocalPlayerId = string.Empty;
+        pendingLocalDisplayName = string.Empty;
+        pendingLocalIsHost = false;
+        nextPropertyPollTime = 0f;
+        operationInProgress = false;
+        localRoomState = RoomStateClosed;
     }
 
     private void SyncNamesAndMetaFromSessionProperties()
@@ -529,6 +746,12 @@ public class FusionLobbyService : OnlineLobbyServiceBase
 
         if (TryReadSessionPropertyInt(RankedPropertyKey, out int ranked))
             currentLobbyState.isRanked = ranked == 1;
+
+        if (TryReadSessionPropertyInt(RoomStatePropertyKey, out int roomState))
+        {
+            localRoomState = roomState;
+            currentLobbyState.matchStarted = roomState >= RoomStateStarting;
+        }
     }
 
     private void PublishHostProperties()
@@ -543,7 +766,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             { MatchModePropertyKey, (int)currentLobbyState.matchMode },
             { PointsToWinPropertyKey, Mathf.Max(1, currentLobbyState.pointsToWin) },
             { MatchDurationPropertyKey, Mathf.RoundToInt(Mathf.Max(1f, currentLobbyState.matchDuration)) },
-            { RankedPropertyKey, currentLobbyState.isRanked ? 1 : 0 }
+            { RankedPropertyKey, currentLobbyState.isRanked ? 1 : 0 },
+            { RoomStatePropertyKey, localRoomState }
         });
     }
 
@@ -556,6 +780,19 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         {
             { JoinIdPropertyKey, Sanitize(currentLobbyState.joinPlayer.playerId, string.Empty) },
             { JoinNamePropertyKey, Sanitize(currentLobbyState.joinPlayer.displayName, string.Empty) }
+        });
+    }
+
+    private void PublishRoomState(int state)
+    {
+        if (runnerManager == null || !runnerManager.IsRunning)
+            return;
+
+        localRoomState = state;
+
+        runnerManager.TryUpdateSessionProperties(new Dictionary<string, SessionProperty>
+        {
+            { RoomStatePropertyKey, state }
         });
     }
 
@@ -663,7 +900,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
         MatchMode matchMode,
         int pointsToWin,
         float matchDuration,
-        bool isRanked)
+        bool isRanked,
+        int roomState)
     {
         return new Dictionary<string, SessionProperty>
         {
@@ -675,7 +913,8 @@ public class FusionLobbyService : OnlineLobbyServiceBase
             { MatchModePropertyKey, (int)matchMode },
             { PointsToWinPropertyKey, Mathf.Max(1, pointsToWin) },
             { MatchDurationPropertyKey, Mathf.RoundToInt(Mathf.Max(1f, matchDuration)) },
-            { RankedPropertyKey, isRanked ? 1 : 0 }
+            { RankedPropertyKey, isRanked ? 1 : 0 },
+            { RoomStatePropertyKey, roomState }
         };
     }
 

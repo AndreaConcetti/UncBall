@@ -23,6 +23,8 @@ public class MultiplayerMenu : MonoBehaviour
     [SerializeField] private OnlineMatchSession onlineMatchSession;
     [SerializeField] private PlayerProfileManager profileManager;
     [SerializeField] private PhotonFusionSessionController fusionSessionController;
+    [SerializeField] private PhotonFusionRunnerManager fusionRunnerManager;
+    [SerializeField] private FusionLobbyService fusionLobbyService;
 
     [Header("Navigation")]
     [SerializeField] private string mainMenuSceneName = "MainMenu";
@@ -150,6 +152,8 @@ public class MultiplayerMenu : MonoBehaviour
     private void Start()
     {
         ResolveDependencies();
+        SanitizePersistentRuntime();
+
         HideAllPanels();
         StopAndResetMatchmakingTimer();
         StopMatchFoundCountdown();
@@ -188,6 +192,7 @@ public class MultiplayerMenu : MonoBehaviour
     public void CreateHostLobby()
     {
         ResolveDependencies();
+        SanitizePersistentRuntime();
 
         onlineMatchSession.PreparePrivateHostSession(
             GetResolvedLocalProfileId(),
@@ -215,6 +220,7 @@ public class MultiplayerMenu : MonoBehaviour
     public void JoinPrivateLobby()
     {
         ResolveDependencies();
+        SanitizePersistentRuntime();
 
         onlineMatchSession.PreparePrivateJoinSession(
             ReadJoinRoomCode(),
@@ -321,6 +327,7 @@ public class MultiplayerMenu : MonoBehaviour
     private void StartMatchmaking(MatchmakingQueuePreset preset)
     {
         ResolveDependencies();
+        SanitizePersistentRuntime();
 
         onlineMatchSession.PrepareMatchmakingSession(
             preset.queueId,
@@ -356,6 +363,15 @@ public class MultiplayerMenu : MonoBehaviour
                 this
             );
         }
+    }
+
+    private void SanitizePersistentRuntime()
+    {
+        ResolveDependencies();
+
+        fusionSessionController?.ForceResetLocalState("MultiplayerMenu sanitize");
+        fusionRunnerManager?.ForceCleanupStaleRunnerIfNeeded();
+        fusionLobbyService?.ForceResetRuntimeState("Menu sanitize");
     }
 
     private void HandleSessionUpdated()
@@ -438,6 +454,7 @@ public class MultiplayerMenu : MonoBehaviour
             if (!matchFoundCountdownRunning)
                 StartMatchFoundCountdown();
 
+            SetGlobalStatus(defaultMatchFoundTitle);
             return;
         }
 
@@ -449,7 +466,7 @@ public class MultiplayerMenu : MonoBehaviour
 
         EnsureMatchmakingTimerRunning();
 
-        string message = ResolveDisplayStatus(session, defaultSearchingText);
+        string message = defaultSearchingText;
         ApplyMatchmakingStatusText(message);
         SetGlobalStatus(message);
     }
@@ -493,12 +510,12 @@ public class MultiplayerMenu : MonoBehaviour
         if (!shouldShowHostPanel)
             return;
 
+        string resolvedRoomCode = !string.IsNullOrWhiteSpace(session.roomCode)
+            ? session.roomCode
+            : (!string.IsNullOrWhiteSpace(session.sessionId) ? session.sessionId : "-");
+
         if (generatedRoomCodeText != null)
-        {
-            generatedRoomCodeText.text = string.IsNullOrWhiteSpace(session.roomCode)
-                ? "-"
-                : session.roomCode;
-        }
+            generatedRoomCodeText.text = resolvedRoomCode;
 
         bool hasJoiner = session.hasRemoteJoiner && !string.IsNullOrWhiteSpace(session.joinDisplayName);
 
@@ -790,6 +807,12 @@ public class MultiplayerMenu : MonoBehaviour
 
         if (fusionSessionController == null)
             fusionSessionController = PhotonFusionSessionController.Instance;
+
+        if (fusionRunnerManager == null)
+            fusionRunnerManager = PhotonFusionRunnerManager.Instance;
+
+        if (fusionLobbyService == null)
+            fusionLobbyService = FusionLobbyService.Instance;
     }
 
     private string GetResolvedLocalProfileId()

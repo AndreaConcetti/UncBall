@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 8440405564875009175}
   - component: {fileID: 74341182407591980}
   - component: {fileID: 4472875160988644675}
+  - component: {fileID: 2961463604889497903}
   m_Layer: 0
   m_Name: FusionOnlineMatchController
   m_TagString: Untagged
@@ -68,11 +69,27 @@ MonoBehaviour:
   onlineGameplayAuthority: {fileID: 0}
   scoreManager: {fileID: 0}
   hud: {fileID: 0}
-  startEndController: {fileID: 0}
+  bottomBarOrderSwapper: {fileID: 0}
+  shotScorePopupUI: {fileID: 0}
   defaultTurnDuration: 12
-  defaultMatchDuration: 60
-  halftimeDuration: 15
+  defaultBreakDuration: 8
+  postShotPanelDelay: 1.5
   enableStuckBallCheck: 1
   stuckTimeout: 3
   stuckVelocityThreshold: 0.05
+  logDebug: 1
+--- !u!114 &2961463604889497903
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3764285927167439590}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 02f51786d0b0acc46955fa52ab80f4cc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FusionOnlineRematchController
+  matchController: {fileID: 0}
+  fusionSessionController: {fileID: 0}
   logDebug: 1

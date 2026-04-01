@@ -28,10 +28,13 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     private NetworkRunner activeRunner;
     private bool callbacksRegistered = false;
+    private bool shutdownInProgress = false;
+    private Task currentShutdownTask;
 
     public NetworkRunner ActiveRunner => activeRunner;
     public bool HasActiveRunner => activeRunner != null;
     public bool IsRunning => activeRunner != null && activeRunner.IsRunning;
+    public bool IsShutdownInProgress => shutdownInProgress;
     public string PrivateLobbyName => privateLobbyName;
     public string MatchmakingLobbyName => matchmakingLobbyName;
 
@@ -110,11 +113,6 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         );
     }
 
-    /// <summary>
-    /// Matchmaking deterministico per bucket.
-    /// Tutti i player che cercano con lo stesso bucketSessionName provano a entrare nella stessa room.
-    /// Se la room non esiste, il primo diventa host. Il secondo entra come client.
-    /// </summary>
     public async Task<bool> StartMatchmakingAsync(
         string bucketSessionName,
         Dictionary<string, SessionProperty> matchmakingProperties,
@@ -148,18 +146,55 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public async Task ShutdownRunnerAsync()
     {
+        ForceCleanupStaleRunnerIfNeeded();
+
         if (activeRunner == null)
             return;
+
+        if (shutdownInProgress)
+        {
+            if (currentShutdownTask != null)
+                await currentShutdownTask;
+
+            return;
+        }
+
+        shutdownInProgress = true;
+        NetworkRunner runnerToShutdown = activeRunner;
 
         if (logDebug)
             Debug.Log("[PhotonFusionRunnerManager] ShutdownRunnerAsync called.", this);
 
-        await activeRunner.Shutdown();
-        CleanupRunnerReference();
+        currentShutdownTask = InternalShutdownRunnerAsync(runnerToShutdown);
+        await currentShutdownTask;
+
+        currentShutdownTask = null;
+        shutdownInProgress = false;
+
+        ForceCleanupStaleRunnerIfNeeded();
+    }
+
+    private async Task InternalShutdownRunnerAsync(NetworkRunner runnerToShutdown)
+    {
+        if (runnerToShutdown == null)
+            return;
+
+        try
+        {
+            await runnerToShutdown.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[PhotonFusionRunnerManager] Exception during ShutdownRunnerAsync: " + ex.Message, this);
+        }
+
+        CleanupRunnerReference(runnerToShutdown);
     }
 
     public bool LoadNetworkScene(string sceneName)
     {
+        ForceCleanupStaleRunnerIfNeeded();
+
         if (activeRunner == null || !activeRunner.IsRunning)
         {
             Debug.LogError("[PhotonFusionRunnerManager] Cannot load network scene. Runner missing or not running.", this);
@@ -188,6 +223,8 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public int GetCurrentPlayerCount()
     {
+        ForceCleanupStaleRunnerIfNeeded();
+
         if (activeRunner == null || !activeRunner.IsRunning)
             return 0;
 
@@ -200,6 +237,8 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public string GetCurrentSessionName()
     {
+        ForceCleanupStaleRunnerIfNeeded();
+
         if (activeRunner == null || activeRunner.SessionInfo == null)
             return string.Empty;
 
@@ -208,17 +247,21 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public bool IsCurrentRunnerServer()
     {
+        ForceCleanupStaleRunnerIfNeeded();
         return activeRunner != null && activeRunner.IsRunning && activeRunner.IsServer;
     }
 
     public bool IsCurrentRunnerClientOnly()
     {
+        ForceCleanupStaleRunnerIfNeeded();
         return activeRunner != null && activeRunner.IsRunning && activeRunner.IsClient && !activeRunner.IsServer;
     }
 
     public bool TryGetCurrentSessionProperty(string key, out SessionProperty value)
     {
         value = default;
+
+        ForceCleanupStaleRunnerIfNeeded();
 
         if (activeRunner == null || activeRunner.SessionInfo == null || !activeRunner.SessionInfo.IsValid)
             return false;
@@ -232,6 +275,8 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public bool TryUpdateSessionProperties(Dictionary<string, SessionProperty> properties)
     {
+        ForceCleanupStaleRunnerIfNeeded();
+
         if (activeRunner == null || activeRunner.SessionInfo == null || !activeRunner.SessionInfo.IsValid)
             return false;
 
@@ -248,6 +293,8 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public byte[] GetPlayerConnectionToken(PlayerRef player)
     {
+        ForceCleanupStaleRunnerIfNeeded();
+
         if (activeRunner == null || !activeRunner.IsRunning)
             return null;
 
@@ -259,6 +306,34 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             return null;
         }
+    }
+
+    public void ForceCleanupStaleRunnerIfNeeded()
+    {
+        if (activeRunner == null)
+            return;
+
+        bool shouldCleanup = false;
+
+        try
+        {
+            if (!activeRunner.IsRunning)
+                shouldCleanup = true;
+        }
+        catch
+        {
+            shouldCleanup = true;
+        }
+
+        if (!shouldCleanup)
+            return;
+
+        if (logDebug)
+            Debug.Log("[PhotonFusionRunnerManager] ForceCleanupStaleRunnerIfNeeded -> cleaning stale runner.", this);
+
+        CleanupRunnerReference(activeRunner);
+        shutdownInProgress = false;
+        currentShutdownTask = null;
     }
 
     private async Task<bool> StartGameInternalAsync(
@@ -282,6 +357,13 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             return false;
         }
 
+        ForceCleanupStaleRunnerIfNeeded();
+
+        if (shutdownInProgress && currentShutdownTask != null)
+            await currentShutdownTask;
+
+        ForceCleanupStaleRunnerIfNeeded();
+
         if (activeRunner != null)
         {
             if (logDebug)
@@ -289,6 +371,8 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
             await ShutdownRunnerAsync();
         }
+
+        ForceCleanupStaleRunnerIfNeeded();
 
         activeRunner = CreateRunnerInstance();
         RegisterCallbacks();
@@ -331,7 +415,9 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
                 this
             );
 
-            CleanupRunnerReference();
+            CleanupRunnerReference(activeRunner);
+            shutdownInProgress = false;
+            currentShutdownTask = null;
             return false;
         }
 
@@ -371,19 +457,29 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         callbacksRegistered = true;
     }
 
-    private void CleanupRunnerReference()
+    private void CleanupRunnerReference(NetworkRunner runnerToCleanup)
     {
-        if (activeRunner != null)
+        if (runnerToCleanup == null)
+            return;
+
+        if (activeRunner != runnerToCleanup)
+            return;
+
+        if (callbacksRegistered)
         {
-            if (callbacksRegistered)
+            try
             {
                 activeRunner.RemoveCallbacks(this);
-                callbacksRegistered = false;
+            }
+            catch
+            {
             }
 
-            if (activeRunner.gameObject != null)
-                Destroy(activeRunner.gameObject);
+            callbacksRegistered = false;
         }
+
+        if (activeRunner != null && activeRunner.gameObject != null)
+            Destroy(activeRunner.gameObject);
 
         activeRunner = null;
     }
@@ -455,7 +551,9 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogWarning("[PhotonFusionRunnerManager] Shutdown: " + shutdownReason, this);
 
         OnShutdownEvent?.Invoke(shutdownReason);
-        CleanupRunnerReference();
+        CleanupRunnerReference(runner);
+        shutdownInProgress = false;
+        currentShutdownTask = null;
     }
 
     public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList)

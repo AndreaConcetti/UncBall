@@ -124,6 +124,7 @@ public class BallLauncher : MonoBehaviour
         ResolveOnlineController();
         ResolveSpawner();
         SyncOnlineCurrentBallBinding();
+        AbortLocalPresentationIfStateInvalid();
 
         if (ball == null)
             return;
@@ -153,7 +154,7 @@ public class BallLauncher : MonoBehaviour
 
     private void ResolveOnlineController()
     {
-        if (cachedController != null)
+        if (cachedController != null && cachedController.IsNetworkStateReadable)
             return;
 
         if (onlineAuthority != null && onlineAuthority.OnlineMatchController != null)
@@ -190,7 +191,7 @@ public class BallLauncher : MonoBehaviour
         ResolveOnlineController();
         ResolveSpawner();
 
-        if (cachedController == null)
+        if (cachedController == null || !cachedController.IsNetworkStateReadable)
             return;
 
         PlayerID localPlayer = ResolveEffectiveLocalPlayerId();
@@ -200,6 +201,7 @@ public class BallLauncher : MonoBehaviour
         {
             if (ball != null)
             {
+                ForceAbortCurrentInteraction(false);
                 ball = null;
                 activePlacementArea = null;
             }
@@ -212,6 +214,7 @@ public class BallLauncher : MonoBehaviour
         {
             if (ball != null && ball == currentBall)
             {
+                ForceAbortCurrentInteraction(false);
                 ball = null;
                 activePlacementArea = null;
             }
@@ -286,6 +289,55 @@ public class BallLauncher : MonoBehaviour
 
         lastPlacementTapTime = -999f;
         lastPlacementTapScreenPos = Vector2.zero;
+
+        cameraController?.SetAiming(false);
+    }
+
+    private void AbortLocalPresentationIfStateInvalid()
+    {
+        if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
+            return;
+
+        ResolveOnlineController();
+        if (cachedController == null || !cachedController.IsNetworkStateReadable)
+        {
+            if (CurrentPhase == LaunchPhase.AimReady || CurrentPhase == LaunchPhase.Placement)
+                ForceAbortCurrentInteraction(false);
+
+            return;
+        }
+
+        PlayerID localPlayer = ResolveEffectiveLocalPlayerId();
+
+        bool localLostTurn = cachedController.CurrentTurnOwner != localPlayer;
+        bool matchBlocked = cachedController.MatchEnded || cachedController.MidMatchBreakActive;
+        bool ballMissing = ball == null;
+        bool launchedAlready = CurrentPhase == LaunchPhase.Launched;
+
+        if (launchedAlready)
+            return;
+
+        if (localLostTurn || matchBlocked || ballMissing)
+            ForceAbortCurrentInteraction(false);
+    }
+
+    private void ForceAbortCurrentInteraction(bool keepBoundBall)
+    {
+        isPlacementDragging = false;
+        isAimTracking = false;
+        mousePlacementDragging = false;
+        mouseAimDragging = false;
+        hasPlacementDragStart = false;
+        activeFinger = null;
+
+        ChargeRatio = 0f;
+        LaunchDirection = Vector3.zero;
+        hasLaunched = false;
+
+        if (keepBoundBall && ball != null)
+            CurrentPhase = LaunchPhase.Placement;
+        else
+            CurrentPhase = LaunchPhase.None;
 
         cameraController?.SetAiming(false);
     }
@@ -539,6 +591,9 @@ public class BallLauncher : MonoBehaviour
             rb.position = targetWorld;
         else
             ball.transform.position = targetWorld;
+
+        if (cachedController != null && cachedController.IsNetworkStateReadable)
+            cachedController.RequestSetCurrentBallPlacement(targetWorld);
     }
 
     void EndPlacementDrag()
@@ -641,6 +696,12 @@ public class BallLauncher : MonoBehaviour
     {
         ChargeRatio = 0f;
         LaunchDirection = Vector3.zero;
+        cameraController?.SetAiming(false);
+
+        if (ball != null)
+            CurrentPhase = LaunchPhase.Placement;
+        else
+            CurrentPhase = LaunchPhase.None;
     }
 
     bool IsSwipeValidForLaunch(Vector2 swipe)
@@ -663,7 +724,7 @@ public class BallLauncher : MonoBehaviour
 
         ResolveOnlineController();
 
-        if (onlineAuthority == null || !onlineAuthority.IsOnlineSession || cachedController == null)
+        if (onlineAuthority == null || !onlineAuthority.IsOnlineSession || cachedController == null || !cachedController.IsNetworkStateReadable)
             return;
 
         hasLaunched = true;
@@ -783,7 +844,10 @@ public class BallLauncher : MonoBehaviour
 
         ResolveOnlineController();
 
-        if (cachedController == null)
+        if (cachedController == null || !cachedController.IsNetworkStateReadable)
+            return true;
+
+        if (cachedController.MatchEnded || cachedController.MidMatchBreakActive)
             return true;
 
         if (cachedController.CurrentTurnOwner != ResolveEffectiveLocalPlayerId())
