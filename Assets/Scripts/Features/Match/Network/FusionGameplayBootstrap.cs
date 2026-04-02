@@ -6,10 +6,9 @@ using UnityEngine;
 public class FusionGameplayBootstrap : MonoBehaviour
 {
     [Header("Dependencies")]
-    [SerializeField] private MatchRuntimeConfig matchRuntimeConfig;
     [SerializeField] private PhotonFusionRunnerManager runnerManager;
     [SerializeField] private OnlineGameplayAuthority onlineGameplayAuthority;
-    [SerializeField] private OnlineMatchSession onlineMatchSession;
+    [SerializeField] private OnlineFlowController onlineFlowController;
 
     [Header("Online Controller Prefab")]
     [SerializeField] private FusionOnlineMatchController onlineMatchControllerPrefab;
@@ -40,17 +39,14 @@ public class FusionGameplayBootstrap : MonoBehaviour
 
     private void ResolveDependencies()
     {
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = MatchRuntimeConfig.Instance;
-
         if (runnerManager == null)
             runnerManager = PhotonFusionRunnerManager.Instance;
 
         if (onlineGameplayAuthority == null)
             onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
 
-        if (onlineMatchSession == null)
-            onlineMatchSession = OnlineMatchSession.Instance;
+        if (onlineFlowController == null)
+            onlineFlowController = OnlineFlowController.Instance;
     }
 
     private bool ShouldRunOnlineBootstrap()
@@ -58,11 +54,12 @@ public class FusionGameplayBootstrap : MonoBehaviour
         if (runnerManager != null && runnerManager.IsRunning)
             return true;
 
-        if (matchRuntimeConfig != null && matchRuntimeConfig.IsOnlineMatch)
+        if (onlineFlowController != null &&
+            onlineFlowController.RuntimeContext != null &&
+            onlineFlowController.RuntimeContext.currentSession != null)
+        {
             return true;
-
-        if (onlineMatchSession != null && onlineMatchSession.HasPreparedSession)
-            return true;
+        }
 
         return false;
     }
@@ -94,15 +91,13 @@ public class FusionGameplayBootstrap : MonoBehaviour
         string p1Name = "Player 1";
         string p2Name = "Player 2";
 
-        if (onlineMatchSession != null && onlineMatchSession.HasPreparedSession)
+        if (onlineFlowController != null &&
+            onlineFlowController.RuntimeContext != null &&
+            onlineFlowController.RuntimeContext.currentSession != null)
         {
-            p1Name = onlineMatchSession.CurrentSession.hostDisplayName;
-            p2Name = onlineMatchSession.CurrentSession.joinDisplayName;
-        }
-        else if (matchRuntimeConfig != null)
-        {
-            p1Name = matchRuntimeConfig.SelectedPlayer1Name;
-            p2Name = matchRuntimeConfig.SelectedPlayer2Name;
+            MatchSessionContext session = onlineFlowController.RuntimeContext.currentSession;
+            p1Name = string.IsNullOrWhiteSpace(session.player1DisplayName) ? "Player 1" : session.player1DisplayName.Trim();
+            p2Name = string.IsNullOrWhiteSpace(session.player2DisplayName) ? "Player 2" : session.player2DisplayName.Trim();
         }
 
         string localName = localPlayer == PlayerID.Player1 ? p1Name : p2Name;
@@ -122,6 +117,9 @@ public class FusionGameplayBootstrap : MonoBehaviour
 
         if (isServer)
             yield return StartCoroutine(EnsureOnlineControllerSpawned(runner));
+
+        if (onlineFlowController != null)
+            onlineFlowController.NotifyMatchStarted();
 
         bootstrapCompleted = true;
 

@@ -4,9 +4,9 @@ using UnityEngine;
 public class GameModeUIChanger : MonoBehaviour
 {
     [Header("Dependencies")]
-    [SerializeField] private MatchRuntimeConfig matchRuntimeConfig;
     [SerializeField] private FusionOnlineMatchController onlineMatchController;
     [SerializeField] private OnlineGameplayAuthority onlineGameplayAuthority;
+    [SerializeField] private OnlineFlowController onlineFlowController;
     [SerializeField] private BallLauncher launcher;
 
     [Header("Mode Objects")]
@@ -27,6 +27,11 @@ public class GameModeUIChanger : MonoBehaviour
     [Header("Launcher Phase")]
     [SerializeField] private GameObject placementPhaseObject;
     [SerializeField] private GameObject aimReadyPhaseObject;
+
+    [Header("Fallback Config")]
+    [SerializeField] private MatchMode fallbackMatchMode = MatchMode.ScoreTarget;
+    [SerializeField] private int fallbackPointsToWin = 16;
+    [SerializeField] private float fallbackMatchDurationSeconds = 180f;
 
     [Header("Config")]
     [SerializeField] private bool applyOnStart = true;
@@ -53,9 +58,7 @@ public class GameModeUIChanger : MonoBehaviour
     {
         ResolveDependencies();
 
-        MatchMode mode = matchRuntimeConfig != null
-            ? matchRuntimeConfig.SelectedMatchMode
-            : MatchMode.ScoreTarget;
+        MatchMode mode = ResolveCurrentMatchMode();
 
         bool isTimeMode = mode == MatchMode.TimeLimit;
         bool isScoreMode = mode == MatchMode.ScoreTarget;
@@ -87,10 +90,7 @@ public class GameModeUIChanger : MonoBehaviour
 
     public void RefreshTargetScoreTexts()
     {
-        if (matchRuntimeConfig == null)
-            return;
-
-        SetTextArray(targetScoreTexts, matchRuntimeConfig.SelectedPointsToWin.ToString());
+        SetTextArray(targetScoreTexts, ResolvePointsToWin().ToString());
     }
 
     public void RefreshTimerText()
@@ -102,10 +102,10 @@ public class GameModeUIChanger : MonoBehaviour
 
         float seconds = 0f;
 
-        if (onlineMatchController != null)
+        if (onlineMatchController != null && onlineMatchController.IsNetworkStateReadable)
             seconds = onlineMatchController.CurrentMatchTimeRemaining;
-        else if (matchRuntimeConfig != null)
-            seconds = matchRuntimeConfig.SelectedMatchDuration;
+        else
+            seconds = ResolveConfiguredMatchDurationSeconds();
 
         int totalSeconds = Mathf.CeilToInt(Mathf.Max(0f, seconds));
         int minutes = totalSeconds / 60;
@@ -120,7 +120,7 @@ public class GameModeUIChanger : MonoBehaviour
 
         PlayerID currentTurnOwner = PlayerID.None;
 
-        if (onlineMatchController != null)
+        if (onlineMatchController != null && onlineMatchController.IsNetworkStateReadable)
             currentTurnOwner = onlineMatchController.CurrentTurnOwner;
         else if (onlineGameplayAuthority != null)
             currentTurnOwner = onlineGameplayAuthority.CurrentTurnOwner;
@@ -180,13 +180,19 @@ public class GameModeUIChanger : MonoBehaviour
     {
         ResolveDependencies();
 
-        if (onlineMatchController != null)
+        if (onlineMatchController != null && onlineMatchController.IsNetworkStateReadable)
+        {
             return string.IsNullOrWhiteSpace(onlineMatchController.Player1DisplayName)
                 ? player1FallbackName
                 : onlineMatchController.Player1DisplayName;
+        }
 
-        if (matchRuntimeConfig != null && !string.IsNullOrWhiteSpace(matchRuntimeConfig.SelectedPlayer1Name))
-            return matchRuntimeConfig.SelectedPlayer1Name;
+        if (onlineFlowController != null)
+        {
+            string resolved = onlineFlowController.GetResolvedPlayer1Name();
+            if (!string.IsNullOrWhiteSpace(resolved))
+                return resolved;
+        }
 
         return player1FallbackName;
     }
@@ -195,24 +201,81 @@ public class GameModeUIChanger : MonoBehaviour
     {
         ResolveDependencies();
 
-        if (onlineMatchController != null)
+        if (onlineMatchController != null && onlineMatchController.IsNetworkStateReadable)
+        {
             return string.IsNullOrWhiteSpace(onlineMatchController.Player2DisplayName)
                 ? player2FallbackName
                 : onlineMatchController.Player2DisplayName;
+        }
 
-        if (matchRuntimeConfig != null && !string.IsNullOrWhiteSpace(matchRuntimeConfig.SelectedPlayer2Name))
-            return matchRuntimeConfig.SelectedPlayer2Name;
+        if (onlineFlowController != null)
+        {
+            string resolved = onlineFlowController.GetResolvedPlayer2Name();
+            if (!string.IsNullOrWhiteSpace(resolved))
+                return resolved;
+        }
 
         return player2FallbackName;
     }
 
+    private MatchMode ResolveCurrentMatchMode()
+    {
+        ResolveDependencies();
+
+        if (onlineMatchController != null && onlineMatchController.IsNetworkStateReadable)
+            return onlineMatchController.CurrentMatchMode;
+
+        if (onlineFlowController != null &&
+            onlineFlowController.RuntimeContext != null &&
+            onlineFlowController.RuntimeContext.currentSession != null)
+        {
+            return onlineFlowController.RuntimeContext.currentSession.matchMode;
+        }
+
+        return fallbackMatchMode;
+    }
+
+    private int ResolvePointsToWin()
+    {
+        ResolveDependencies();
+
+        if (onlineMatchController != null && onlineMatchController.IsNetworkStateReadable)
+            return Mathf.Max(1, onlineMatchController.PointsToWin);
+
+        if (onlineFlowController != null &&
+            onlineFlowController.RuntimeContext != null &&
+            onlineFlowController.RuntimeContext.currentSession != null)
+        {
+            return Mathf.Max(1, onlineFlowController.RuntimeContext.currentSession.pointsToWin);
+        }
+
+        return Mathf.Max(1, fallbackPointsToWin);
+    }
+
+    private float ResolveConfiguredMatchDurationSeconds()
+    {
+        ResolveDependencies();
+
+        if (onlineMatchController != null && onlineMatchController.IsNetworkStateReadable)
+            return Mathf.Max(1f, onlineMatchController.ConfiguredMatchDuration);
+
+        if (onlineFlowController != null &&
+            onlineFlowController.RuntimeContext != null &&
+            onlineFlowController.RuntimeContext.currentSession != null)
+        {
+            return Mathf.Max(1f, onlineFlowController.RuntimeContext.currentSession.matchDurationSeconds);
+        }
+
+        return Mathf.Max(1f, fallbackMatchDurationSeconds);
+    }
+
     private void ResolveDependencies()
     {
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = MatchRuntimeConfig.Instance;
-
         if (onlineGameplayAuthority == null)
             onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
+
+        if (onlineFlowController == null)
+            onlineFlowController = OnlineFlowController.Instance;
 
         if (onlineMatchController == null && onlineGameplayAuthority != null)
             onlineMatchController = onlineGameplayAuthority.OnlineMatchController;

@@ -8,10 +8,14 @@ public class OnlineMatchEndFlow : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private FusionOnlineMatchController matchController;
     [SerializeField] private FusionOnlineRematchController rematchController;
-    [SerializeField] private PhotonFusionSessionController fusionSessionController;
-    [SerializeField] private MatchRuntimeConfig matchRuntimeConfig;
+    [SerializeField] private OnlineFlowController onlineFlowController;
     [SerializeField] private PlayerProfileManager profileManager;
     [SerializeField] private RewardManager rewardManager;
+
+    [Header("Progression Policy")]
+    [SerializeField] private bool allowChestRewards = false;
+    [SerializeField] private bool allowXpRewards = false;
+    [SerializeField] private bool allowStatsProgression = false;
 
     [Header("Main Endgame Buttons")]
     [SerializeField] private Button requestRematchButton;
@@ -81,6 +85,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
     private void Awake()
     {
         ResolveDependencies();
+        ApplyRuntimeRewardFlagsIfAvailable();
         HideAllRematchPanels();
         ClearRewardTexts();
         RefreshAllVisualState();
@@ -120,8 +125,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
         HideAllRematchPanels();
         RefreshButtonInteractableState();
 
-        if (fusionSessionController != null)
-            fusionSessionController.ShutdownSessionAndReturnToMenu(true);
+        if (onlineFlowController != null)
+            onlineFlowController.ReturnToMenuFromMatch(true);
     }
 
     public void OnPressRequestRematch()
@@ -171,10 +176,10 @@ public class OnlineMatchEndFlow : MonoBehaviour
         HideAllRematchPanels();
         RefreshButtonInteractableState();
 
-        if (fusionSessionController != null)
+        if (onlineFlowController != null)
         {
             exitTriggered = true;
-            fusionSessionController.ShutdownSessionAndReturnToMenu(true);
+            onlineFlowController.ReturnToMenuFromMatch(true);
         }
     }
 
@@ -216,10 +221,10 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 break;
 
             case FusionOnlineRematchController.RematchState.Declined:
-                if (!exitTriggered && fusionSessionController != null)
+                if (!exitTriggered && onlineFlowController != null)
                 {
                     exitTriggered = true;
-                    fusionSessionController.ShutdownSessionAndReturnToMenu(true);
+                    onlineFlowController.ReturnToMenuFromMatch(true);
                 }
                 break;
 
@@ -282,37 +287,40 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
     private void RefreshButtonInteractableState()
     {
-        bool sessionShuttingDown = fusionSessionController != null && fusionSessionController.IsShuttingDown;
+        bool returningToMenu =
+            onlineFlowController != null &&
+            onlineFlowController.CurrentState == OnlineFlowState.ReturningToMenu;
+
         bool canReadMatch = matchController != null && matchController.IsNetworkStateReadable;
         bool matchEnded = canReadMatch && matchController.MatchEnded;
         bool canRequest = rematchController != null && matchEnded && rematchController.CanLocalRequestRematch();
 
         if (requestRematchButton != null)
-            requestRematchButton.interactable = !exitTriggered && !sessionShuttingDown && canRequest;
+            requestRematchButton.interactable = !exitTriggered && !returningToMenu && canRequest;
 
         if (cancelRequestButton != null)
             cancelRequestButton.interactable =
                 !exitTriggered &&
-                !sessionShuttingDown &&
+                !returningToMenu &&
                 rematchController != null &&
                 rematchController.HasOutgoingRequestFromLocalPlayer();
 
         if (acceptRequestButton != null)
             acceptRequestButton.interactable =
                 !exitTriggered &&
-                !sessionShuttingDown &&
+                !returningToMenu &&
                 rematchController != null &&
                 rematchController.HasIncomingRequestForLocalPlayer();
 
         if (declineRequestButton != null)
             declineRequestButton.interactable =
                 !exitTriggered &&
-                !sessionShuttingDown &&
+                !returningToMenu &&
                 rematchController != null &&
                 rematchController.HasIncomingRequestForLocalPlayer();
 
         if (backHomeButton != null)
-            backHomeButton.interactable = !exitTriggered && !sessionShuttingDown;
+            backHomeButton.interactable = !exitTriggered && !returningToMenu;
     }
 
     private void ShowRequestSentPanel(string opponentName, string statusText)
@@ -364,8 +372,9 @@ public class OnlineMatchEndFlow : MonoBehaviour
             return;
 
         ResolveDependencies();
+        ApplyRuntimeRewardFlagsIfAvailable();
 
-        if (matchRuntimeConfig == null || profileManager == null || matchController == null || !matchController.IsNetworkStateReadable)
+        if (profileManager == null || matchController == null || !matchController.IsNetworkStateReadable)
             return;
 
         PlayerID localPlayerId = matchController.EffectiveLocalPlayerId;
@@ -373,7 +382,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
         bool localWon = winner == localPlayerId;
         bool draw = winner == PlayerID.None;
-        bool ranked = matchRuntimeConfig.SelectedIsRanked;
+        bool ranked = IsRankedMatch();
+        MatchMode matchMode = ResolveMatchMode();
 
         lastGrantedXp = 0;
         lastGrantedSoftCurrency = 0;
@@ -381,17 +391,17 @@ public class OnlineMatchEndFlow : MonoBehaviour
         lastGrantedChest = false;
         lastGrantedChestType = ChestType.Random;
 
-        if (matchRuntimeConfig.SelectedAllowStatsProgression)
+        if (allowStatsProgression)
         {
             profileManager.RegisterMatchResult(
-                matchRuntimeConfig.SelectedGameMode,
-                matchRuntimeConfig.SelectedMatchMode,
+                PlayerMatchCategory.OnlineMultiplayer,
+                matchMode,
                 localWon,
                 ranked
             );
         }
 
-        if (matchRuntimeConfig.SelectedAllowXpRewards)
+        if (allowXpRewards)
         {
             lastGrantedXp = ranked
                 ? (draw ? rankedDrawXp : (localWon ? rankedWinXp : rankedLoseXp))
@@ -418,7 +428,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 profileManager.AddPremiumCurrency(lastGrantedPremiumCurrency);
         }
 
-        if (matchRuntimeConfig.SelectedAllowChestRewards)
+        if (allowChestRewards)
         {
             bool canGrantChest = !grantChestOnlyIfLocalPlayerWins || localWon;
 
@@ -454,6 +464,9 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
         rewardsApplied = true;
 
+        if (onlineFlowController != null)
+            onlineFlowController.NotifyMatchEnded();
+
         if (logDebug)
         {
             Debug.Log(
@@ -461,6 +474,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 "LocalWon=" + localWon +
                 " | Draw=" + draw +
                 " | Ranked=" + ranked +
+                " | Mode=" + matchMode +
                 " | Xp=" + lastGrantedXp +
                 " | Soft=" + lastGrantedSoftCurrency +
                 " | Premium=" + lastGrantedPremiumCurrency +
@@ -505,34 +519,63 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
     private void ResolveDependencies()
     {
-        if (matchController == null)
-        {
-#if UNITY_2023_1_OR_NEWER
-            matchController = FindFirstObjectByType<FusionOnlineMatchController>();
-#else
-            matchController = FindObjectOfType<FusionOnlineMatchController>();
-#endif
-        }
-
-        if (rematchController == null)
-        {
-#if UNITY_2023_1_OR_NEWER
-            rematchController = FindFirstObjectByType<FusionOnlineRematchController>();
-#else
-            rematchController = FindObjectOfType<FusionOnlineRematchController>();
-#endif
-        }
-
-        if (fusionSessionController == null)
-            fusionSessionController = PhotonFusionSessionController.Instance;
-
-        if (matchRuntimeConfig == null)
-            matchRuntimeConfig = MatchRuntimeConfig.Instance;
+        if (onlineFlowController == null)
+            onlineFlowController = OnlineFlowController.Instance;
 
         if (profileManager == null)
             profileManager = PlayerProfileManager.Instance;
 
-        if (rewardManager == null)
-            rewardManager = RewardManager.Instance;
+#if UNITY_2023_1_OR_NEWER
+        if (matchController == null)
+            matchController = FindFirstObjectByType<FusionOnlineMatchController>();
+
+        if (rematchController == null)
+            rematchController = FindFirstObjectByType<FusionOnlineRematchController>();
+#else
+        if (matchController == null)
+            matchController = FindObjectOfType<FusionOnlineMatchController>();
+
+        if (rematchController == null)
+            rematchController = FindObjectOfType<FusionOnlineRematchController>();
+#endif
+    }
+
+    private void ApplyRuntimeRewardFlagsIfAvailable()
+    {
+        if (onlineFlowController == null ||
+            onlineFlowController.RuntimeContext == null ||
+            onlineFlowController.RuntimeContext.currentSession == null)
+        {
+            return;
+        }
+
+        MatchSessionContext session = onlineFlowController.RuntimeContext.currentSession;
+        allowChestRewards = session.allowChestRewards;
+        allowXpRewards = session.allowXpRewards;
+        allowStatsProgression = session.allowStatsProgression;
+    }
+
+    private bool IsRankedMatch()
+    {
+        if (onlineFlowController != null &&
+            onlineFlowController.RuntimeContext != null &&
+            onlineFlowController.RuntimeContext.currentSession != null)
+        {
+            return onlineFlowController.RuntimeContext.currentSession.isRanked;
+        }
+
+        return false;
+    }
+
+    private MatchMode ResolveMatchMode()
+    {
+        if (onlineFlowController != null &&
+            onlineFlowController.RuntimeContext != null &&
+            onlineFlowController.RuntimeContext.currentSession != null)
+        {
+            return onlineFlowController.RuntimeContext.currentSession.matchMode;
+        }
+
+        return MatchMode.ScoreTarget;
     }
 }

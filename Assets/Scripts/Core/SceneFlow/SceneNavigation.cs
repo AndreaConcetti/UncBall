@@ -4,17 +4,28 @@ using UnityEngine.SceneManagement;
 public class SceneNavigation : MonoBehaviour
 {
     [SerializeField] private string mainMenuSceneName = "MainMenu";
-    [SerializeField] private bool useFusionAwareShutdown = true;
+    [SerializeField] private bool useOnlineFlowAwareReturn = true;
 
     public void BackToMainMenu()
     {
         Time.timeScale = 1f;
 
-        if (useFusionAwareShutdown && MatchRuntimeConfig.Instance != null && MatchRuntimeConfig.Instance.IsOnlineMatch)
+        if (useOnlineFlowAwareReturn && OnlineFlowController.Instance != null)
         {
-            if (PhotonFusionSessionController.Instance != null)
+            OnlineFlowState state = OnlineFlowController.Instance.CurrentState;
+
+            bool onlineSessionRelevant =
+                state == OnlineFlowState.Queueing ||
+                state == OnlineFlowState.MatchAssigned ||
+                state == OnlineFlowState.JoiningSession ||
+                state == OnlineFlowState.LoadingGameplay ||
+                state == OnlineFlowState.InMatch ||
+                state == OnlineFlowState.EndingMatch ||
+                state == OnlineFlowState.ReturningToMenu;
+
+            if (onlineSessionRelevant)
             {
-                PhotonFusionSessionController.Instance.ShutdownSessionAndReturnToMenu(true);
+                OnlineFlowController.Instance.ReturnToMenuFromMatch(true);
                 return;
             }
         }

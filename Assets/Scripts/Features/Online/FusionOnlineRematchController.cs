@@ -13,12 +13,17 @@ public class FusionOnlineRematchController : MonoBehaviour
 
     [Header("Dependencies")]
     [SerializeField] private FusionOnlineMatchController matchController;
-    [SerializeField] private PhotonFusionSessionController fusionSessionController;
+    [SerializeField] private PhotonFusionRunnerManager runnerManager;
+    [SerializeField] private OnlineFlowController onlineFlowController;
+
+    [Header("Config")]
+    [SerializeField] private string gameplaySceneName = "Gameplay";
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
     private int lastConsumedAcceptedNonce = -1;
+    private bool localUiCancelled;
 
     public bool IsNetworkStateReadable =>
         matchController != null &&
@@ -30,6 +35,9 @@ public class FusionOnlineRematchController : MonoBehaviour
     {
         get
         {
+            if (localUiCancelled)
+                return RematchState.Cancelled;
+
             if (!IsNetworkStateReadable)
                 return RematchState.None;
 
@@ -99,20 +107,22 @@ public class FusionOnlineRematchController : MonoBehaviour
             return;
 
         lastConsumedAcceptedNonce = RematchNonce;
+        localUiCancelled = false;
 
-        if (matchController != null && matchController.Object != null && matchController.Object.HasStateAuthority)
+        if (matchController != null &&
+            matchController.Object != null &&
+            matchController.Object.HasStateAuthority &&
+            runnerManager != null &&
+            runnerManager.IsRunning)
         {
-            if (fusionSessionController != null)
-            {
-                bool loaded = fusionSessionController.LoadGameplaySceneOnActiveRunner();
+            bool loaded = runnerManager.LoadNetworkScene(gameplaySceneName);
 
-                if (logDebug)
-                {
-                    Debug.Log(
-                        "[FusionOnlineRematchController] Accepted rematch -> reload requested by scene authority. Loaded=" + loaded,
-                        this
-                    );
-                }
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[FusionOnlineRematchController] Accepted rematch -> reload requested by scene authority. Loaded=" + loaded,
+                    this
+                );
             }
         }
     }
@@ -125,8 +135,11 @@ public class FusionOnlineRematchController : MonoBehaviour
         if (!matchController.MatchEnded)
             return false;
 
-        if (fusionSessionController != null && fusionSessionController.IsShuttingDown)
+        if (onlineFlowController != null &&
+            onlineFlowController.CurrentState == OnlineFlowState.ReturningToMenu)
+        {
             return false;
+        }
 
         return State == RematchState.None || State == RematchState.Cancelled;
     }
@@ -160,6 +173,7 @@ public class FusionOnlineRematchController : MonoBehaviour
         if (!CanLocalRequestRematch())
             return;
 
+        localUiCancelled = false;
         matchController.RequestLocalRematch();
 
         if (logDebug)
@@ -176,13 +190,16 @@ public class FusionOnlineRematchController : MonoBehaviour
         if (!HasOutgoingRequestFromLocalPlayer())
             return;
 
-        if (matchController.Object != null && matchController.Object.HasStateAuthority)
-        {
-            ForceLocalCancelledStateOnlyForUi();
-            return;
-        }
+        localUiCancelled = true;
 
-        ForceLocalCancelledStateOnlyForUi();
+        if (logDebug)
+        {
+            Debug.LogWarning(
+                "[FusionOnlineRematchController] CancelLocalRematchRequest -> local UI cancellation only. " +
+                "Replicated cancel API not implemented yet.",
+                this
+            );
+        }
     }
 
     public void AcceptLocalRematch()
@@ -195,6 +212,7 @@ public class FusionOnlineRematchController : MonoBehaviour
         if (!HasIncomingRequestForLocalPlayer())
             return;
 
+        localUiCancelled = false;
         matchController.AcceptLocalRematch();
 
         if (logDebug)
@@ -211,22 +229,11 @@ public class FusionOnlineRematchController : MonoBehaviour
         if (State != RematchState.Pending)
             return;
 
+        localUiCancelled = false;
         matchController.DeclineLocalRematch();
 
         if (logDebug)
             Debug.Log("[FusionOnlineRematchController] DeclineLocalRematch", this);
-    }
-
-    private void ForceLocalCancelledStateOnlyForUi()
-    {
-        if (logDebug)
-        {
-            Debug.LogWarning(
-                "[FusionOnlineRematchController] CancelLocalRematchRequest -> local UI cancellation only. " +
-                "Current match controller does not expose a replicated cancel API yet.",
-                this
-            );
-        }
     }
 
     private void ResolveDependencies()
@@ -234,8 +241,11 @@ public class FusionOnlineRematchController : MonoBehaviour
         if (matchController == null)
             matchController = GetComponent<FusionOnlineMatchController>();
 
-        if (fusionSessionController == null)
-            fusionSessionController = PhotonFusionSessionController.Instance;
+        if (runnerManager == null)
+            runnerManager = PhotonFusionRunnerManager.Instance;
+
+        if (onlineFlowController == null)
+            onlineFlowController = OnlineFlowController.Instance;
 
 #if UNITY_2023_1_OR_NEWER
         if (matchController == null)

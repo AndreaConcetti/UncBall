@@ -71,12 +71,16 @@ MonoBehaviour:
   hud: {fileID: 0}
   bottomBarOrderSwapper: {fileID: 0}
   shotScorePopupUI: {fileID: 0}
+  onlineFlowController: {fileID: 0}
   defaultTurnDuration: 12
   defaultBreakDuration: 8
   postShotPanelDelay: 1.5
   enableStuckBallCheck: 1
   stuckTimeout: 3
   stuckVelocityThreshold: 0.05
+  fallbackMatchMode: 1
+  fallbackPointsToWin: 16
+  fallbackMatchDurationSeconds: 180
   logDebug: 1
 --- !u!114 &2961463604889497903
 MonoBehaviour:
@@ -90,6 +94,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 02f51786d0b0acc46955fa52ab80f4cc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FusionOnlineRematchController
-  matchController: {fileID: 0}
-  fusionSessionController: {fileID: 0}
+  matchController: {fileID: 4472875160988644675}
+  runnerManager: {fileID: 0}
+  onlineFlowController: {fileID: 0}
+  gameplaySceneName: Gameplay
   logDebug: 1

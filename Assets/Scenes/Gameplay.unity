@@ -8940,7 +8940,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SceneNavigation
   mainMenuSceneName: MainMenu
-  useFusionAwareShutdown: 1
+  useOnlineFlowAwareReturn: 1
 --- !u!114 &880244600
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12359,10 +12359,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 185b95e8c55b301489078a3ff723e69d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FusionGameplayBootstrap
-  matchRuntimeConfig: {fileID: 0}
   runnerManager: {fileID: 0}
   onlineGameplayAuthority: {fileID: 1394314180}
-  onlineMatchSession: {fileID: 0}
+  onlineFlowController: {fileID: 0}
   onlineMatchControllerPrefab: {fileID: 4472875160988644675, guid: ed0895c016ea5344e95aeb5cb7084087, type: 3}
   bootstrapStarted: 0
   bootstrapCompleted: 0
@@ -12381,9 +12380,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::OnlineMatchEndFlow
   matchController: {fileID: 0}
   rematchController: {fileID: 0}
-  fusionSessionController: {fileID: 0}
-  matchRuntimeConfig: {fileID: 0}
+  onlineFlowController: {fileID: 0}
   profileManager: {fileID: 0}
+  rewardManager: {fileID: 0}
+  allowChestRewards: 0
+  allowXpRewards: 0
+  allowStatsProgression: 0
   requestRematchButton: {fileID: 485161588}
   backHomeButton: {fileID: 217964541}
   rematchRequestSentPanel: {fileID: 2095561071}
@@ -12395,6 +12397,10 @@ MonoBehaviour:
   rematchRequestArrivedStatusText: {fileID: 324931216}
   acceptRequestButton: {fileID: 1924483188}
   declineRequestButton: {fileID: 1595542258}
+  rewardXpText: {fileID: 0}
+  rewardSoftCurrencyText: {fileID: 0}
+  rewardPremiumCurrencyText: {fileID: 0}
+  rewardChestText: {fileID: 0}
   normalWinXp: 25
   normalLoseXp: 10
   normalDrawXp: 15
@@ -12410,6 +12416,9 @@ MonoBehaviour:
   rankedWinPremiumCurrency: 1
   rankedLosePremiumCurrency: 0
   rankedDrawPremiumCurrency: 0
+  normalWinChestType: 0
+  rankedWinChestType: 2
+  grantChestOnlyIfLocalPlayerWins: 1
   onNormalChestRewardRequested:
     m_PersistentCalls:
       m_Calls: []

@@ -279,7 +279,7 @@ public class PlayerProfileManager : MonoBehaviour
     }
 
     public void RegisterMatchResult(
-        MatchRuntimeConfig.GameMode gameMode,
+        PlayerMatchCategory matchCategory,
         MatchMode matchMode,
         bool localPlayerWon,
         bool isRanked)
@@ -303,9 +303,9 @@ public class PlayerProfileManager : MonoBehaviour
         int rankedMatchesPlayed = activeProfile.rankedMatchesPlayed;
         int rankedWins = activeProfile.rankedWins;
 
-        switch (gameMode)
+        switch (matchCategory)
         {
-            case MatchRuntimeConfig.GameMode.Versus:
+            case PlayerMatchCategory.LocalVersus:
                 versusMatchesPlayed++;
                 if (localPlayerWon)
                     versusWins++;
@@ -316,13 +316,13 @@ public class PlayerProfileManager : MonoBehaviour
                     versusScoreMatchesPlayed++;
                 break;
 
-            case MatchRuntimeConfig.GameMode.Bot:
+            case PlayerMatchCategory.Bot:
                 botMatchesPlayed++;
                 if (localPlayerWon)
                     botWins++;
                 break;
 
-            case MatchRuntimeConfig.GameMode.Multiplayer:
+            case PlayerMatchCategory.OnlineMultiplayer:
                 multiplayerMatchesPlayed++;
                 if (localPlayerWon)
                     multiplayerWins++;
@@ -355,7 +355,7 @@ public class PlayerProfileManager : MonoBehaviour
         {
             Debug.Log(
                 "[PlayerProfileManager] RegisterMatchResult -> " +
-                "GameMode=" + gameMode +
+                "Category=" + matchCategory +
                 " | MatchMode=" + matchMode +
                 " | LocalWin=" + localPlayerWon +
                 " | Ranked=" + isRanked,

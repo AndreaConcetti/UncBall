@@ -26,6 +26,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [SerializeField] private FusionOnlineMatchHUD hud;
     [SerializeField] private BottomBarOrderSwapper bottomBarOrderSwapper;
     [SerializeField] private ShotScorePopupUI shotScorePopupUI;
+    [SerializeField] private OnlineFlowController onlineFlowController;
 
     [Header("Rules")]
     [SerializeField] private float defaultTurnDuration = 15f;
@@ -34,6 +35,11 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [SerializeField] private bool enableStuckBallCheck = true;
     [SerializeField] private float stuckTimeout = 2.5f;
     [SerializeField] private float stuckVelocityThreshold = 0.05f;
+
+    [Header("Fallback Match Config")]
+    [SerializeField] private MatchMode fallbackMatchMode = MatchMode.TimeLimit;
+    [SerializeField] private int fallbackPointsToWin = 16;
+    [SerializeField] private float fallbackMatchDurationSeconds = 180f;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
@@ -102,9 +108,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
         Object.IsValid &&
         Runner != null;
 
-    public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : MatchMode.TimeLimit;
-    public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : 0;
-    public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : 0f;
+    public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : fallbackMatchMode;
+    public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : fallbackPointsToWin;
+    public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : fallbackMatchDurationSeconds;
 
     public PlayerID CurrentTurnOwner => IsNetworkStateReadable ? (PlayerID)NetCurrentTurnOwnerRaw : PlayerID.None;
     public float CurrentTurnTimeRemaining => IsNetworkStateReadable ? NetTurnTimeRemaining : 0f;
@@ -410,6 +416,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (onlineGameplayAuthority == null)
             onlineGameplayAuthority = OnlineGameplayAuthority.Instance;
 
+        if (onlineFlowController == null)
+            onlineFlowController = OnlineFlowController.Instance;
+
         if (scoreManager == null)
             scoreManager = ScoreManager.Instance;
 
@@ -443,28 +452,26 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void RefreshAuthoritativePresentationFromSession()
     {
-        OnlineMatchSession session = OnlineMatchSession.Instance;
-        if (session == null || !session.HasPreparedSession || session.CurrentSession == null)
+        MatchSessionContext session = GetCurrentSessionContext();
+        if (session == null)
             return;
-
-        OnlineMatchSessionData s = session.CurrentSession;
 
         if (!NetPlayer1PresentationLocked)
         {
-            if (!string.IsNullOrWhiteSpace(s.hostDisplayName))
-                NetPlayer1DisplayName = s.hostDisplayName.Trim();
+            if (!string.IsNullOrWhiteSpace(session.player1DisplayName))
+                NetPlayer1DisplayName = session.player1DisplayName.Trim();
 
-            if (!string.IsNullOrWhiteSpace(s.player1SkinUniqueId))
-                NetPlayer1SkinId = s.player1SkinUniqueId.Trim();
+            if (!string.IsNullOrWhiteSpace(session.player1SkinUniqueId))
+                NetPlayer1SkinId = session.player1SkinUniqueId.Trim();
         }
 
         if (!NetPlayer2PresentationLocked)
         {
-            if (s.hasRemoteJoiner && !string.IsNullOrWhiteSpace(s.joinDisplayName))
-                NetPlayer2DisplayName = s.joinDisplayName.Trim();
+            if (!string.IsNullOrWhiteSpace(session.player2DisplayName))
+                NetPlayer2DisplayName = session.player2DisplayName.Trim();
 
-            if (!string.IsNullOrWhiteSpace(s.player2SkinUniqueId))
-                NetPlayer2SkinId = s.player2SkinUniqueId.Trim();
+            if (!string.IsNullOrWhiteSpace(session.player2SkinUniqueId))
+                NetPlayer2SkinId = session.player2SkinUniqueId.Trim();
         }
     }
 
@@ -512,11 +519,13 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void InitializeAuthorityState()
     {
-        MatchRuntimeConfig config = MatchRuntimeConfig.Instance;
+        MatchSessionContext session = GetCurrentSessionContext();
 
-        MatchMode resolvedMatchMode = config != null ? config.SelectedMatchMode : MatchMode.TimeLimit;
-        int resolvedPointsToWin = config != null ? Mathf.Max(1, config.SelectedPointsToWin) : 16;
-        float resolvedMatchDuration = config != null ? Mathf.Max(1f, config.SelectedMatchDuration) : 180f;
+        MatchMode resolvedMatchMode = session != null ? session.matchMode : fallbackMatchMode;
+        int resolvedPointsToWin = session != null ? Mathf.Max(1, session.pointsToWin) : Mathf.Max(1, fallbackPointsToWin);
+        float resolvedMatchDuration = session != null
+            ? Mathf.Max(1f, session.matchDurationSeconds)
+            : Mathf.Max(1f, fallbackMatchDurationSeconds);
 
         NetMatchModeRaw = (byte)resolvedMatchMode;
         NetPointsToWin = resolvedPointsToWin;
@@ -1364,24 +1373,14 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private string ResolveDisplayNameForPlayer(PlayerID player)
     {
-        OnlineMatchSession session = OnlineMatchSession.Instance;
-        if (session != null && session.HasPreparedSession)
+        MatchSessionContext session = GetCurrentSessionContext();
+        if (session != null)
         {
-            if (player == PlayerID.Player1 && !string.IsNullOrWhiteSpace(session.CurrentSession.hostDisplayName))
-                return session.CurrentSession.hostDisplayName.Trim();
+            if (player == PlayerID.Player1 && !string.IsNullOrWhiteSpace(session.player1DisplayName))
+                return session.player1DisplayName.Trim();
 
-            if (player == PlayerID.Player2 && !string.IsNullOrWhiteSpace(session.CurrentSession.joinDisplayName))
-                return session.CurrentSession.joinDisplayName.Trim();
-        }
-
-        MatchRuntimeConfig config = MatchRuntimeConfig.Instance;
-        if (config != null)
-        {
-            if (player == PlayerID.Player1 && !string.IsNullOrWhiteSpace(config.SelectedPlayer1Name))
-                return config.SelectedPlayer1Name.Trim();
-
-            if (player == PlayerID.Player2 && !string.IsNullOrWhiteSpace(config.SelectedPlayer2Name))
-                return config.SelectedPlayer2Name.Trim();
+            if (player == PlayerID.Player2 && !string.IsNullOrWhiteSpace(session.player2DisplayName))
+                return session.player2DisplayName.Trim();
         }
 
         return player == PlayerID.Player1 ? "Player 1" : "Player 2";
@@ -1389,23 +1388,12 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private string ResolveInitialSkinIdForPlayer(PlayerID player)
     {
-        MatchRuntimeConfig config = MatchRuntimeConfig.Instance;
-        if (config != null)
-        {
-            string configSkin = player == PlayerID.Player1
-                ? config.Player1SkinUniqueId
-                : config.Player2SkinUniqueId;
-
-            if (!string.IsNullOrWhiteSpace(configSkin))
-                return configSkin.Trim();
-        }
-
-        OnlineMatchSession session = OnlineMatchSession.Instance;
-        if (session != null && session.HasPreparedSession)
+        MatchSessionContext session = GetCurrentSessionContext();
+        if (session != null)
         {
             string sessionSkin = player == PlayerID.Player1
-                ? session.CurrentSession.player1SkinUniqueId
-                : session.CurrentSession.player2SkinUniqueId;
+                ? session.player1SkinUniqueId
+                : session.player2SkinUniqueId;
 
             if (!string.IsNullOrWhiteSpace(sessionSkin))
                 return sessionSkin.Trim();
@@ -1416,9 +1404,16 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private string ResolveLocalDisplayName()
     {
-        MatchRuntimeConfig config = MatchRuntimeConfig.Instance;
-        if (config != null && !string.IsNullOrWhiteSpace(config.SelectedLocalDisplayName))
-            return config.SelectedLocalDisplayName.Trim();
+        MatchSessionContext session = GetCurrentSessionContext();
+        if (session != null && session.localPlayer != null && !string.IsNullOrWhiteSpace(session.localPlayer.displayName))
+            return session.localPlayer.displayName.Trim();
+
+        if (onlineFlowController != null)
+        {
+            string flowLocalName = onlineFlowController.GetResolvedLocalDisplayName();
+            if (!string.IsNullOrWhiteSpace(flowLocalName))
+                return flowLocalName.Trim();
+        }
 
         return EffectiveLocalPlayerId == PlayerID.Player1 ? "Player 1" : "Player 2";
     }
@@ -1443,5 +1438,19 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
 
         return skin.skinUniqueId.Trim();
+    }
+
+    private MatchSessionContext GetCurrentSessionContext()
+    {
+        ResolveReferences();
+
+        if (onlineFlowController == null ||
+            onlineFlowController.RuntimeContext == null ||
+            onlineFlowController.RuntimeContext.currentSession == null)
+        {
+            return null;
+        }
+
+        return onlineFlowController.RuntimeContext.currentSession;
     }
 }
