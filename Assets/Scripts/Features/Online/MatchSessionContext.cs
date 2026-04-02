@@ -1,7 +1,7 @@
 using System;
 
 [Serializable]
-public sealed class MatchSessionContext
+public class MatchSessionContext
 {
     public string matchId;
     public string sessionName;
@@ -9,8 +9,11 @@ public sealed class MatchSessionContext
 
     public QueueType queueType;
     public MatchMode matchMode;
+
     public int pointsToWin;
     public float matchDurationSeconds;
+    public float turnDurationSeconds;
+
     public bool isRanked;
 
     public bool allowChestRewards;
@@ -29,86 +32,58 @@ public sealed class MatchSessionContext
     public string player1SkinUniqueId;
     public string player2SkinUniqueId;
 
-    public MatchSessionContext()
+    public static MatchSessionContext FromAssignment(
+        MatchAssignment assignment,
+        string gameplaySceneName)
     {
-        matchId = string.Empty;
-        sessionName = string.Empty;
-        gameplaySceneName = "Gameplay";
-
-        queueType = QueueType.Normal;
-        matchMode = MatchMode.ScoreTarget;
-        pointsToWin = 16;
-        matchDurationSeconds = 180f;
-        isRanked = false;
-
-        allowChestRewards = false;
-        allowXpRewards = false;
-        allowStatsProgression = false;
-
-        localPlayer = new OnlinePlayerIdentity();
-        remotePlayer = new OnlinePlayerIdentity();
-
-        localIsHost = false;
-        isConnected = false;
-
-        player1DisplayName = "Player 1";
-        player2DisplayName = "Player 2";
-
-        player1SkinUniqueId = string.Empty;
-        player2SkinUniqueId = string.Empty;
-    }
-
-    public static MatchSessionContext FromAssignment(MatchAssignment assignment, string gameplaySceneName)
-    {
-        MatchSessionContext context = new MatchSessionContext();
-
         if (assignment == null)
-            return context;
+            return null;
 
-        context.matchId = string.IsNullOrWhiteSpace(assignment.matchId) ? string.Empty : assignment.matchId.Trim();
-        context.sessionName = string.IsNullOrWhiteSpace(assignment.sessionName) ? string.Empty : assignment.sessionName.Trim();
-        context.gameplaySceneName = string.IsNullOrWhiteSpace(gameplaySceneName) ? "Gameplay" : gameplaySceneName.Trim();
+        MatchSessionContext context = new MatchSessionContext
+        {
+            matchId = assignment.matchId,
+            sessionName = assignment.sessionName,
+            gameplaySceneName = gameplaySceneName,
 
-        context.queueType = assignment.queueType;
-        context.matchMode = assignment.matchMode;
-        context.pointsToWin = Math.Max(1, assignment.pointsToWin);
-        context.matchDurationSeconds = Math.Max(1f, assignment.matchDurationSeconds);
-        context.isRanked = assignment.isRanked;
+            queueType = assignment.queueType,
+            matchMode = assignment.matchMode,
 
-        context.allowChestRewards = assignment.allowChestRewards;
-        context.allowXpRewards = assignment.allowXpRewards;
-        context.allowStatsProgression = assignment.allowStatsProgression;
+            pointsToWin = assignment.pointsToWin,
+            matchDurationSeconds = assignment.matchDurationSeconds,
+            turnDurationSeconds = assignment.turnDurationSeconds,
 
-        context.localPlayer = assignment.localPlayer ?? new OnlinePlayerIdentity();
-        context.remotePlayer = assignment.remotePlayer ?? new OnlinePlayerIdentity();
+            isRanked = assignment.isRanked,
 
-        context.localIsHost = assignment.localIsHost;
-        context.isConnected = false;
+            allowChestRewards = assignment.allowChestRewards,
+            allowXpRewards = assignment.allowXpRewards,
+            allowStatsProgression = assignment.allowStatsProgression,
 
-        context.player1DisplayName = context.localIsHost
-            ? SafeName(context.localPlayer.displayName, "Player 1")
-            : SafeName(context.remotePlayer.displayName, "Player 1");
+            localPlayer = assignment.localPlayer,
+            remotePlayer = assignment.remotePlayer,
 
-        context.player2DisplayName = context.localIsHost
-            ? SafeName(context.remotePlayer.displayName, "Player 2")
-            : SafeName(context.localPlayer.displayName, "Player 2");
+            localIsHost = assignment.localIsHost,
+            isConnected = false,
 
-        context.player1SkinUniqueId = string.IsNullOrWhiteSpace(assignment.player1SkinUniqueId)
-            ? string.Empty
-            : assignment.player1SkinUniqueId.Trim();
+            player1DisplayName = assignment.localIsHost
+                ? SafeName(assignment.localPlayer)
+                : SafeName(assignment.remotePlayer),
 
-        context.player2SkinUniqueId = string.IsNullOrWhiteSpace(assignment.player2SkinUniqueId)
-            ? string.Empty
-            : assignment.player2SkinUniqueId.Trim();
+            player2DisplayName = assignment.localIsHost
+                ? SafeName(assignment.remotePlayer)
+                : SafeName(assignment.localPlayer),
+
+            player1SkinUniqueId = assignment.player1SkinUniqueId,
+            player2SkinUniqueId = assignment.player2SkinUniqueId
+        };
 
         return context;
     }
 
-    private static string SafeName(string value, string fallback)
+    private static string SafeName(OnlinePlayerIdentity identity)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return fallback;
+        if (identity == null || string.IsNullOrWhiteSpace(identity.displayName))
+            return "Player";
 
-        return value.Trim();
+        return identity.displayName.Trim();
     }
 }

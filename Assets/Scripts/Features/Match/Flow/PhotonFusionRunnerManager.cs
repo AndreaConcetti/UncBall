@@ -1,4 +1,5 @@
 using Fusion;
+using Fusion.Photon.Realtime;
 using Fusion.Sockets;
 using System;
 using System.Collections.Generic;
@@ -85,7 +86,9 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             maxPlayers,
             sessionProperties,
             string.IsNullOrWhiteSpace(customLobbyNameOverride) ? privateLobbyName : customLobbyNameOverride,
-            connectionToken: null
+            connectionToken: null,
+            allowRandomSessionName: false,
+            matchmakingMode: MatchmakingMode.FillRoom
         );
     }
 
@@ -109,7 +112,9 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             maxPlayers,
             null,
             string.IsNullOrWhiteSpace(customLobbyNameOverride) ? privateLobbyName : customLobbyNameOverride,
-            connectionToken
+            connectionToken,
+            allowRandomSessionName: false,
+            matchmakingMode: MatchmakingMode.FillRoom
         );
     }
 
@@ -140,7 +145,36 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             maxPlayers,
             matchmakingProperties,
             string.IsNullOrWhiteSpace(customLobbyNameOverride) ? matchmakingLobbyName : customLobbyNameOverride,
-            connectionToken
+            connectionToken,
+            allowRandomSessionName: false,
+            matchmakingMode: MatchmakingMode.FillRoom
+        );
+    }
+
+    public async Task<bool> StartPhotonQueueMatchmakingAsync(
+        Dictionary<string, SessionProperty> matchmakingProperties,
+        int maxPlayers = 2,
+        string customLobbyNameOverride = null,
+        byte[] connectionToken = null,
+        MatchmakingMode matchmakingMode = MatchmakingMode.FillRoom)
+    {
+        SceneRef currentScene = GetActiveSceneRef();
+        if (!currentScene.IsValid)
+        {
+            Debug.LogError("[PhotonFusionRunnerManager] Current active scene is not valid for random Fusion matchmaking.", this);
+            return false;
+        }
+
+        return await StartGameInternalAsync(
+            GameMode.AutoHostOrClient,
+            null,
+            currentScene,
+            maxPlayers,
+            matchmakingProperties,
+            string.IsNullOrWhiteSpace(customLobbyNameOverride) ? matchmakingLobbyName : customLobbyNameOverride,
+            connectionToken,
+            allowRandomSessionName: true,
+            matchmakingMode: matchmakingMode
         );
     }
 
@@ -343,7 +377,9 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         int maxPlayers,
         Dictionary<string, SessionProperty> sessionProperties,
         string customLobbyName,
-        byte[] connectionToken)
+        byte[] connectionToken,
+        bool allowRandomSessionName,
+        MatchmakingMode matchmakingMode)
     {
         if (!sceneRef.IsValid)
         {
@@ -351,7 +387,7 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(sessionName))
+        if (!allowRandomSessionName && string.IsNullOrWhiteSpace(sessionName))
         {
             Debug.LogError("[PhotonFusionRunnerManager] Session name is empty.", this);
             return false;
@@ -384,13 +420,14 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         StartGameArgs args = new StartGameArgs
         {
             GameMode = gameMode,
-            SessionName = sessionName,
+            SessionName = string.IsNullOrWhiteSpace(sessionName) ? null : sessionName,
             Scene = sceneRef,
             SceneManager = sceneManager,
             PlayerCount = Mathf.Max(2, maxPlayers),
             SessionProperties = sessionProperties,
             CustomLobbyName = customLobbyName,
-            ConnectionToken = connectionToken
+            ConnectionToken = connectionToken,
+            MatchmakingMode = matchmakingMode
         };
 
         if (logDebug)
@@ -398,10 +435,11 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
             Debug.Log(
                 "[PhotonFusionRunnerManager] Starting Fusion game. " +
                 "Mode=" + gameMode +
-                " | SessionName=" + sessionName +
+                " | SessionName=" + (string.IsNullOrWhiteSpace(sessionName) ? "<RANDOM>" : sessionName) +
                 " | SceneRef=" + sceneRef +
                 " | MaxPlayers=" + maxPlayers +
-                " | CustomLobbyName=" + customLobbyName,
+                " | CustomLobbyName=" + customLobbyName +
+                " | MatchmakingMode=" + matchmakingMode,
                 this
             );
         }
@@ -579,13 +617,13 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnInput(NetworkRunner runner, NetworkInput input) { }
     public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
-    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
-    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
+    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
+    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
     public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
     public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
-    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
-    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
+    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
     public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
 }

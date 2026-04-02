@@ -14,10 +14,12 @@ public class OnlineFlowController : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private PhotonFusionRunnerManager runnerManager;
     [SerializeField] private PlayerProfileManager profileManager;
+    [SerializeField] private OnlineQueueRulesConfig queueRulesConfig;
 
     [Header("Config")]
     [SerializeField] private string gameplaySceneName = "Gameplay";
     [SerializeField] private string mainMenuSceneName = "MainMenu";
+    [SerializeField] private float matchFoundUiDelaySeconds = 2.0f;
     [SerializeField] private bool logDebug = true;
 
     [Header("Runtime")]
@@ -31,6 +33,7 @@ public class OnlineFlowController : MonoBehaviour
 
     public OnlineRuntimeContext RuntimeContext => runtimeContext;
     public OnlineFlowState CurrentState => runtimeContext != null ? runtimeContext.state : OnlineFlowState.Offline;
+    public float MatchFoundUiDelaySeconds => Mathf.Max(0f, matchFoundUiDelaySeconds);
 
     public bool IsBusy =>
         CurrentState == OnlineFlowState.Queueing ||
@@ -79,7 +82,12 @@ public class OnlineFlowController : MonoBehaviour
         if (initialized)
             return;
 
-        matchmakingService = new LocalDevMatchmakingService();
+        if (queueRulesConfig == null)
+        {
+            Debug.LogError("[OnlineFlowController] OnlineQueueRulesConfig missing.", this);
+        }
+
+        matchmakingService = new PhotonFusionMatchmakingService(runnerManager, queueRulesConfig, logDebug);
         matchSessionService = new FusionMatchSessionService(runnerManager);
 
         initialized = true;
@@ -102,6 +110,13 @@ public class OnlineFlowController : MonoBehaviour
         if (profileManager == null)
         {
             runtimeContext.SetError("PlayerProfileManager missing.");
+            NotifyStateChanged();
+            return;
+        }
+
+        if (queueRulesConfig == null)
+        {
+            runtimeContext.SetError("OnlineQueueRulesConfig missing.");
             NotifyStateChanged();
             return;
         }
@@ -145,6 +160,10 @@ public class OnlineFlowController : MonoBehaviour
             runtimeContext.statusMessage = "Match found.";
             NotifyStateChanged();
 
+            float delay = Mathf.Max(0f, matchFoundUiDelaySeconds);
+            if (delay > 0f)
+                await Task.Delay(TimeSpan.FromSeconds(delay), currentFlowCts.Token);
+
             MatchSessionContext sessionContext = MatchSessionContext.FromAssignment(
                 assignment,
                 gameplaySceneName
@@ -155,10 +174,7 @@ public class OnlineFlowController : MonoBehaviour
             runtimeContext.statusMessage = "Joining match session...";
             NotifyStateChanged();
 
-            bool joined = await matchSessionService.JoinAssignedMatchAsync(
-                sessionContext,
-                currentFlowCts.Token
-            );
+            bool joined = true;
 
             if (!joined)
             {

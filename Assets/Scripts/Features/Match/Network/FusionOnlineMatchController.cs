@@ -47,6 +47,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [Networked] private byte NetMatchModeRaw { get; set; }
     [Networked] private int NetPointsToWin { get; set; }
     [Networked] private float NetConfiguredMatchDuration { get; set; }
+    [Networked] private float NetConfiguredTurnDuration { get; set; }
 
     [Networked] private byte NetCurrentTurnOwnerRaw { get; set; }
     [Networked] private float NetTurnTimeRemaining { get; set; }
@@ -111,6 +112,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
     public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : fallbackMatchMode;
     public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : fallbackPointsToWin;
     public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : fallbackMatchDurationSeconds;
+    public float ConfiguredTurnDuration => IsNetworkStateReadable ? NetConfiguredTurnDuration : defaultTurnDuration;
 
     public PlayerID CurrentTurnOwner => IsNetworkStateReadable ? (PlayerID)NetCurrentTurnOwnerRaw : PlayerID.None;
     public float CurrentTurnTimeRemaining => IsNetworkStateReadable ? NetTurnTimeRemaining : 0f;
@@ -527,12 +529,17 @@ public class FusionOnlineMatchController : NetworkBehaviour
             ? Mathf.Max(1f, session.matchDurationSeconds)
             : Mathf.Max(1f, fallbackMatchDurationSeconds);
 
+        float resolvedTurnDuration = session != null
+            ? Mathf.Max(1f, session.turnDurationSeconds)
+            : Mathf.Max(1f, defaultTurnDuration);
+
         NetMatchModeRaw = (byte)resolvedMatchMode;
         NetPointsToWin = resolvedPointsToWin;
         NetConfiguredMatchDuration = resolvedMatchDuration;
+        NetConfiguredTurnDuration = resolvedTurnDuration;
 
         NetCurrentTurnOwnerRaw = (byte)PlayerID.Player1;
-        NetTurnTimeRemaining = defaultTurnDuration;
+        NetTurnTimeRemaining = resolvedTurnDuration;
         NetMatchTimeRemaining = resolvedMatchDuration;
 
         NetScoreP1 = 0;
@@ -562,6 +569,24 @@ public class FusionOnlineMatchController : NetworkBehaviour
         NetPlayer1SkinId = ResolveInitialSkinIdForPlayer(PlayerID.Player1);
         NetPlayer2SkinId = ResolveInitialSkinIdForPlayer(PlayerID.Player2);
 
+        if (string.IsNullOrWhiteSpace(NetPlayer1DisplayName.ToString()))
+            NetPlayer1DisplayName = "Player 1";
+
+        if (string.IsNullOrWhiteSpace(NetPlayer2DisplayName.ToString()))
+            NetPlayer2DisplayName = "Player 2";
+
+        if (Runner != null && Runner.IsServer)
+        {
+            string localServerName = ResolveLocalDisplayName();
+            string localServerSkinId = ResolveLocalEquippedSkinId();
+
+            if (!string.IsNullOrWhiteSpace(localServerName))
+                NetPlayer1DisplayName = localServerName.Trim();
+
+            if (!string.IsNullOrWhiteSpace(localServerSkinId))
+                NetPlayer1SkinId = localServerSkinId.Trim();
+        }
+
         NetPlayer1PresentationLocked = false;
         NetPlayer2PresentationLocked = false;
 
@@ -585,6 +610,18 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         if (bottomBarOrderSwapper != null)
             bottomBarOrderSwapper.SetOrder(true);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchController] InitializeAuthorityState -> " +
+                "P1Name=" + NetPlayer1DisplayName +
+                " | P1Skin=" + NetPlayer1SkinId +
+                " | P2Name=" + NetPlayer2DisplayName +
+                " | P2Skin=" + NetPlayer2SkinId,
+                this
+            );
+        }
     }
 
     private void SubmitLocalPresentationIfNeeded()
@@ -898,7 +935,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         NetBreakActive = false;
         NetBreakTimeRemaining = defaultBreakDuration;
         NetBreakReasonRaw = (byte)MidMatchBreakReason.None;
-        NetTurnTimeRemaining = defaultTurnDuration;
+        NetTurnTimeRemaining = ConfiguredTurnDuration;
         NetCurrentTurnOwnerRaw = (byte)PlayerID.Player2;
         NetShotInFlight = false;
 
@@ -1004,7 +1041,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
     private void ReleaseCurrentBallFromTurnTrackingAuthority()
     {
         NetShotInFlight = false;
-        NetTurnTimeRemaining = defaultTurnDuration;
+        NetTurnTimeRemaining = ConfiguredTurnDuration;
         watchedBall = null;
         watchedBallRb = null;
         stuckTimer = 0f;
@@ -1164,7 +1201,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         PlayerID nextOwner = CurrentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
         NetShotInFlight = false;
-        NetTurnTimeRemaining = defaultTurnDuration;
+        NetTurnTimeRemaining = ConfiguredTurnDuration;
         watchedBall = null;
         watchedBallRb = null;
         stuckTimer = 0f;
@@ -1285,7 +1322,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         stuckTimer = 0f;
         currentPlayerScoredThisTurn = false;
         NetCurrentTurnOwnerRaw = (byte)owner;
-        NetTurnTimeRemaining = defaultTurnDuration;
+        NetTurnTimeRemaining = ConfiguredTurnDuration;
         NetShotInFlight = false;
 
         if (logDebug)
@@ -1431,8 +1468,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (logDebug)
         {
             Debug.Log(
-                "[FusionOnlineMatchController] ResolveLocalEquippedSkinId -> " +
-                "Using local primary loadout skin = " + skin.skinUniqueId,
+                "[FusionOnlineMatchController] ResolveLocalEquippedSkinId -> Using local primary loadout skin = " + skin.skinUniqueId,
                 this
             );
         }

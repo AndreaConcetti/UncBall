@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 82f854ca0677acd42a2e70486dc8d973, type: 3}
+  m_Name: OnlineQueueRulesConfig
+  m_EditorClassIdentifier: Assembly-CSharp::OnlineQueueRulesConfig
+  normal:
+    matchMode: 0
+    pointsToWin: 4
+    matchDurationSeconds: 20
+    turnDurationSeconds: 12
+    allowChestRewards: 1
+    allowXpRewards: 1
+    allowStatsProgression: 1
+  ranked:
+    matchMode: 1
+    pointsToWin: 1
+    matchDurationSeconds: 40
+    turnDurationSeconds: 8
+    allowChestRewards: 1
+    allowXpRewards: 1
+    allowStatsProgression: 1
