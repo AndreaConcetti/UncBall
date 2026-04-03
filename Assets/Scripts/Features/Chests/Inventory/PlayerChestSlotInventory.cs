@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UncballArena.Core.Runtime;
 
 public class PlayerChestSlotInventory : MonoBehaviour
 {
@@ -60,9 +61,7 @@ public class PlayerChestSlotInventory : MonoBehaviour
         MarkRuntimeRootPersistentIfNeeded();
 
         ResolveDependencies();
-
-        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
-            activeProfileId = profileManager.ActiveProfileId;
+        activeProfileId = ResolveCurrentProfileId();
 
         LoadInventory();
         EnsureRuntimeStructure();
@@ -104,9 +103,7 @@ public class PlayerChestSlotInventory : MonoBehaviour
     private void Start()
     {
         ResolveDependencies();
-
-        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
-            SetActiveProfileId(profileManager.ActiveProfileId, true);
+        SetActiveProfileId(ResolveCurrentProfileId(), true);
     }
 
     public bool AwardChest(ChestType chestType)
@@ -316,6 +313,11 @@ public class PlayerChestSlotInventory : MonoBehaviour
 
         if (!PlayerPrefs.HasKey(resolvedSaveKey))
         {
+            TryMigrateLegacyLocalProfileSave();
+        }
+
+        if (!PlayerPrefs.HasKey(resolvedSaveKey))
+        {
             runtimeData = new PlayerChestSlotInventorySaveData();
             return;
         }
@@ -376,7 +378,7 @@ public class PlayerChestSlotInventory : MonoBehaviour
 
     public void SetActiveProfileId(string newProfileId, bool reloadInventory = true)
     {
-        string sanitized = string.IsNullOrWhiteSpace(newProfileId) ? "local_player_1" : newProfileId.Trim();
+        string sanitized = SanitizeProfileId(newProfileId);
 
         if (activeProfileId == sanitized)
             return;
@@ -410,7 +412,7 @@ public class PlayerChestSlotInventory : MonoBehaviour
             return;
         }
 
-        activeProfileId = string.IsNullOrWhiteSpace(profileId) ? activeProfileId : profileId;
+        activeProfileId = SanitizeProfileId(profileId);
         runtimeData = snapshot;
 
         EnsureRuntimeStructure();
@@ -634,8 +636,66 @@ public class PlayerChestSlotInventory : MonoBehaviour
 
     private string GetResolvedSaveKey()
     {
-        string profilePart = string.IsNullOrWhiteSpace(activeProfileId) ? "local_player_1" : activeProfileId.Trim();
-        return saveKey + "_" + profilePart;
+        return saveKey + "_" + SanitizeProfileId(activeProfileId);
+    }
+
+    private string GetLegacySaveKey()
+    {
+        return saveKey + "_local_player_1";
+    }
+
+    private void TryMigrateLegacyLocalProfileSave()
+    {
+        string targetKey = GetResolvedSaveKey();
+        string legacyKey = GetLegacySaveKey();
+
+        if (string.Equals(targetKey, legacyKey, StringComparison.Ordinal))
+            return;
+
+        if (PlayerPrefs.HasKey(targetKey))
+            return;
+
+        if (!PlayerPrefs.HasKey(legacyKey))
+            return;
+
+        string legacyJson = PlayerPrefs.GetString(legacyKey, string.Empty);
+        if (string.IsNullOrWhiteSpace(legacyJson))
+            return;
+
+        PlayerPrefs.SetString(targetKey, legacyJson);
+        PlayerPrefs.Save();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerChestSlotInventory] Migrated legacy save -> " +
+                "From=" + legacyKey +
+                " | To=" + targetKey,
+                this
+            );
+        }
+    }
+
+    private string ResolveCurrentProfileId()
+    {
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            return profileManager.ActiveProfileId.Trim();
+
+        if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.PlayerId))
+            return OnlineLocalPlayerContext.PlayerId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(activeProfileId))
+            return activeProfileId.Trim();
+
+        return "guest_fallback";
+    }
+
+    private string SanitizeProfileId(string profileId)
+    {
+        if (!string.IsNullOrWhiteSpace(profileId))
+            return profileId.Trim();
+
+        return ResolveCurrentProfileId();
     }
 
     private string GetTimeProviderDebugName()
@@ -665,6 +725,9 @@ public class PlayerChestSlotInventory : MonoBehaviour
             return;
 
         GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        if (runtimeRoot.transform.parent != null)
+            runtimeRoot.transform.SetParent(null);
+
         DontDestroyOnLoad(runtimeRoot);
     }
 

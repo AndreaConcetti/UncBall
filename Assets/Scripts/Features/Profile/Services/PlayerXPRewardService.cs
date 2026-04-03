@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using UnityEngine;
+using UncballArena.Core.Bootstrap;
+using UncballArena.Core.Profile.Models;
 
 [Serializable]
 public class PlayerXPGrantResult
@@ -73,21 +75,22 @@ public class PlayerXPRewardService : MonoBehaviour
 
         dailyLoginCheckedThisSession = true;
 
-        if (profileManager == null || progressionRules == null || profileManager.ActiveProfile == null)
+        if (progressionRules == null)
         {
-            result.reason = "missing_dependencies";
+            result.reason = "missing_progression_rules";
             return result;
         }
 
         string todayUtc = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        string lastClaimDate = profileManager.ActiveProfile.lastDailyLoginClaimDateUtc;
 
+        string lastClaimDate = GetLastDailyLoginClaimDateUtc();
         if (!string.IsNullOrWhiteSpace(lastClaimDate) && lastClaimDate == todayUtc)
         {
             result.reason = "already_claimed_today";
             return result;
         }
 
+        int currentStreak = GetCurrentConsecutiveLoginDays();
         int newStreak = 1;
 
         if (!string.IsNullOrWhiteSpace(lastClaimDate))
@@ -102,17 +105,16 @@ public class PlayerXPRewardService : MonoBehaviour
                 DateTime yesterdayUtc = DateTime.UtcNow.Date.AddDays(-1);
 
                 if (lastClaimParsed.Date == yesterdayUtc)
-                    newStreak = Mathf.Max(1, profileManager.ActiveProfile.consecutiveLoginDays + 1);
+                    newStreak = Mathf.Max(1, currentStreak + 1);
             }
         }
 
         int grantedXp = progressionRules.GetDailyLoginXp(newStreak);
+
         result = GrantXpInternal(
             grantedXp,
             "daily_login",
             "granted",
-            additionalMatchesPlayed: 0,
-            additionalWins: 0,
             newDailyLoginDateUtc: todayUtc,
             newConsecutiveLoginDays: newStreak
         );
@@ -143,9 +145,9 @@ public class PlayerXPRewardService : MonoBehaviour
             reason = ""
         };
 
-        if (profileManager == null || progressionRules == null || profileManager.ActiveProfile == null)
+        if (progressionRules == null)
         {
-            result.reason = "missing_dependencies";
+            result.reason = "missing_progression_rules";
             return result;
         }
 
@@ -156,8 +158,6 @@ public class PlayerXPRewardService : MonoBehaviour
             grantedXp,
             "match_completion",
             wonMatch ? "match_played_and_won" : "match_played",
-            additionalMatchesPlayed: 0,
-            additionalWins: 0,
             newDailyLoginDateUtc: null,
             newConsecutiveLoginDays: null
         );
@@ -183,8 +183,6 @@ public class PlayerXPRewardService : MonoBehaviour
         int grantedXp,
         string source,
         string reason,
-        int additionalMatchesPlayed,
-        int additionalWins,
         string newDailyLoginDateUtc,
         int? newConsecutiveLoginDays)
     {
@@ -194,30 +192,22 @@ public class PlayerXPRewardService : MonoBehaviour
             source = source,
             reason = reason,
             grantedXp = Mathf.Max(0, grantedXp),
-            consecutiveLoginDays = newConsecutiveLoginDays ?? (profileManager != null && profileManager.ActiveProfile != null
-                ? profileManager.ActiveProfile.consecutiveLoginDays
-                : 0)
+            consecutiveLoginDays = newConsecutiveLoginDays ?? GetCurrentConsecutiveLoginDays()
         };
 
-        if (profileManager == null || progressionRules == null || profileManager.ActiveProfile == null)
-        {
-            result.reason = "missing_dependencies";
-            return result;
-        }
+        int previousLevel = GetCurrentLevel();
+        int currentXp = GetCurrentTotalXp();
 
-        PlayerProfileRuntimeData profile = profileManager.ActiveProfile;
+        int newTotalXp = Mathf.Max(0, currentXp + result.grantedXp);
+        int newLevel = progressionRules != null
+            ? progressionRules.CalculateLevelFromTotalXp(newTotalXp)
+            : Mathf.Max(1, previousLevel);
 
-        int previousLevel = Mathf.Max(1, profile.level);
-        int newTotalXp = Mathf.Max(0, profile.xp + result.grantedXp);
-        int newLevel = progressionRules.CalculateLevelFromTotalXp(newTotalXp);
-
-        profileManager.ApplyProgressionState(
-            totalXp: newTotalXp,
-            totalLevel: newLevel,
-            totalMatchesPlayed: Mathf.Max(0, profile.totalMatchesPlayed + additionalMatchesPlayed),
-            totalWins: Mathf.Max(0, profile.totalWins + additionalWins),
-            lastDailyLoginClaimDateUtc: newDailyLoginDateUtc,
-            consecutiveLoginDays: newConsecutiveLoginDays
+        ApplyProgressionToBestAvailableStore(
+            newTotalXp,
+            newLevel,
+            newDailyLoginDateUtc,
+            newConsecutiveLoginDays
         );
 
         result.success = true;
@@ -227,8 +217,120 @@ public class PlayerXPRewardService : MonoBehaviour
         result.leveledUp = newLevel > previousLevel;
 
         OnXpGranted?.Invoke(result);
-
         return result;
+    }
+
+    private void ApplyProgressionToBestAvailableStore(
+        int newTotalXp,
+        int newLevel,
+        string newDailyLoginDateUtc,
+        int? newConsecutiveLoginDays)
+    {
+        if (IsUsingCoreProfile())
+        {
+            ApplyToCoreProfile(newTotalXp, newLevel, newDailyLoginDateUtc, newConsecutiveLoginDays);
+            return;
+        }
+
+        if (profileManager != null)
+        {
+            profileManager.ApplyProgressionState(
+                totalXp: newTotalXp,
+                totalLevel: newLevel,
+                lastDailyLoginClaimDateUtc: newDailyLoginDateUtc,
+                consecutiveLoginDays: newConsecutiveLoginDays
+            );
+        }
+    }
+
+    private async void ApplyToCoreProfile(
+        int newTotalXp,
+        int newLevel,
+        string newDailyLoginDateUtc,
+        int? newConsecutiveLoginDays)
+    {
+        if (!IsUsingCoreProfile())
+            return;
+
+        ProfileSnapshot current = GameCompositionRoot.Instance.ProfileService.CurrentProfile;
+        if (current == null || !current.IsValid())
+            return;
+
+        ProfileSnapshot updated = new ProfileSnapshot(
+            current.ProfileId,
+            current.PlayerId,
+            current.DisplayName,
+            newTotalXp,
+            newLevel,
+            current.TotalMatches,
+            current.TotalWins,
+            current.MultiplayerMatches,
+            current.MultiplayerWins,
+            current.RankedMatches,
+            current.RankedWins,
+            current.EquippedBallSkinId,
+            current.EquippedTableSkinId,
+            current.SoftCurrency,
+            current.HardCurrency,
+            current.CreatedAtUnixSeconds,
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        );
+
+        await GameCompositionRoot.Instance.ProfileService.ApplyAuthoritativeSnapshotAsync(updated);
+
+        if (profileManager != null)
+            profileManager.ApplyProgressionState(
+                totalXp: newTotalXp,
+                totalLevel: newLevel,
+                lastDailyLoginClaimDateUtc: newDailyLoginDateUtc,
+                consecutiveLoginDays: newConsecutiveLoginDays
+            );
+    }
+
+    private bool IsUsingCoreProfile()
+    {
+        return GameCompositionRoot.Instance != null &&
+               GameCompositionRoot.Instance.IsReady &&
+               GameCompositionRoot.Instance.ProfileService != null &&
+               GameCompositionRoot.Instance.ProfileService.CurrentProfile != null;
+    }
+
+    private int GetCurrentTotalXp()
+    {
+        if (IsUsingCoreProfile())
+            return Mathf.Max(0, GameCompositionRoot.Instance.ProfileService.CurrentProfile.Xp);
+
+        if (profileManager != null && profileManager.ActiveProfile != null)
+            return Mathf.Max(0, profileManager.ActiveProfile.xp);
+
+        return 0;
+    }
+
+    private int GetCurrentLevel()
+    {
+        if (IsUsingCoreProfile())
+            return Mathf.Max(1, GameCompositionRoot.Instance.ProfileService.CurrentProfile.Level);
+
+        if (profileManager != null && profileManager.ActiveProfile != null)
+            return Mathf.Max(1, profileManager.ActiveProfile.level);
+
+        return 1;
+    }
+
+    private string GetLastDailyLoginClaimDateUtc()
+    {
+        if (profileManager != null && profileManager.ActiveProfile != null)
+            return profileManager.ActiveProfile.lastDailyLoginClaimDateUtc;
+
+        return string.Empty;
+    }
+
+    private int GetCurrentConsecutiveLoginDays()
+    {
+        if (profileManager != null && profileManager.ActiveProfile != null)
+            return Mathf.Max(0, profileManager.ActiveProfile.consecutiveLoginDays);
+
+        return 0;
     }
 
     private void ResolveDependencies()
@@ -246,6 +348,9 @@ public class PlayerXPRewardService : MonoBehaviour
             return;
 
         GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        if (runtimeRoot.transform.parent != null)
+            runtimeRoot.transform.SetParent(null);
+
         DontDestroyOnLoad(runtimeRoot);
     }
 

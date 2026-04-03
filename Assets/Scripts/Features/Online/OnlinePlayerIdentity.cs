@@ -1,4 +1,5 @@
 using System;
+using UncballArena.Core.Runtime;
 
 [Serializable]
 public sealed class OnlinePlayerIdentity
@@ -16,9 +17,25 @@ public sealed class OnlinePlayerIdentity
 
     public OnlinePlayerIdentity(string profileId, string onlinePlayerId, string displayName)
     {
-        this.profileId = Sanitize(profileId, "local_player_1");
+        this.profileId = Sanitize(profileId, ResolveLocalProfileFallback());
         this.onlinePlayerId = Sanitize(onlinePlayerId, "online_player");
-        this.displayName = Sanitize(displayName, "Player");
+        this.displayName = Sanitize(displayName, ResolveLocalDisplayNameFallback());
+    }
+
+    private static string ResolveLocalProfileFallback()
+    {
+        if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.PlayerId))
+            return OnlineLocalPlayerContext.PlayerId.Trim();
+
+        return "guest_fallback";
+    }
+
+    private static string ResolveLocalDisplayNameFallback()
+    {
+        if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.DisplayName))
+            return OnlineLocalPlayerContext.DisplayName.Trim();
+
+        return "Player";
     }
 
     public static string Sanitize(string value, string fallback)

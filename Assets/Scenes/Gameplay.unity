@@ -12331,7 +12331,7 @@ MonoBehaviour:
   localPlayerName: Player 1
   remotePlayerName: Player 2
   onlineMatchController: {fileID: 0}
-  logDebug: 1
+  logDebug: 0
 --- !u!4 &1394314181
 Transform:
   m_ObjectHideFlags: 0

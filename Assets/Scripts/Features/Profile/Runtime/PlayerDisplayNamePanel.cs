@@ -16,6 +16,30 @@ public class PlayerDisplayNamePanel : MonoBehaviour
     [SerializeField] private int maxLength = 16;
     [SerializeField] private bool logDebug = true;
 
+    private void OnEnable()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null)
+        {
+            profileManager.OnActiveProfileChanged -= HandleProfileChanged;
+            profileManager.OnActiveProfileDataChanged -= HandleProfileChanged;
+            profileManager.OnActiveProfileChanged += HandleProfileChanged;
+            profileManager.OnActiveProfileDataChanged += HandleProfileChanged;
+        }
+
+        RefreshUi();
+    }
+
+    private void OnDisable()
+    {
+        if (profileManager != null)
+        {
+            profileManager.OnActiveProfileChanged -= HandleProfileChanged;
+            profileManager.OnActiveProfileDataChanged -= HandleProfileChanged;
+        }
+    }
+
     private void Start()
     {
         ResolveDependencies();
@@ -62,6 +86,11 @@ public class PlayerDisplayNamePanel : MonoBehaviour
 
         if (feedbackText != null)
             feedbackText.text = string.Empty;
+    }
+
+    private void HandleProfileChanged(PlayerProfileRuntimeData _)
+    {
+        RefreshUi();
     }
 
     private void ResolveDependencies()

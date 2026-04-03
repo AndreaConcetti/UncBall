@@ -1,13 +1,10 @@
 using UnityEngine;
+using UncballArena.Core.Runtime;
 
 public static class OnlinePlayerStatsSnapshotFactory
 {
     public static OnlinePlayerMatchStatsSnapshot BuildFromLocalProfile(OnlinePlayerIdentity fallbackIdentity = null)
     {
-        PlayerProfileManager profileManager = PlayerProfileManager.Instance;
-        if (profileManager == null)
-            profileManager = Object.FindAnyObjectByType<PlayerProfileManager>();
-
         string fallbackDisplayName = fallbackIdentity != null && !string.IsNullOrWhiteSpace(fallbackIdentity.displayName)
             ? fallbackIdentity.displayName
             : "Player";
@@ -20,58 +17,45 @@ public static class OnlinePlayerStatsSnapshotFactory
             ? fallbackIdentity.profileId
             : "local_profile";
 
-        if (profileManager == null || profileManager.ActiveProfile == null)
+        if (OnlineLocalPlayerContext.IsAvailable)
         {
-            OnlinePlayerMatchStatsSnapshot fallbackSnapshot =
-                OnlinePlayerMatchStatsSnapshot.CreateDefault(fallbackDisplayName, fallbackOnlineId, fallbackProfileId);
+            int level = Mathf.Max(1, OnlineLocalPlayerContext.Level);
+            int totalMatches = Mathf.Max(0, OnlineLocalPlayerContext.TotalMatches);
+            int totalWins = Mathf.Max(0, OnlineLocalPlayerContext.TotalWins);
+            int totalLosses = Mathf.Max(0, totalMatches - totalWins);
+            int winRatePercent = totalMatches > 0
+                ? Mathf.Clamp(Mathf.RoundToInt((float)totalWins / totalMatches * 100f), 0, 100)
+                : 0;
 
-            fallbackSnapshot.Normalize();
-            return fallbackSnapshot;
+            OnlinePlayerMatchStatsSnapshot snapshot = new OnlinePlayerMatchStatsSnapshot
+            {
+                onlinePlayerId = !string.IsNullOrWhiteSpace(fallbackOnlineId)
+                    ? fallbackOnlineId.Trim()
+                    : OnlineLocalPlayerContext.PlayerId,
+
+                profileId = !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.PlayerId)
+                    ? OnlineLocalPlayerContext.PlayerId.Trim()
+                    : fallbackProfileId,
+
+                displayName = !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.DisplayName)
+                    ? OnlineLocalPlayerContext.DisplayName.Trim()
+                    : fallbackDisplayName,
+
+                level = level,
+                totalMatches = totalMatches,
+                totalWins = totalWins,
+                totalLosses = totalLosses,
+                winRatePercent = winRatePercent
+            };
+
+            snapshot.Normalize();
+            return snapshot;
         }
 
-        PlayerProfileRuntimeData profile = profileManager.ActiveProfile;
+        OnlinePlayerMatchStatsSnapshot fallbackSnapshot =
+            OnlinePlayerMatchStatsSnapshot.CreateDefault(fallbackDisplayName, fallbackOnlineId, fallbackProfileId);
 
-        int level = Mathf.Max(1, profile.level);
-        int totalMatches = Mathf.Max(0, profile.totalMatchesPlayed);
-        int totalWins = Mathf.Max(0, profile.totalWins);
-        int totalLosses = Mathf.Max(0, totalMatches - totalWins);
-        int winRatePercent = totalMatches > 0
-            ? Mathf.Clamp(Mathf.RoundToInt((float)totalWins / totalMatches * 100f), 0, 100)
-            : 0;
-
-        OnlinePlayerMatchStatsSnapshot snapshot = new OnlinePlayerMatchStatsSnapshot
-        {
-            onlinePlayerId = !string.IsNullOrWhiteSpace(fallbackOnlineId)
-                ? fallbackOnlineId.Trim()
-                : "local_player",
-
-            profileId = !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId)
-                ? profileManager.ActiveProfileId.Trim()
-                : fallbackProfileId,
-
-            displayName = !string.IsNullOrWhiteSpace(profileManager.ActiveDisplayName)
-                ? profileManager.ActiveDisplayName.Trim()
-                : fallbackDisplayName,
-
-            level = level,
-            totalMatches = totalMatches,
-            totalWins = totalWins,
-            totalLosses = totalLosses,
-            winRatePercent = winRatePercent
-        };
-
-        snapshot.Normalize();
-
-        Debug.Log(
-            "[OnlinePlayerStatsSnapshotFactory] Local snapshot built -> " +
-            "Name=" + snapshot.displayName +
-            " | Level=" + snapshot.level +
-            " | Matches=" + snapshot.totalMatches +
-            " | Wins=" + snapshot.totalWins +
-            " | Losses=" + snapshot.totalLosses +
-            " | WR=" + snapshot.winRatePercent + "%",
-            profileManager);
-
-        return snapshot;
+        fallbackSnapshot.Normalize();
+        return fallbackSnapshot;
     }
 }

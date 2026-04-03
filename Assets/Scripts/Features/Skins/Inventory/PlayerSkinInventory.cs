@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UncballArena.Core.Bootstrap;
+using UncballArena.Core.Runtime;
 
 public class PlayerSkinInventory : MonoBehaviour
 {
@@ -63,9 +65,7 @@ public class PlayerSkinInventory : MonoBehaviour
         MarkRuntimeRootPersistentIfNeeded();
 
         ResolveDependencies();
-
-        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
-            activeProfileId = profileManager.ActiveProfileId;
+        activeProfileId = ResolveCurrentProfileId();
 
         LoadInventory();
         EnsureRuntimeStructure();
@@ -111,9 +111,7 @@ public class PlayerSkinInventory : MonoBehaviour
     private void Start()
     {
         ResolveDependencies();
-
-        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
-            SetActiveProfileId(profileManager.ActiveProfileId, true);
+        SetActiveProfileId(ResolveCurrentProfileId(), true);
     }
 
     public bool AddUnlockedSkin(BallSkinData skin)
@@ -144,6 +142,7 @@ public class PlayerSkinInventory : MonoBehaviour
             runtimeData.equippedSkinId = skin.skinUniqueId;
 
         SaveInventory();
+        PushEquippedSkinToCompositionRoot(runtimeData.equippedSkinId);
         EnsureEquippedSkinAppliedToLoadout();
         NotifyInventoryChanged();
 
@@ -211,6 +210,7 @@ public class PlayerSkinInventory : MonoBehaviour
             playerSkinLoadout.EquipSkinForPlayer1(skin);
 
         SaveInventory();
+        PushEquippedSkinToCompositionRoot(skinUniqueId);
         NotifyInventoryChanged();
 
         if (logDebug)
@@ -260,6 +260,9 @@ public class PlayerSkinInventory : MonoBehaviour
     public void LoadInventory()
     {
         string resolvedSaveKey = GetResolvedSaveKey();
+
+        if (!PlayerPrefs.HasKey(resolvedSaveKey))
+            TryMigrateLegacyLocalProfileSave();
 
         if (!PlayerPrefs.HasKey(resolvedSaveKey))
         {
@@ -379,6 +382,7 @@ public class PlayerSkinInventory : MonoBehaviour
         RemoveDuplicateSkinsInPlace();
         SaveInventory();
         EnsureEquippedSkinAppliedToLoadout();
+        PushEquippedSkinToCompositionRoot(runtimeData.equippedSkinId);
         NotifyInventoryChanged();
 
         if (logDebug)
@@ -438,6 +442,10 @@ public class PlayerSkinInventory : MonoBehaviour
             if (string.IsNullOrWhiteSpace(skin.skinUniqueId))
                 skin.skinUniqueId = BuildFallbackSkinId(skin);
         }
+
+        string preferredEquippedId = ResolvePreferredEquippedSkinId();
+        if (!string.IsNullOrWhiteSpace(preferredEquippedId) && ContainsSkin(preferredEquippedId))
+            runtimeData.equippedSkinId = preferredEquippedId;
 
         if (!string.IsNullOrWhiteSpace(runtimeData.equippedSkinId) && !ContainsSkin(runtimeData.equippedSkinId))
         {
@@ -613,6 +621,10 @@ public class PlayerSkinInventory : MonoBehaviour
     {
         ResolveDependencies();
 
+        string preferredEquippedId = ResolvePreferredEquippedSkinId();
+        if (!string.IsNullOrWhiteSpace(preferredEquippedId) && ContainsSkin(preferredEquippedId))
+            runtimeData.equippedSkinId = preferredEquippedId;
+
         BallSkinData equippedSkin = GetEquippedSkin();
 
         if (equippedSkin == null && runtimeData.unlockedSkins.Count > 0)
@@ -639,12 +651,63 @@ public class PlayerSkinInventory : MonoBehaviour
         return saveKeyPrefix + "_" + SanitizeProfileId(activeProfileId);
     }
 
+    private string GetLegacySaveKey()
+    {
+        return saveKeyPrefix + "_local_player_1";
+    }
+
+    private void TryMigrateLegacyLocalProfileSave()
+    {
+        string targetKey = GetResolvedSaveKey();
+        string legacyKey = GetLegacySaveKey();
+
+        if (string.Equals(targetKey, legacyKey, StringComparison.Ordinal))
+            return;
+
+        if (PlayerPrefs.HasKey(targetKey))
+            return;
+
+        if (!PlayerPrefs.HasKey(legacyKey))
+            return;
+
+        string legacyJson = PlayerPrefs.GetString(legacyKey, string.Empty);
+        if (string.IsNullOrWhiteSpace(legacyJson))
+            return;
+
+        PlayerPrefs.SetString(targetKey, legacyJson);
+        PlayerPrefs.Save();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerSkinInventory] Migrated legacy save -> " +
+                "From=" + legacyKey +
+                " | To=" + targetKey,
+                this
+            );
+        }
+    }
+
+    private string ResolveCurrentProfileId()
+    {
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            return profileManager.ActiveProfileId.Trim();
+
+        if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.PlayerId))
+            return OnlineLocalPlayerContext.PlayerId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(activeProfileId))
+            return activeProfileId.Trim();
+
+        return "guest_fallback";
+    }
+
     private string SanitizeProfileId(string profileId)
     {
-        if (string.IsNullOrWhiteSpace(profileId))
-            return "local_player_1";
+        if (!string.IsNullOrWhiteSpace(profileId))
+            return profileId.Trim();
 
-        return profileId.Trim();
+        return ResolveCurrentProfileId();
     }
 
     private long GetNowUnixSeconds()
@@ -684,12 +747,42 @@ public class PlayerSkinInventory : MonoBehaviour
         );
     }
 
+    private string ResolvePreferredEquippedSkinId()
+    {
+        if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.EquippedBallSkinId))
+            return OnlineLocalPlayerContext.EquippedBallSkinId.Trim();
+
+        if (GameCompositionRoot.Instance != null &&
+            GameCompositionRoot.Instance.ProfileService != null &&
+            GameCompositionRoot.Instance.ProfileService.CurrentProfile != null &&
+            !string.IsNullOrWhiteSpace(GameCompositionRoot.Instance.ProfileService.CurrentProfile.EquippedBallSkinId))
+        {
+            return GameCompositionRoot.Instance.ProfileService.CurrentProfile.EquippedBallSkinId.Trim();
+        }
+
+        return runtimeData != null ? runtimeData.equippedSkinId : string.Empty;
+    }
+
+    private async void PushEquippedSkinToCompositionRoot(string skinId)
+    {
+        if (string.IsNullOrWhiteSpace(skinId))
+            return;
+
+        if (GameCompositionRoot.Instance == null || !GameCompositionRoot.Instance.IsReady || GameCompositionRoot.Instance.ProfileService == null)
+            return;
+
+        await GameCompositionRoot.Instance.ProfileService.SetEquippedBallSkinAsync(skinId);
+    }
+
     private void MarkRuntimeRootPersistentIfNeeded()
     {
         if (!dontDestroyOnLoad)
             return;
 
         GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        if (runtimeRoot.transform.parent != null)
+            runtimeRoot.transform.SetParent(null);
+
         DontDestroyOnLoad(runtimeRoot);
     }
 

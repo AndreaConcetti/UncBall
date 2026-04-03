@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 
 public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
 {
@@ -41,7 +42,7 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
         if (logDebug)
         {
             Debug.Log(
-                "[OnlinePlayerPresentationResolver] Local from local profile -> " +
+                "[OnlinePlayerPresentationResolver] Local snapshot -> " +
                 snapshot.displayName +
                 " | " + snapshot.totalWins + "W-" + snapshot.totalLosses + "L" +
                 " | WR=" + snapshot.winRatePercent + "%",
@@ -58,23 +59,10 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
 
         MatchAssignment assignment = GetCurrentAssignment();
 
-        if (assignment != null &&
-            HasUsableRemoteSnapshot(assignment.remotePlayerStats))
+        if (assignment != null && HasUsableRemoteSnapshot(assignment.remotePlayerStats))
         {
             snapshot = CloneSnapshot(assignment.remotePlayerStats);
             snapshot.Normalize();
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlinePlayerPresentationResolver] Opponent from match assignment -> " +
-                    snapshot.displayName +
-                    " | " + snapshot.totalWins + "W-" + snapshot.totalLosses + "L" +
-                    " | WR=" + snapshot.winRatePercent + "%",
-                    this
-                );
-            }
-
             return true;
         }
 
@@ -86,35 +74,11 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
 
             snapshot = CloneSnapshot(liveSnapshot);
             snapshot.Normalize();
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlinePlayerPresentationResolver] Opponent from live listener cache -> " +
-                    snapshot.displayName +
-                    " | " + snapshot.totalWins + "W-" + snapshot.totalLosses + "L" +
-                    " | WR=" + snapshot.winRatePercent + "%",
-                    this
-                );
-            }
-
             return true;
         }
 
         snapshot = OnlinePlayerMatchStatsSnapshot.CreateDefault("Opponent");
         snapshot.Normalize();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlinePlayerPresentationResolver] Opponent fallback -> " +
-                snapshot.displayName +
-                " | " + snapshot.totalWins + "W-" + snapshot.totalLosses + "L" +
-                " | WR=" + snapshot.winRatePercent + "%",
-                this
-            );
-        }
-
         return true;
     }
 
@@ -190,7 +154,7 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
 
         bool hasNonPlaceholderName =
             !string.IsNullOrWhiteSpace(snapshot.displayName) &&
-            !string.Equals(snapshot.displayName.Trim(), "Opponent", System.StringComparison.OrdinalIgnoreCase);
+            !string.Equals(snapshot.displayName.Trim(), "Opponent", StringComparison.OrdinalIgnoreCase);
 
         return hasIdentity || hasStats || hasNonPlaceholderName;
     }

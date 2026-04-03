@@ -1,15 +1,18 @@
 using System;
 using UnityEngine;
+using UncballArena.Core.Bootstrap;
+using UncballArena.Core.Profile.Models;
+using UncballArena.Core.Runtime;
 
 public class PlayerProfileManager : MonoBehaviour
 {
     public static PlayerProfileManager Instance { get; private set; }
 
-    [Header("Persistence")]
+    [Header("Legacy Fallback Persistence")]
     [SerializeField] private bool dontDestroyOnLoad = true;
-    [SerializeField] private string saveKeyPrefix = "PLAYER_PROFILE_CACHE";
+    [SerializeField] private string legacySaveKeyPrefix = "PLAYER_PROFILE_CACHE";
 
-    [Header("Default Profile")]
+    [Header("Legacy Fallback Defaults")]
     [SerializeField] private string defaultProfileId = "local_player_1";
     [SerializeField] private string defaultDisplayName = "Player 1";
 
@@ -18,6 +21,8 @@ public class PlayerProfileManager : MonoBehaviour
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
+
+    private bool subscribedToCompositionRoot;
 
     public event Action<PlayerProfileRuntimeData> OnActiveProfileChanged;
     public event Action<PlayerProfileRuntimeData> OnActiveProfileDataChanged;
@@ -37,7 +42,9 @@ public class PlayerProfileManager : MonoBehaviour
         Instance = this;
         MarkRuntimeRootPersistentIfNeeded();
 
-        LoadOrCreateProfile(defaultProfileId, defaultDisplayName);
+        BootstrapLocalRuntimeMirror();
+        SubscribeCompositionRootIfNeeded();
+        TryPullFromCompositionRoot(forceNotify: false);
         ApplyActiveProfileToSystems();
 
         if (logDebug)
@@ -57,14 +64,40 @@ public class PlayerProfileManager : MonoBehaviour
 
     private void Start()
     {
+        SubscribeCompositionRootIfNeeded();
+        TryPullFromCompositionRoot(forceNotify: true);
         ApplyActiveProfileToSystems();
+    }
+
+    private void OnEnable()
+    {
+        SubscribeCompositionRootIfNeeded();
+        TryPullFromCompositionRoot(forceNotify: false);
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeCompositionRootIfNeeded();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+
+        UnsubscribeCompositionRootIfNeeded();
     }
 
     public void SetActiveProfile(string profileId, bool createIfMissing = true, string fallbackDisplayName = null)
     {
-        string sanitizedProfileId = SanitizeProfileId(profileId);
+        if (IsUsingCoreProfile())
+        {
+            TryPullFromCompositionRoot(forceNotify: true);
+            return;
+        }
 
-        string saveKey = GetResolvedSaveKey(sanitizedProfileId);
+        string sanitizedProfileId = SanitizeProfileId(profileId);
+        string saveKey = GetLegacyResolvedSaveKey(sanitizedProfileId);
         bool hasSave = PlayerPrefs.HasKey(saveKey);
 
         if (!hasSave && !createIfMissing)
@@ -79,42 +112,39 @@ public class PlayerProfileManager : MonoBehaviour
 
         if (hasSave)
         {
-            LoadOrCreateProfile(sanitizedProfileId, fallbackDisplayName);
+            LoadOrCreateLegacyProfile(sanitizedProfileId, fallbackDisplayName);
         }
         else
         {
-            CreateDefaultProfile(
+            CreateDefaultRuntimeProfile(
                 sanitizedProfileId,
-                string.IsNullOrWhiteSpace(fallbackDisplayName) ? defaultDisplayName : fallbackDisplayName
+                string.IsNullOrWhiteSpace(fallbackDisplayName) ? defaultDisplayName : fallbackDisplayName.Trim()
             );
-            SaveActiveProfile();
+            SaveLegacyActiveProfile();
         }
 
         ApplyActiveProfileToSystems();
         NotifyActiveProfileChanged();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[PlayerProfileManager] Active profile changed. " +
-                "ProfileId=" + ActiveProfileId +
-                " | DisplayName=" + ActiveDisplayName,
-                this
-            );
-        }
     }
 
     public void UpdateDisplayName(string newDisplayName)
     {
         EnsureRuntimeStructure();
 
-        string sanitized = string.IsNullOrWhiteSpace(newDisplayName) ? defaultDisplayName : newDisplayName.Trim();
+        string sanitized = string.IsNullOrWhiteSpace(newDisplayName)
+            ? ResolvePreferredDisplayName()
+            : newDisplayName.Trim();
 
-        if (activeProfile.displayName == sanitized)
+        if (string.Equals(activeProfile.displayName, sanitized, StringComparison.Ordinal))
             return;
 
         activeProfile.displayName = sanitized;
-        SaveActiveProfile();
+
+        if (IsUsingCoreProfile())
+            PushDisplayNameToCore(sanitized);
+        else
+            SaveLegacyActiveProfile();
+
         NotifyActiveProfileDataChanged();
 
         if (logDebug)
@@ -129,11 +159,13 @@ public class PlayerProfileManager : MonoBehaviour
             return;
 
         activeProfile.xp += amount;
-        SaveActiveProfile();
-        NotifyActiveProfileDataChanged();
 
-        if (logDebug)
-            Debug.Log("[PlayerProfileManager] XP added -> +" + amount + " | Total=" + activeProfile.xp, this);
+        if (IsUsingCoreProfile())
+            PushProfileStatsToCompositionRoot();
+        else
+            SaveLegacyActiveProfile();
+
+        NotifyActiveProfileDataChanged();
     }
 
     public void SetLevel(int level)
@@ -146,11 +178,13 @@ public class PlayerProfileManager : MonoBehaviour
             return;
 
         activeProfile.level = sanitized;
-        SaveActiveProfile();
-        NotifyActiveProfileDataChanged();
 
-        if (logDebug)
-            Debug.Log("[PlayerProfileManager] Level set -> " + activeProfile.level, this);
+        if (IsUsingCoreProfile())
+            PushProfileStatsToCompositionRoot();
+        else
+            SaveLegacyActiveProfile();
+
+        NotifyActiveProfileDataChanged();
     }
 
     public void AddSoftCurrency(int amount)
@@ -161,11 +195,13 @@ public class PlayerProfileManager : MonoBehaviour
             return;
 
         activeProfile.softCurrency = Mathf.Max(0, activeProfile.softCurrency + amount);
-        SaveActiveProfile();
-        NotifyActiveProfileDataChanged();
 
-        if (logDebug)
-            Debug.Log("[PlayerProfileManager] SoftCurrency delta -> " + amount + " | Total=" + activeProfile.softCurrency, this);
+        if (IsUsingCoreProfile())
+            PushFullProfileToCompositionRoot();
+        else
+            SaveLegacyActiveProfile();
+
+        NotifyActiveProfileDataChanged();
     }
 
     public void AddPremiumCurrency(int amount)
@@ -176,18 +212,13 @@ public class PlayerProfileManager : MonoBehaviour
             return;
 
         activeProfile.premiumCurrency = Mathf.Max(0, activeProfile.premiumCurrency + amount);
-        SaveActiveProfile();
-        NotifyActiveProfileDataChanged();
 
-        if (logDebug)
-        {
-            Debug.Log(
-                "[PlayerProfileManager] PremiumCurrency delta -> " +
-                amount +
-                " | Total=" + activeProfile.premiumCurrency,
-                this
-            );
-        }
+        if (IsUsingCoreProfile())
+            PushFullProfileToCompositionRoot();
+        else
+            SaveLegacyActiveProfile();
+
+        NotifyActiveProfileDataChanged();
     }
 
     public void ApplyProgressionState(
@@ -258,24 +289,12 @@ public class PlayerProfileManager : MonoBehaviour
         if (consecutiveLoginDays.HasValue)
             activeProfile.consecutiveLoginDays = Mathf.Max(0, consecutiveLoginDays.Value);
 
-        SaveActiveProfile();
-        NotifyActiveProfileDataChanged();
+        if (IsUsingCoreProfile())
+            PushFullProfileToCompositionRoot();
+        else
+            SaveLegacyActiveProfile();
 
-        if (logDebug)
-        {
-            Debug.Log(
-                "[PlayerProfileManager] ApplyProgressionState -> " +
-                "XP=" + activeProfile.xp +
-                " | Level=" + activeProfile.level +
-                " | TotalMatches=" + activeProfile.totalMatchesPlayed +
-                " | TotalWins=" + activeProfile.totalWins +
-                " | Versus=" + activeProfile.versusMatchesPlayed +
-                " | Bot=" + activeProfile.botMatchesPlayed +
-                " | Multiplayer=" + activeProfile.multiplayerMatchesPlayed +
-                " | Ranked=" + activeProfile.rankedMatchesPlayed,
-                this
-            );
-        }
+        NotifyActiveProfileDataChanged();
     }
 
     public void RegisterMatchResult(
@@ -350,18 +369,6 @@ public class PlayerProfileManager : MonoBehaviour
             rankedMatchesPlayed: rankedMatchesPlayed,
             rankedWins: rankedWins
         );
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[PlayerProfileManager] RegisterMatchResult -> " +
-                "Category=" + matchCategory +
-                " | MatchMode=" + matchMode +
-                " | LocalWin=" + localPlayerWon +
-                " | Ranked=" + isRanked,
-                this
-            );
-        }
     }
 
     public void ApplyAuthoritativeSnapshot(PlayerProfileRuntimeData snapshot)
@@ -374,25 +381,289 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile = CloneRuntimeData(snapshot);
         EnsureRuntimeStructure();
-        SaveActiveProfile();
+
+        if (IsUsingCoreProfile())
+            PushFullProfileToCompositionRoot();
+        else
+            SaveLegacyActiveProfile();
+
         ApplyActiveProfileToSystems();
         NotifyActiveProfileChanged();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[PlayerProfileManager] Applied authoritative snapshot. " +
-                "ProfileId=" + ActiveProfileId +
-                " | DisplayName=" + ActiveDisplayName,
-                this
-            );
-        }
     }
 
     public void SaveActiveProfile()
     {
+        if (IsUsingCoreProfile())
+        {
+            PushFullProfileToCompositionRoot();
+            return;
+        }
+
+        SaveLegacyActiveProfile();
+    }
+
+    public void ReloadActiveProfile()
+    {
+        if (IsUsingCoreProfile())
+        {
+            TryPullFromCompositionRoot(forceNotify: true);
+            return;
+        }
+
+        LoadOrCreateLegacyProfile(ActiveProfileId, ActiveDisplayName);
+        ApplyActiveProfileToSystems();
+        NotifyActiveProfileChanged();
+    }
+
+    public void ClearActiveProfileForDebug()
+    {
+        if (IsUsingCoreProfile())
+        {
+            CreateDefaultRuntimeProfile(ResolvePreferredProfileId(), ResolvePreferredDisplayName());
+            PushFullProfileToCompositionRoot();
+            ApplyActiveProfileToSystems();
+            NotifyActiveProfileChanged();
+            return;
+        }
+
+        string saveKey = GetLegacyResolvedSaveKey(activeProfile.profileId);
+        PlayerPrefs.DeleteKey(saveKey);
+        PlayerPrefs.Save();
+
+        CreateDefaultRuntimeProfile(activeProfile.profileId, defaultDisplayName);
+        SaveLegacyActiveProfile();
+        ApplyActiveProfileToSystems();
+        NotifyActiveProfileChanged();
+    }
+
+    private void BootstrapLocalRuntimeMirror()
+    {
+        if (IsUsingCoreProfile())
+        {
+            TryPullFromCompositionRoot(forceNotify: false);
+            return;
+        }
+
+        LoadOrCreateLegacyProfile(ResolvePreferredProfileId(), ResolvePreferredDisplayName());
+    }
+
+    private bool IsUsingCoreProfile()
+    {
+        return GameCompositionRoot.Instance != null &&
+               GameCompositionRoot.Instance.IsReady &&
+               GameCompositionRoot.Instance.ProfileService != null &&
+               GameCompositionRoot.Instance.AuthService != null;
+    }
+
+    private void SubscribeCompositionRootIfNeeded()
+    {
+        if (subscribedToCompositionRoot)
+            return;
+
+        if (GameCompositionRoot.Instance == null || GameCompositionRoot.Instance.ProfileRuntimeState == null)
+            return;
+
+        GameCompositionRoot.Instance.ProfileRuntimeState.Changed -= HandleCompositionProfileChanged;
+        GameCompositionRoot.Instance.ProfileRuntimeState.Changed += HandleCompositionProfileChanged;
+        subscribedToCompositionRoot = true;
+    }
+
+    private void UnsubscribeCompositionRootIfNeeded()
+    {
+        if (!subscribedToCompositionRoot)
+            return;
+
+        if (GameCompositionRoot.Instance != null && GameCompositionRoot.Instance.ProfileRuntimeState != null)
+            GameCompositionRoot.Instance.ProfileRuntimeState.Changed -= HandleCompositionProfileChanged;
+
+        subscribedToCompositionRoot = false;
+    }
+
+    private void HandleCompositionProfileChanged(ProfileSnapshot snapshot)
+    {
+        ApplySnapshotFromCore(snapshot, true);
+    }
+
+    private void TryPullFromCompositionRoot(bool forceNotify)
+    {
+        if (!IsUsingCoreProfile())
+            return;
+
+        SubscribeCompositionRootIfNeeded();
+
+        ProfileSnapshot snapshot = GameCompositionRoot.Instance.ProfileService.CurrentProfile;
+        ApplySnapshotFromCore(snapshot, forceNotify);
+    }
+
+    private void ApplySnapshotFromCore(ProfileSnapshot snapshot, bool forceNotify)
+    {
+        if (snapshot == null || !snapshot.IsValid())
+            return;
+
+        bool changed =
+            activeProfile == null ||
+            activeProfile.profileId != snapshot.PlayerId ||
+            activeProfile.displayName != snapshot.DisplayName ||
+            activeProfile.xp != snapshot.Xp ||
+            activeProfile.level != snapshot.Level ||
+            activeProfile.softCurrency != snapshot.SoftCurrency ||
+            activeProfile.premiumCurrency != snapshot.HardCurrency ||
+            activeProfile.totalMatchesPlayed != snapshot.TotalMatches ||
+            activeProfile.totalWins != snapshot.TotalWins ||
+            activeProfile.multiplayerMatchesPlayed != snapshot.MultiplayerMatches ||
+            activeProfile.multiplayerWins != snapshot.MultiplayerWins ||
+            activeProfile.rankedMatchesPlayed != snapshot.RankedMatches ||
+            activeProfile.rankedWins != snapshot.RankedWins;
+
+        int legacyVersusMatches = activeProfile != null ? activeProfile.versusMatchesPlayed : 0;
+        int legacyVersusWins = activeProfile != null ? activeProfile.versusWins : 0;
+        int legacyVersusTimeMatches = activeProfile != null ? activeProfile.versusTimeMatchesPlayed : 0;
+        int legacyVersusScoreMatches = activeProfile != null ? activeProfile.versusScoreMatchesPlayed : 0;
+        int legacyBotMatches = activeProfile != null ? activeProfile.botMatchesPlayed : 0;
+        int legacyBotWins = activeProfile != null ? activeProfile.botWins : 0;
+        string legacyLastDailyClaim = activeProfile != null ? activeProfile.lastDailyLoginClaimDateUtc : string.Empty;
+        int legacyConsecutiveDays = activeProfile != null ? activeProfile.consecutiveLoginDays : 0;
+
+        activeProfile = new PlayerProfileRuntimeData
+        {
+            saveVersion = 3,
+            profileId = snapshot.PlayerId,
+            displayName = string.IsNullOrWhiteSpace(snapshot.DisplayName) ? ResolvePreferredDisplayName() : snapshot.DisplayName.Trim(),
+            xp = Mathf.Max(0, snapshot.Xp),
+            level = Mathf.Max(1, snapshot.Level),
+            softCurrency = Mathf.Max(0, snapshot.SoftCurrency),
+            premiumCurrency = Mathf.Max(0, snapshot.HardCurrency),
+            totalMatchesPlayed = Mathf.Max(0, snapshot.TotalMatches),
+            totalWins = Mathf.Max(0, snapshot.TotalWins),
+            versusMatchesPlayed = Mathf.Max(0, legacyVersusMatches),
+            versusWins = Mathf.Max(0, legacyVersusWins),
+            versusTimeMatchesPlayed = Mathf.Max(0, legacyVersusTimeMatches),
+            versusScoreMatchesPlayed = Mathf.Max(0, legacyVersusScoreMatches),
+            botMatchesPlayed = Mathf.Max(0, legacyBotMatches),
+            botWins = Mathf.Max(0, legacyBotWins),
+            multiplayerMatchesPlayed = Mathf.Max(0, snapshot.MultiplayerMatches),
+            multiplayerWins = Mathf.Max(0, snapshot.MultiplayerWins),
+            rankedMatchesPlayed = Mathf.Max(0, snapshot.RankedMatches),
+            rankedWins = Mathf.Max(0, snapshot.RankedWins),
+            lastDailyLoginClaimDateUtc = legacyLastDailyClaim,
+            consecutiveLoginDays = Mathf.Max(0, legacyConsecutiveDays),
+            createdFromServer = false,
+            pendingServerSync = false,
+            lastServerSyncUnixTimeSeconds = GetNowUnixSeconds(),
+            lastLocalSaveUnixTimeSeconds = GetNowUnixSeconds()
+        };
+
+        EnsureRuntimeStructure();
+        ApplyActiveProfileToSystems();
+
+        if (changed || forceNotify)
+            NotifyActiveProfileChanged();
+    }
+
+    private void LoadOrCreateLegacyProfile(string profileId, string fallbackDisplayName)
+    {
+        string sanitizedProfileId = SanitizeProfileId(profileId);
+        string saveKey = GetLegacyResolvedSaveKey(sanitizedProfileId);
+
+        if (!PlayerPrefs.HasKey(saveKey))
+        {
+            CreateDefaultRuntimeProfile(sanitizedProfileId, fallbackDisplayName);
+            SaveLegacyActiveProfile();
+            return;
+        }
+
+        string json = PlayerPrefs.GetString(saveKey, string.Empty);
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            CreateDefaultRuntimeProfile(sanitizedProfileId, fallbackDisplayName);
+            SaveLegacyActiveProfile();
+            return;
+        }
+
+        PlayerProfileSaveData saveData = JsonUtility.FromJson<PlayerProfileSaveData>(json);
+
+        if (saveData == null)
+        {
+            CreateDefaultRuntimeProfile(sanitizedProfileId, fallbackDisplayName);
+            SaveLegacyActiveProfile();
+            return;
+        }
+
+        activeProfile = new PlayerProfileRuntimeData
+        {
+            saveVersion = Mathf.Max(1, saveData.saveVersion),
+            profileId = SanitizeProfileId(saveData.profileId),
+            displayName = string.IsNullOrWhiteSpace(saveData.displayName)
+                ? ResolvePreferredDisplayName()
+                : saveData.displayName.Trim(),
+            xp = Mathf.Max(0, saveData.xp),
+            level = Mathf.Max(1, saveData.level),
+            softCurrency = Mathf.Max(0, saveData.softCurrency),
+            premiumCurrency = Mathf.Max(0, saveData.premiumCurrency),
+            totalMatchesPlayed = Mathf.Max(0, saveData.totalMatchesPlayed),
+            totalWins = Mathf.Max(0, saveData.totalWins),
+            versusMatchesPlayed = Mathf.Max(0, saveData.versusMatchesPlayed),
+            versusWins = Mathf.Max(0, saveData.versusWins),
+            versusTimeMatchesPlayed = Mathf.Max(0, saveData.versusTimeMatchesPlayed),
+            versusScoreMatchesPlayed = Mathf.Max(0, saveData.versusScoreMatchesPlayed),
+            botMatchesPlayed = Mathf.Max(0, saveData.botMatchesPlayed),
+            botWins = Mathf.Max(0, saveData.botWins),
+            multiplayerMatchesPlayed = Mathf.Max(0, saveData.multiplayerMatchesPlayed),
+            multiplayerWins = Mathf.Max(0, saveData.multiplayerWins),
+            rankedMatchesPlayed = Mathf.Max(0, saveData.rankedMatchesPlayed),
+            rankedWins = Mathf.Max(0, saveData.rankedWins),
+            lastDailyLoginClaimDateUtc = string.IsNullOrWhiteSpace(saveData.lastDailyLoginClaimDateUtc)
+                ? string.Empty
+                : saveData.lastDailyLoginClaimDateUtc,
+            consecutiveLoginDays = Mathf.Max(0, saveData.consecutiveLoginDays),
+            createdFromServer = saveData.createdFromServer,
+            pendingServerSync = saveData.pendingServerSync,
+            lastServerSyncUnixTimeSeconds = Math.Max(0L, saveData.lastServerSyncUnixTimeSeconds),
+            lastLocalSaveUnixTimeSeconds = Math.Max(0L, saveData.lastLocalSaveUnixTimeSeconds)
+        };
+
+        EnsureRuntimeStructure();
+    }
+
+    private void CreateDefaultRuntimeProfile(string profileId, string displayName)
+    {
+        activeProfile = new PlayerProfileRuntimeData
+        {
+            saveVersion = 3,
+            profileId = SanitizeProfileId(profileId),
+            displayName = string.IsNullOrWhiteSpace(displayName) ? ResolvePreferredDisplayName() : displayName.Trim(),
+            xp = 0,
+            level = 1,
+            softCurrency = 0,
+            premiumCurrency = 0,
+            totalMatchesPlayed = 0,
+            totalWins = 0,
+            versusMatchesPlayed = 0,
+            versusWins = 0,
+            versusTimeMatchesPlayed = 0,
+            versusScoreMatchesPlayed = 0,
+            botMatchesPlayed = 0,
+            botWins = 0,
+            multiplayerMatchesPlayed = 0,
+            multiplayerWins = 0,
+            rankedMatchesPlayed = 0,
+            rankedWins = 0,
+            lastDailyLoginClaimDateUtc = string.Empty,
+            consecutiveLoginDays = 0,
+            createdFromServer = false,
+            pendingServerSync = false,
+            lastServerSyncUnixTimeSeconds = 0,
+            lastLocalSaveUnixTimeSeconds = GetNowUnixSeconds()
+        };
+    }
+
+    private void SaveLegacyActiveProfile()
+    {
         EnsureRuntimeStructure();
 
+        activeProfile.profileId = ResolvePreferredProfileId();
+        activeProfile.displayName = ResolvePreferredDisplayName();
         activeProfile.lastLocalSaveUnixTimeSeconds = GetNowUnixSeconds();
 
         PlayerProfileSaveData saveData = new PlayerProfileSaveData
@@ -425,139 +696,8 @@ public class PlayerProfileManager : MonoBehaviour
         };
 
         string json = JsonUtility.ToJson(saveData);
-        PlayerPrefs.SetString(GetResolvedSaveKey(activeProfile.profileId), json);
+        PlayerPrefs.SetString(GetLegacyResolvedSaveKey(activeProfile.profileId), json);
         PlayerPrefs.Save();
-    }
-
-    public void ReloadActiveProfile()
-    {
-        string currentProfileId = ActiveProfileId;
-        string currentDisplayName = ActiveDisplayName;
-
-        LoadOrCreateProfile(currentProfileId, currentDisplayName);
-        ApplyActiveProfileToSystems();
-        NotifyActiveProfileChanged();
-    }
-
-    public void ClearActiveProfileForDebug()
-    {
-        EnsureRuntimeStructure();
-
-        string saveKey = GetResolvedSaveKey(activeProfile.profileId);
-        PlayerPrefs.DeleteKey(saveKey);
-        PlayerPrefs.Save();
-
-        CreateDefaultProfile(activeProfile.profileId, defaultDisplayName);
-        SaveActiveProfile();
-        ApplyActiveProfileToSystems();
-        NotifyActiveProfileChanged();
-    }
-
-    private void LoadOrCreateProfile(string profileId, string fallbackDisplayName)
-    {
-        string sanitizedProfileId = SanitizeProfileId(profileId);
-        string saveKey = GetResolvedSaveKey(sanitizedProfileId);
-
-        if (!PlayerPrefs.HasKey(saveKey))
-        {
-            CreateDefaultProfile(
-                sanitizedProfileId,
-                string.IsNullOrWhiteSpace(fallbackDisplayName) ? defaultDisplayName : fallbackDisplayName
-            );
-            SaveActiveProfile();
-            return;
-        }
-
-        string json = PlayerPrefs.GetString(saveKey, string.Empty);
-
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            CreateDefaultProfile(
-                sanitizedProfileId,
-                string.IsNullOrWhiteSpace(fallbackDisplayName) ? defaultDisplayName : fallbackDisplayName
-            );
-            SaveActiveProfile();
-            return;
-        }
-
-        PlayerProfileSaveData saveData = JsonUtility.FromJson<PlayerProfileSaveData>(json);
-
-        if (saveData == null)
-        {
-            CreateDefaultProfile(
-                sanitizedProfileId,
-                string.IsNullOrWhiteSpace(fallbackDisplayName) ? defaultDisplayName : fallbackDisplayName
-            );
-            SaveActiveProfile();
-            return;
-        }
-
-        activeProfile = new PlayerProfileRuntimeData
-        {
-            saveVersion = Mathf.Max(1, saveData.saveVersion),
-            profileId = SanitizeProfileId(saveData.profileId),
-            displayName = string.IsNullOrWhiteSpace(saveData.displayName)
-                ? (string.IsNullOrWhiteSpace(fallbackDisplayName) ? defaultDisplayName : fallbackDisplayName)
-                : saveData.displayName.Trim(),
-            xp = Mathf.Max(0, saveData.xp),
-            level = Mathf.Max(1, saveData.level),
-            softCurrency = Mathf.Max(0, saveData.softCurrency),
-            premiumCurrency = Mathf.Max(0, saveData.premiumCurrency),
-            totalMatchesPlayed = Mathf.Max(0, saveData.totalMatchesPlayed),
-            totalWins = Mathf.Max(0, saveData.totalWins),
-            versusMatchesPlayed = Mathf.Max(0, saveData.versusMatchesPlayed),
-            versusWins = Mathf.Max(0, saveData.versusWins),
-            versusTimeMatchesPlayed = Mathf.Max(0, saveData.versusTimeMatchesPlayed),
-            versusScoreMatchesPlayed = Mathf.Max(0, saveData.versusScoreMatchesPlayed),
-            botMatchesPlayed = Mathf.Max(0, saveData.botMatchesPlayed),
-            botWins = Mathf.Max(0, saveData.botWins),
-            multiplayerMatchesPlayed = Mathf.Max(0, saveData.multiplayerMatchesPlayed),
-            multiplayerWins = Mathf.Max(0, saveData.multiplayerWins),
-            rankedMatchesPlayed = Mathf.Max(0, saveData.rankedMatchesPlayed),
-            rankedWins = Mathf.Max(0, saveData.rankedWins),
-            lastDailyLoginClaimDateUtc = string.IsNullOrWhiteSpace(saveData.lastDailyLoginClaimDateUtc)
-                ? string.Empty
-                : saveData.lastDailyLoginClaimDateUtc,
-            consecutiveLoginDays = Mathf.Max(0, saveData.consecutiveLoginDays),
-            createdFromServer = saveData.createdFromServer,
-            pendingServerSync = saveData.pendingServerSync,
-            lastServerSyncUnixTimeSeconds = Math.Max(0L, saveData.lastServerSyncUnixTimeSeconds),
-            lastLocalSaveUnixTimeSeconds = Math.Max(0L, saveData.lastLocalSaveUnixTimeSeconds)
-        };
-
-        EnsureRuntimeStructure();
-    }
-
-    private void CreateDefaultProfile(string profileId, string displayName)
-    {
-        activeProfile = new PlayerProfileRuntimeData
-        {
-            saveVersion = 3,
-            profileId = SanitizeProfileId(profileId),
-            displayName = string.IsNullOrWhiteSpace(displayName) ? defaultDisplayName : displayName.Trim(),
-            xp = 0,
-            level = 1,
-            softCurrency = 0,
-            premiumCurrency = 0,
-            totalMatchesPlayed = 0,
-            totalWins = 0,
-            versusMatchesPlayed = 0,
-            versusWins = 0,
-            versusTimeMatchesPlayed = 0,
-            versusScoreMatchesPlayed = 0,
-            botMatchesPlayed = 0,
-            botWins = 0,
-            multiplayerMatchesPlayed = 0,
-            multiplayerWins = 0,
-            rankedMatchesPlayed = 0,
-            rankedWins = 0,
-            lastDailyLoginClaimDateUtc = string.Empty,
-            consecutiveLoginDays = 0,
-            createdFromServer = false,
-            pendingServerSync = false,
-            lastServerSyncUnixTimeSeconds = 0,
-            lastLocalSaveUnixTimeSeconds = GetNowUnixSeconds()
-        };
     }
 
     private void ApplyActiveProfileToSystems()
@@ -593,10 +733,10 @@ public class PlayerProfileManager : MonoBehaviour
             activeProfile = new PlayerProfileRuntimeData();
 
         if (string.IsNullOrWhiteSpace(activeProfile.profileId))
-            activeProfile.profileId = SanitizeProfileId(defaultProfileId);
+            activeProfile.profileId = ResolvePreferredProfileId();
 
         if (string.IsNullOrWhiteSpace(activeProfile.displayName))
-            activeProfile.displayName = defaultDisplayName;
+            activeProfile.displayName = ResolvePreferredDisplayName();
 
         activeProfile.level = Mathf.Max(1, activeProfile.level);
         activeProfile.xp = Mathf.Max(0, activeProfile.xp);
@@ -661,22 +801,127 @@ public class PlayerProfileManager : MonoBehaviour
         };
     }
 
-    private string GetResolvedSaveKey(string profileId)
+    private string GetLegacyResolvedSaveKey(string profileId)
     {
-        return saveKeyPrefix + "_" + SanitizeProfileId(profileId);
+        return legacySaveKeyPrefix + "_" + SanitizeProfileId(profileId);
     }
 
     private string SanitizeProfileId(string profileId)
     {
         if (string.IsNullOrWhiteSpace(profileId))
-            return defaultProfileId;
+            return ResolvePreferredProfileId();
 
         return profileId.Trim();
+    }
+
+    private string ResolvePreferredProfileId()
+    {
+        if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.PlayerId))
+            return OnlineLocalPlayerContext.PlayerId.Trim();
+
+        if (GameCompositionRoot.Instance != null &&
+            GameCompositionRoot.Instance.AuthService != null &&
+            GameCompositionRoot.Instance.AuthService.CurrentSession != null &&
+            GameCompositionRoot.Instance.AuthService.CurrentSession.Identity != null &&
+            !string.IsNullOrWhiteSpace(GameCompositionRoot.Instance.AuthService.CurrentSession.Identity.PlayerId))
+        {
+            return GameCompositionRoot.Instance.AuthService.CurrentSession.Identity.PlayerId.Trim();
+        }
+
+        if (activeProfile != null && !string.IsNullOrWhiteSpace(activeProfile.profileId))
+            return activeProfile.profileId.Trim();
+
+        return string.IsNullOrWhiteSpace(defaultProfileId) ? "guest_fallback" : defaultProfileId.Trim();
+    }
+
+    private string ResolvePreferredDisplayName()
+    {
+        if (GameCompositionRoot.Instance != null &&
+            GameCompositionRoot.Instance.ProfileService != null &&
+            GameCompositionRoot.Instance.ProfileService.CurrentProfile != null &&
+            !string.IsNullOrWhiteSpace(GameCompositionRoot.Instance.ProfileService.CurrentProfile.DisplayName))
+        {
+            return GameCompositionRoot.Instance.ProfileService.CurrentProfile.DisplayName.Trim();
+        }
+
+        if (GameCompositionRoot.Instance != null &&
+            GameCompositionRoot.Instance.AuthService != null &&
+            GameCompositionRoot.Instance.AuthService.CurrentSession != null &&
+            GameCompositionRoot.Instance.AuthService.CurrentSession.Identity != null &&
+            !string.IsNullOrWhiteSpace(GameCompositionRoot.Instance.AuthService.CurrentSession.Identity.DisplayName))
+        {
+            return GameCompositionRoot.Instance.AuthService.CurrentSession.Identity.DisplayName.Trim();
+        }
+
+        if (activeProfile != null && !string.IsNullOrWhiteSpace(activeProfile.displayName))
+            return activeProfile.displayName.Trim();
+
+        return string.IsNullOrWhiteSpace(defaultDisplayName) ? "Player" : defaultDisplayName.Trim();
     }
 
     private long GetNowUnixSeconds()
     {
         return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    }
+
+    private async void PushDisplayNameToCore(string newDisplayName)
+    {
+        if (!IsUsingCoreProfile())
+            return;
+
+        await GameCompositionRoot.Instance.ProfileService.SetDisplayNameAsync(newDisplayName);
+        await GameCompositionRoot.Instance.AuthService.UpdateDisplayNameAsync(newDisplayName);
+    }
+
+    private async void PushProfileStatsToCompositionRoot()
+    {
+        if (!IsUsingCoreProfile())
+            return;
+
+        await GameCompositionRoot.Instance.ProfileService.SetProgressionAsync(activeProfile.xp, activeProfile.level);
+        await GameCompositionRoot.Instance.ProfileService.SetStatsAsync(
+            activeProfile.totalMatchesPlayed,
+            activeProfile.totalWins,
+            activeProfile.multiplayerMatchesPlayed,
+            activeProfile.multiplayerWins,
+            activeProfile.rankedMatchesPlayed,
+            activeProfile.rankedWins
+        );
+    }
+
+    private async void PushFullProfileToCompositionRoot()
+    {
+        if (!IsUsingCoreProfile())
+            return;
+
+        ProfileSnapshot current = GameCompositionRoot.Instance.ProfileService.CurrentProfile;
+        if (current == null || !current.IsValid())
+            return;
+
+        ProfileSnapshot updated = new ProfileSnapshot(
+            current.ProfileId,
+            ResolvePreferredProfileId(),
+            activeProfile.displayName,
+            activeProfile.xp,
+            activeProfile.level,
+            activeProfile.totalMatchesPlayed,
+            activeProfile.totalWins,
+            activeProfile.multiplayerMatchesPlayed,
+            activeProfile.multiplayerWins,
+            activeProfile.rankedMatchesPlayed,
+            activeProfile.rankedWins,
+            current.EquippedBallSkinId,
+            current.EquippedTableSkinId,
+            activeProfile.softCurrency,
+            activeProfile.premiumCurrency,
+            current.CreatedAtUnixSeconds,
+            GetNowUnixSeconds()
+        );
+
+        await GameCompositionRoot.Instance.ProfileService.ApplyAuthoritativeSnapshotAsync(updated);
+
+        if (!string.IsNullOrWhiteSpace(activeProfile.displayName))
+            await GameCompositionRoot.Instance.AuthService.UpdateDisplayNameAsync(activeProfile.displayName);
     }
 
     private void MarkRuntimeRootPersistentIfNeeded()
@@ -685,6 +930,9 @@ public class PlayerProfileManager : MonoBehaviour
             return;
 
         GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        if (runtimeRoot.transform.parent != null)
+            runtimeRoot.transform.SetParent(null);
+
         DontDestroyOnLoad(runtimeRoot);
     }
 

@@ -1,4 +1,6 @@
+using System;
 using TMPro;
+using UncballArena.Core.Runtime;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -285,7 +287,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     private void RefreshPlayerNameIfNeeded()
     {
         string currentName = ResolveCurrentPlayerName();
-        if (string.Equals(lastRenderedPlayerName, currentName, System.StringComparison.Ordinal))
+        if (string.Equals(lastRenderedPlayerName, currentName, StringComparison.Ordinal))
             return;
 
         ApplyPlayerName(currentName);
@@ -298,6 +300,9 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
     private string ResolveCurrentPlayerName()
     {
+        if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.DisplayName))
+            return OnlineLocalPlayerContext.DisplayName.Trim().ToUpperInvariant();
+
         ResolveDependencies(false);
 
         if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveDisplayName))

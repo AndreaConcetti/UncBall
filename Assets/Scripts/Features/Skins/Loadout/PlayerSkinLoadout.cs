@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UncballArena.Core.Runtime;
 
 [Serializable]
 public class PlayerLoadoutSlotData
@@ -51,8 +52,7 @@ public class PlayerSkinLoadout : MonoBehaviour
         EnsureRuntimeStructure();
         SanitizeRuntimeData();
 
-        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
-            player1Slot.profileId = profileManager.ActiveProfileId;
+        player1Slot.profileId = ResolveLocalProfileId();
 
         if (logDebug)
         {
@@ -88,16 +88,14 @@ public class PlayerSkinLoadout : MonoBehaviour
     private void Start()
     {
         ResolveDependencies();
-
-        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
-            SetPlayer1ProfileId(profileManager.ActiveProfileId);
+        SetPlayer1ProfileId(ResolveLocalProfileId());
     }
 
     public void SetPlayer1ProfileId(string profileId)
     {
         EnsureRuntimeStructure();
 
-        string sanitized = SanitizeProfileId(profileId, "local_player_1");
+        string sanitized = SanitizeProfileId(profileId, ResolveLocalProfileId());
 
         if (player1Slot.profileId == sanitized)
             return;
@@ -113,7 +111,7 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         EnsureRuntimeStructure();
 
-        string sanitized = SanitizeProfileId(profileId, "local_player_2");
+        string sanitized = SanitizeProfileId(profileId, "remote_player");
 
         if (player2Slot.profileId == sanitized)
             return;
@@ -129,8 +127,8 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         EnsureRuntimeStructure();
 
-        player1Slot.profileId = SanitizeProfileId(localProfileId, "local_player_1");
-        player2Slot.profileId = SanitizeProfileId(remoteProfileId, "local_player_2");
+        player1Slot.profileId = SanitizeProfileId(localProfileId, ResolveLocalProfileId());
+        player2Slot.profileId = SanitizeProfileId(remoteProfileId, "remote_player");
 
         NotifyLoadoutChanged();
 
@@ -161,6 +159,7 @@ public class PlayerSkinLoadout : MonoBehaviour
             return;
         }
 
+        player1Slot.profileId = ResolveLocalProfileId();
         player1Slot.equippedSkin = CloneSkin(skin);
         NotifyLoadoutChanged();
 
@@ -219,7 +218,7 @@ public class PlayerSkinLoadout : MonoBehaviour
             return;
         }
 
-        string sanitized = SanitizeProfileId(profileId, "local_player_1");
+        string sanitized = SanitizeProfileId(profileId, ResolveLocalProfileId());
 
         if (player1Slot.profileId == sanitized)
         {
@@ -318,8 +317,8 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         EnsureRuntimeStructure();
 
-        player1Slot.profileId = SanitizeProfileId(newPlayer1ProfileId, "local_player_1");
-        player2Slot.profileId = SanitizeProfileId(newPlayer2ProfileId, "local_player_2");
+        player1Slot.profileId = SanitizeProfileId(newPlayer1ProfileId, ResolveLocalProfileId());
+        player2Slot.profileId = SanitizeProfileId(newPlayer2ProfileId, "remote_player");
 
         player1Slot.equippedSkin = IsSkinDataUsable(newPlayer1Skin) ? CloneSkin(newPlayer1Skin) : null;
         player2Slot.equippedSkin = IsSkinDataUsable(newPlayer2Skin) ? CloneSkin(newPlayer2Skin) : null;
@@ -343,8 +342,8 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         EnsureRuntimeStructure();
 
-        player1Slot.profileId = SanitizeProfileId(player1ProfileId, "local_player_1");
-        player2Slot.profileId = SanitizeProfileId(player2ProfileId, "local_player_2");
+        player1Slot.profileId = ResolveLocalProfileId();
+        player2Slot.profileId = SanitizeProfileId(player2ProfileId, "remote_player");
 
         NotifyLoadoutChanged();
 
@@ -382,29 +381,19 @@ public class PlayerSkinLoadout : MonoBehaviour
             player2Slot = new PlayerLoadoutSlotData();
 
         if (string.IsNullOrWhiteSpace(player1Slot.profileId))
-            player1Slot.profileId = SanitizeProfileId(player1ProfileId, "local_player_1");
+            player1Slot.profileId = ResolveLocalProfileId();
 
         if (string.IsNullOrWhiteSpace(player2Slot.profileId))
-            player2Slot.profileId = SanitizeProfileId(player2ProfileId, "local_player_2");
+            player2Slot.profileId = SanitizeProfileId(player2ProfileId, "remote_player");
     }
 
     private void SanitizeRuntimeData()
     {
         if (player1Slot != null && !IsSkinDataUsable(player1Slot.equippedSkin))
-        {
-            if (player1Slot.equippedSkin != null && logDebug)
-                Debug.LogWarning("[PlayerSkinLoadout] Cleared invalid serialized skin from Player1 slot.", this);
-
             player1Slot.equippedSkin = null;
-        }
 
         if (player2Slot != null && !IsSkinDataUsable(player2Slot.equippedSkin))
-        {
-            if (player2Slot.equippedSkin != null && logDebug)
-                Debug.LogWarning("[PlayerSkinLoadout] Cleared invalid serialized skin from Player2 slot.", this);
-
             player2Slot.equippedSkin = null;
-        }
     }
 
     private bool IsSkinDataUsable(BallSkinData skin)
@@ -437,6 +426,17 @@ public class PlayerSkinLoadout : MonoBehaviour
         return profileId.Trim();
     }
 
+    private string ResolveLocalProfileId()
+    {
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            return profileManager.ActiveProfileId.Trim();
+
+        if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.PlayerId))
+            return OnlineLocalPlayerContext.PlayerId.Trim();
+
+        return string.IsNullOrWhiteSpace(player1ProfileId) ? "guest_fallback" : player1ProfileId.Trim();
+    }
+
     private BallSkinData CloneSkin(BallSkinData source)
     {
         if (source == null)
@@ -465,6 +465,9 @@ public class PlayerSkinLoadout : MonoBehaviour
             return;
 
         GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+        if (runtimeRoot.transform.parent != null)
+            runtimeRoot.transform.SetParent(null);
+
         DontDestroyOnLoad(runtimeRoot);
     }
 
