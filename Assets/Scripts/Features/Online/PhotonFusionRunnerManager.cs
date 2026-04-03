@@ -48,6 +48,9 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
     public event Action OnSceneLoadDoneEvent;
     public event Action OnSceneLoadStartEvent;
 
+    public event Action<PlayerRef, ReliableKey, byte[]> OnReliableDataReceivedEvent;
+    public event Action<PlayerRef, ReliableKey, float> OnReliableDataProgressEvent;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -342,6 +345,56 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
+    public bool SendReliableDataToPlayer(PlayerRef player, ReliableKey key, byte[] data)
+    {
+        ForceCleanupStaleRunnerIfNeeded();
+
+        if (activeRunner == null || !activeRunner.IsRunning)
+            return false;
+
+        if (!activeRunner.IsServer)
+            return false;
+
+        if (data == null || data.Length == 0)
+            return false;
+
+        try
+        {
+            activeRunner.SendReliableDataToPlayer(player, key, data);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[PhotonFusionRunnerManager] SendReliableDataToPlayer failed: " + ex.Message, this);
+            return false;
+        }
+    }
+
+    public bool SendReliableDataToServer(ReliableKey key, byte[] data)
+    {
+        ForceCleanupStaleRunnerIfNeeded();
+
+        if (activeRunner == null || !activeRunner.IsRunning)
+            return false;
+
+        if (activeRunner.IsServer)
+            return false;
+
+        if (data == null || data.Length == 0)
+            return false;
+
+        try
+        {
+            activeRunner.SendReliableDataToServer(key, data);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[PhotonFusionRunnerManager] SendReliableDataToServer failed: " + ex.Message, this);
+            return false;
+        }
+    }
+
     public void ForceCleanupStaleRunnerIfNeeded()
     {
         if (activeRunner == null)
@@ -615,10 +668,40 @@ public class PhotonFusionRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
         OnSceneLoadStartEvent?.Invoke();
     }
 
+    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
+    {
+        byte[] copy = null;
+
+        if (data.Count > 0)
+        {
+            copy = new byte[data.Count];
+            Array.Copy(data.Array, data.Offset, copy, 0, data.Count);
+        }
+        else
+        {
+            copy = Array.Empty<byte>();
+        }
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PhotonFusionRunnerManager] Reliable data received -> " +
+                "Player=" + player +
+                " | Bytes=" + copy.Length,
+                this
+            );
+        }
+
+        OnReliableDataReceivedEvent?.Invoke(player, key, copy);
+    }
+
+    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress)
+    {
+        OnReliableDataProgressEvent?.Invoke(player, key, progress);
+    }
+
     public void OnInput(NetworkRunner runner, NetworkInput input) { }
     public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
-    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
-    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
     public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
     public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }

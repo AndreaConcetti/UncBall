@@ -181,14 +181,14 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                     allowStatsProgression = rules.allowStatsProgression,
 
                     localPlayer = new OnlinePlayerIdentity(
-                        Safe(localSnapshot.onlinePlayerId, Safe(localPlayer.onlinePlayerId, "local_player")),
-                        Safe(localSnapshot.profileId, Safe(localPlayer.profileId, "local_profile")),
-                        Safe(localSnapshot.displayName, Safe(localPlayer.displayName, "Player"))
+                        Safe(localPlayer.profileId, Safe(localSnapshot.profileId, "local_profile")),
+                        Safe(localPlayer.onlinePlayerId, Safe(localSnapshot.onlinePlayerId, "local_player")),
+                        Safe(localPlayer.displayName, Safe(localSnapshot.displayName, "Player"))
                     ),
 
                     remotePlayer = new OnlinePlayerIdentity(
-                        Safe(remoteSnapshot.onlinePlayerId, "remote_player"),
                         Safe(remoteSnapshot.profileId, "remote_profile"),
+                        Safe(remoteSnapshot.onlinePlayerId, "remote_player"),
                         remoteName
                     ),
 
@@ -234,6 +234,15 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
             }
 
             return OnlinePlayerMatchStatsSnapshot.CreateDefault("Opponent");
+        }
+
+        if (FusionConnectionMetadataListener.Instance != null &&
+            FusionConnectionMetadataListener.Instance.TryGetLatestHostSnapshot(out OnlinePlayerMatchStatsSnapshot hostSnapshot) &&
+            hostSnapshot != null &&
+            hostSnapshot.IsValid)
+        {
+            hostSnapshot.Normalize();
+            return CloneSnapshot(hostSnapshot);
         }
 
         return OnlinePlayerMatchStatsSnapshot.CreateDefault("Opponent");

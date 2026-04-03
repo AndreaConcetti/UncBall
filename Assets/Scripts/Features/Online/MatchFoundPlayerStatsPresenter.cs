@@ -6,13 +6,13 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private OnlinePlayerPresentationResolver resolver;
 
-    [Header("Local Player Texts")]
+    [Header("Left Slot Texts")]
     [SerializeField] private TMP_Text localNameText;
     [SerializeField] private TMP_Text localLevelText;
     [SerializeField] private TMP_Text localWinLoseText;
     [SerializeField] private TMP_Text localWinRateText;
 
-    [Header("Opponent Texts")]
+    [Header("Right Slot Texts")]
     [SerializeField] private TMP_Text opponentNameText;
     [SerializeField] private TMP_Text opponentLevelText;
     [SerializeField] private TMP_Text opponentWinLoseText;
@@ -24,13 +24,13 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
     [SerializeField] private bool showLevelPrefix = true;
     [SerializeField] private string levelPrefix = "LV. ";
 
-    [Header("Fallback Local")]
+    [Header("Fallback Left")]
     [SerializeField] private string fallbackLocalName = "PLAYER";
     [SerializeField] private string fallbackLocalLevelText = "LV. 1";
     [SerializeField] private string fallbackLocalWinLoseText = "0W - 0L";
     [SerializeField] private string fallbackLocalWinRateText = "0%";
 
-    [Header("Fallback Opponent")]
+    [Header("Fallback Right")]
     [SerializeField] private string fallbackOpponentName = "OPPONENT";
     [SerializeField] private string fallbackOpponentLevelText = "LV. 1";
     [SerializeField] private string fallbackOpponentWinLoseText = "0W - 0L";
@@ -39,16 +39,16 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool logDebug;
 
-    private string lastLocalName = string.Empty;
-    private string lastOpponentName = string.Empty;
-    private int lastLocalWins = -1;
-    private int lastLocalLosses = -1;
-    private int lastLocalWinRate = -1;
-    private int lastLocalLevel = -1;
-    private int lastOpponentWins = -1;
-    private int lastOpponentLosses = -1;
-    private int lastOpponentWinRate = -1;
-    private int lastOpponentLevel = -1;
+    private string lastLeftName = string.Empty;
+    private string lastRightName = string.Empty;
+    private int lastLeftWins = -1;
+    private int lastLeftLosses = -1;
+    private int lastLeftWinRate = -1;
+    private int lastLeftLevel = -1;
+    private int lastRightWins = -1;
+    private int lastRightLosses = -1;
+    private int lastRightWinRate = -1;
+    private int lastRightLevel = -1;
 
     private void Awake()
     {
@@ -90,25 +90,47 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
 
         bool hasLocal = resolver != null && resolver.TryGetLocalSnapshot(out localSnapshot);
         bool hasOpponent = resolver != null && resolver.TryGetOpponentSnapshot(out opponentSnapshot);
+        bool localIsHost = resolver != null && resolver.IsLocalHost();
 
-        if (!hasLocal || localSnapshot == null)
+        OnlinePlayerMatchStatsSnapshot leftSnapshot = null;
+        OnlinePlayerMatchStatsSnapshot rightSnapshot = null;
+
+        if (localIsHost)
         {
-            ApplyLocalFallback(force);
+            leftSnapshot = hasLocal ? localSnapshot : null;
+            rightSnapshot = hasOpponent ? opponentSnapshot : null;
         }
         else
         {
-            localSnapshot.Normalize();
-            ApplyLocalSnapshot(localSnapshot, force);
+            leftSnapshot = hasOpponent ? opponentSnapshot : null;
+            rightSnapshot = hasLocal ? localSnapshot : null;
         }
 
-        if (!hasOpponent || opponentSnapshot == null)
-        {
-            ApplyOpponentFallback(force);
-        }
+        if (leftSnapshot == null)
+            ApplyLeftFallback(force);
         else
         {
-            opponentSnapshot.Normalize();
-            ApplyOpponentSnapshot(opponentSnapshot, force);
+            leftSnapshot.Normalize();
+            ApplyLeftSnapshot(leftSnapshot, force);
+        }
+
+        if (rightSnapshot == null)
+            ApplyRightFallback(force);
+        else
+        {
+            rightSnapshot.Normalize();
+            ApplyRightSnapshot(rightSnapshot, force);
+        }
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[MatchFoundPlayerStatsPresenter] Layout -> " +
+                "LocalIsHost=" + localIsHost +
+                " | Left=" + (leftSnapshot != null ? leftSnapshot.displayName : "NULL") +
+                " | Right=" + (rightSnapshot != null ? rightSnapshot.displayName : "NULL"),
+                this
+            );
         }
     }
 
@@ -118,7 +140,7 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
             resolver = FindAnyObjectByType<OnlinePlayerPresentationResolver>();
     }
 
-    private void ApplyLocalSnapshot(OnlinePlayerMatchStatsSnapshot snapshot, bool force)
+    private void ApplyLeftSnapshot(OnlinePlayerMatchStatsSnapshot snapshot, bool force)
     {
         string displayName = snapshot.GetDisplayNameOrFallback(fallbackLocalName);
         if (uppercaseNames)
@@ -131,20 +153,20 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
 
         bool changed =
             force ||
-            lastLocalName != displayName ||
-            lastLocalWins != wins ||
-            lastLocalLosses != losses ||
-            lastLocalWinRate != winRate ||
-            lastLocalLevel != level;
+            lastLeftName != displayName ||
+            lastLeftWins != wins ||
+            lastLeftLosses != losses ||
+            lastLeftWinRate != winRate ||
+            lastLeftLevel != level;
 
         if (!changed)
             return;
 
-        lastLocalName = displayName;
-        lastLocalWins = wins;
-        lastLocalLosses = losses;
-        lastLocalWinRate = winRate;
-        lastLocalLevel = level;
+        lastLeftName = displayName;
+        lastLeftWins = wins;
+        lastLeftLosses = losses;
+        lastLeftWinRate = winRate;
+        lastLeftLevel = level;
 
         if (localNameText != null)
             localNameText.text = displayName;
@@ -157,20 +179,9 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
 
         if (localWinRateText != null)
             localWinRateText.text = winRate + "%";
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[MatchFoundPlayerStatsPresenter] Local -> " +
-                displayName + " | Level=" + level +
-                " | " + wins + "W-" + losses + "L" +
-                " | WR=" + winRate + "%",
-                this
-            );
-        }
     }
 
-    private void ApplyOpponentSnapshot(OnlinePlayerMatchStatsSnapshot snapshot, bool force)
+    private void ApplyRightSnapshot(OnlinePlayerMatchStatsSnapshot snapshot, bool force)
     {
         string displayName = snapshot.GetDisplayNameOrFallback(fallbackOpponentName);
         if (uppercaseNames)
@@ -183,20 +194,20 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
 
         bool changed =
             force ||
-            lastOpponentName != displayName ||
-            lastOpponentWins != wins ||
-            lastOpponentLosses != losses ||
-            lastOpponentWinRate != winRate ||
-            lastOpponentLevel != level;
+            lastRightName != displayName ||
+            lastRightWins != wins ||
+            lastRightLosses != losses ||
+            lastRightWinRate != winRate ||
+            lastRightLevel != level;
 
         if (!changed)
             return;
 
-        lastOpponentName = displayName;
-        lastOpponentWins = wins;
-        lastOpponentLosses = losses;
-        lastOpponentWinRate = winRate;
-        lastOpponentLevel = level;
+        lastRightName = displayName;
+        lastRightWins = wins;
+        lastRightLosses = losses;
+        lastRightWinRate = winRate;
+        lastRightLevel = level;
 
         if (opponentNameText != null)
             opponentNameText.text = displayName;
@@ -209,37 +220,26 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
 
         if (opponentWinRateText != null)
             opponentWinRateText.text = winRate + "%";
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[MatchFoundPlayerStatsPresenter] Opponent -> " +
-                displayName + " | Level=" + level +
-                " | " + wins + "W-" + losses + "L" +
-                " | WR=" + winRate + "%",
-                this
-            );
-        }
     }
 
-    private void ApplyLocalFallback(bool force)
+    private void ApplyLeftFallback(bool force)
     {
         bool changed =
             force ||
-            lastLocalName != fallbackLocalName ||
-            lastLocalLevel != -2 ||
-            lastLocalWins != -2 ||
-            lastLocalLosses != -2 ||
-            lastLocalWinRate != -2;
+            lastLeftName != fallbackLocalName ||
+            lastLeftLevel != -2 ||
+            lastLeftWins != -2 ||
+            lastLeftLosses != -2 ||
+            lastLeftWinRate != -2;
 
         if (!changed)
             return;
 
-        lastLocalName = fallbackLocalName;
-        lastLocalLevel = -2;
-        lastLocalWins = -2;
-        lastLocalLosses = -2;
-        lastLocalWinRate = -2;
+        lastLeftName = fallbackLocalName;
+        lastLeftLevel = -2;
+        lastLeftWins = -2;
+        lastLeftLosses = -2;
+        lastLeftWinRate = -2;
 
         if (localNameText != null)
             localNameText.text = uppercaseNames ? fallbackLocalName.ToUpperInvariant() : fallbackLocalName;
@@ -254,24 +254,24 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
             localWinRateText.text = fallbackLocalWinRateText;
     }
 
-    private void ApplyOpponentFallback(bool force)
+    private void ApplyRightFallback(bool force)
     {
         bool changed =
             force ||
-            lastOpponentName != fallbackOpponentName ||
-            lastOpponentLevel != -2 ||
-            lastOpponentWins != -2 ||
-            lastOpponentLosses != -2 ||
-            lastOpponentWinRate != -2;
+            lastRightName != fallbackOpponentName ||
+            lastRightLevel != -2 ||
+            lastRightWins != -2 ||
+            lastRightLosses != -2 ||
+            lastRightWinRate != -2;
 
         if (!changed)
             return;
 
-        lastOpponentName = fallbackOpponentName;
-        lastOpponentLevel = -2;
-        lastOpponentWins = -2;
-        lastOpponentLosses = -2;
-        lastOpponentWinRate = -2;
+        lastRightName = fallbackOpponentName;
+        lastRightLevel = -2;
+        lastRightWins = -2;
+        lastRightLosses = -2;
+        lastRightWinRate = -2;
 
         if (opponentNameText != null)
             opponentNameText.text = uppercaseNames ? fallbackOpponentName.ToUpperInvariant() : fallbackOpponentName;

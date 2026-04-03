@@ -1489,4 +1489,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         return onlineFlowController.RuntimeContext.currentSession;
     }
+
+
 }
