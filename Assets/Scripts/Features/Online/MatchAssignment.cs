@@ -22,6 +22,9 @@ public class MatchAssignment
     public OnlinePlayerIdentity localPlayer;
     public OnlinePlayerIdentity remotePlayer;
 
+    public OnlinePlayerMatchStatsSnapshot localPlayerStats;
+    public OnlinePlayerMatchStatsSnapshot remotePlayerStats;
+
     public bool localIsHost;
 
     public string player1SkinUniqueId;
