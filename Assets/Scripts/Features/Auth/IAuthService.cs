@@ -1,27 +1,37 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using UncballArena.Core.Auth.Models;
 
-namespace UncballArena.Core.Auth.Services
+namespace UncballArena.Core.Auth
 {
     public interface IAuthService
     {
-        AuthSession CurrentSession { get; }
         bool IsInitialized { get; }
-        bool IsAuthenticated { get; }
+        PlayerIdentity CurrentIdentity { get; }
+        AuthSession CurrentSession { get; }
 
         event Action<AuthSession> SessionChanged;
 
-        Task InitializeAsync();
-        Task<AuthSession> RestoreSessionAsync();
-        Task<AuthSession> SignInAsGuestAsync(string displayName = "");
-        Task<AuthSession> SignInWithGooglePlayAsync();
-        Task<AuthSession> SignInWithAppleAsync();
-        Task<AuthSession> SignInWithFacebookAsync();
-        Task<AuthSession> LinkCurrentGuestToGooglePlayAsync();
-        Task<AuthSession> LinkCurrentGuestToAppleAsync();
-        Task<AuthSession> LinkCurrentGuestToFacebookAsync();
-        Task<AuthSession> UpdateDisplayNameAsync(string displayName);
-        Task SignOutAsync();
+        Task InitializeAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> SignInGuestAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> SignInWithGoogleAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> SignInWithAppleAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> LinkGoogleAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> LinkAppleAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> UpdateDisplayNameAsync(string displayName, CancellationToken cancellationToken);
+        Task SignOutAsync(CancellationToken cancellationToken);
+
+        bool IsProviderAvailable(AuthProviderType providerType);
+        bool IsProviderLinked(AuthProviderType providerType);
+        bool CanLinkProvider(AuthProviderType providerType);
+        IReadOnlyList<ProviderLinkStatus> GetProviderStatuses();
+        AccountOverview GetAccountOverview();
+
+        Task<PlayerIdentity> SignInAsGuestAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> SignInWithGooglePlayAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> LinkCurrentGuestToGooglePlayAsync(CancellationToken cancellationToken);
+        Task<PlayerIdentity> LinkCurrentGuestToAppleAsync(CancellationToken cancellationToken);
     }
 }

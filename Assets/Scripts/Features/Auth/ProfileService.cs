@@ -1,6 +1,8 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UncballArena.Core.Bootstrap;
 using UncballArena.Core.Profile.Models;
 using UncballArena.Core.Profile.Repositories;
 
@@ -45,7 +47,7 @@ namespace UncballArena.Core.Profile.Services
                 return CurrentProfile;
             }
 
-            CurrentProfile = ProfileSnapshot.CreateNew(playerId, displayName);
+            CurrentProfile = ProfileSnapshot.CreateNew(playerId, SanitizeDisplayName(displayName));
             await repository.SaveAsync(CurrentProfile);
 
             RaiseProfileChanged();
@@ -82,8 +84,16 @@ namespace UncballArena.Core.Profile.Services
         {
             EnsureProfileExists();
 
-            CurrentProfile = CurrentProfile.WithDisplayName(displayName);
+            string sanitized = SanitizeDisplayName(displayName);
+
+            if (string.Equals(CurrentProfile.DisplayName, sanitized, StringComparison.Ordinal))
+                return CurrentProfile;
+
+            CurrentProfile = CurrentProfile.WithDisplayName(sanitized);
             await repository.SaveAsync(CurrentProfile);
+
+            await SyncDisplayNameToAuthIfPossibleAsync(sanitized);
+
             RaiseProfileChanged();
             return CurrentProfile;
         }
@@ -91,6 +101,9 @@ namespace UncballArena.Core.Profile.Services
         public async Task<ProfileSnapshot> SetEquippedBallSkinAsync(string skinId)
         {
             EnsureProfileExists();
+
+            if (string.Equals(CurrentProfile.EquippedBallSkinId, skinId ?? string.Empty, StringComparison.Ordinal))
+                return CurrentProfile;
 
             CurrentProfile = CurrentProfile.WithEquippedBallSkin(skinId);
             await repository.SaveAsync(CurrentProfile);
@@ -102,6 +115,9 @@ namespace UncballArena.Core.Profile.Services
         {
             EnsureProfileExists();
 
+            if (string.Equals(CurrentProfile.EquippedTableSkinId, skinId ?? string.Empty, StringComparison.Ordinal))
+                return CurrentProfile;
+
             CurrentProfile = CurrentProfile.WithEquippedTableSkin(skinId);
             await repository.SaveAsync(CurrentProfile);
             RaiseProfileChanged();
@@ -112,7 +128,13 @@ namespace UncballArena.Core.Profile.Services
         {
             EnsureProfileExists();
 
-            CurrentProfile = CurrentProfile.WithProgression(xp, level);
+            int sanitizedXp = Mathf.Max(0, xp);
+            int sanitizedLevel = Mathf.Max(1, level);
+
+            if (CurrentProfile.Xp == sanitizedXp && CurrentProfile.Level == sanitizedLevel)
+                return CurrentProfile;
+
+            CurrentProfile = CurrentProfile.WithProgression(sanitizedXp, sanitizedLevel);
             await repository.SaveAsync(CurrentProfile);
             RaiseProfileChanged();
             return CurrentProfile;
@@ -128,13 +150,31 @@ namespace UncballArena.Core.Profile.Services
         {
             EnsureProfileExists();
 
+            int sanitizedTotalMatches = Mathf.Max(0, totalMatches);
+            int sanitizedTotalWins = Mathf.Max(0, totalWins);
+            int sanitizedMultiplayerMatches = Mathf.Max(0, multiplayerMatches);
+            int sanitizedMultiplayerWins = Mathf.Max(0, multiplayerWins);
+            int sanitizedRankedMatches = Mathf.Max(0, rankedMatches);
+            int sanitizedRankedWins = Mathf.Max(0, rankedWins);
+
+            bool unchanged =
+                CurrentProfile.TotalMatches == sanitizedTotalMatches &&
+                CurrentProfile.TotalWins == sanitizedTotalWins &&
+                CurrentProfile.MultiplayerMatches == sanitizedMultiplayerMatches &&
+                CurrentProfile.MultiplayerWins == sanitizedMultiplayerWins &&
+                CurrentProfile.RankedMatches == sanitizedRankedMatches &&
+                CurrentProfile.RankedWins == sanitizedRankedWins;
+
+            if (unchanged)
+                return CurrentProfile;
+
             CurrentProfile = CurrentProfile.WithStats(
-                totalMatches,
-                totalWins,
-                multiplayerMatches,
-                multiplayerWins,
-                rankedMatches,
-                rankedWins
+                sanitizedTotalMatches,
+                sanitizedTotalWins,
+                sanitizedMultiplayerMatches,
+                sanitizedMultiplayerWins,
+                sanitizedRankedMatches,
+                sanitizedRankedWins
             );
 
             await repository.SaveAsync(CurrentProfile);
@@ -150,10 +190,41 @@ namespace UncballArena.Core.Profile.Services
                 return CurrentProfile;
             }
 
+            bool displayNameChanged =
+                CurrentProfile == null ||
+                !string.Equals(CurrentProfile.DisplayName, snapshot.DisplayName, StringComparison.Ordinal);
+
             CurrentProfile = snapshot;
             await repository.SaveAsync(CurrentProfile);
+
+            if (displayNameChanged)
+                await SyncDisplayNameToAuthIfPossibleAsync(CurrentProfile.DisplayName);
+
             RaiseProfileChanged();
             return CurrentProfile;
+        }
+
+        private async Task SyncDisplayNameToAuthIfPossibleAsync(string displayName)
+        {
+            GameCompositionRoot root = GameCompositionRoot.Instance;
+            if (root == null || !root.IsReady || root.AuthService == null)
+                return;
+
+            if (root.AuthService.CurrentSession == null || !root.AuthService.CurrentSession.HasUsableIdentity())
+                return;
+
+            string currentAuthName = root.AuthService.CurrentSession.Identity.DisplayName ?? string.Empty;
+            if (string.Equals(currentAuthName, displayName ?? string.Empty, StringComparison.Ordinal))
+                return;
+
+            await root.AuthService.UpdateDisplayNameAsync(displayName, CancellationToken.None);
+        }
+
+        private string SanitizeDisplayName(string displayName)
+        {
+            return string.IsNullOrWhiteSpace(displayName)
+                ? string.Empty
+                : displayName.Trim();
         }
 
         private void EnsureProfileExists()

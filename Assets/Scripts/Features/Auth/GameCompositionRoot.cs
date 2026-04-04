@@ -1,9 +1,10 @@
+using System.Threading;
 using System.Threading.Tasks;
-using UnityEngine;
-using UncballArena.Core.Auth.Services;
+using UncballArena.Core.Auth;
 using UncballArena.Core.Profile.Repositories;
 using UncballArena.Core.Profile.Services;
 using UncballArena.Core.Runtime;
+using UnityEngine;
 
 namespace UncballArena.Core.Bootstrap
 {
@@ -52,16 +53,27 @@ namespace UncballArena.Core.Bootstrap
             AuthRuntimeState = new AuthRuntimeState();
             ProfileRuntimeState = new ProfileRuntimeState();
 
-            AuthService = new LocalAuthService();
+            LocalAuthStorage localAuthStorage = new LocalAuthStorage();
+            GuestAuthProvider guestProvider = new GuestAuthProvider(localAuthStorage, initialGuestDisplayName);
+            GooglePlayAuthProvider googlePlayProvider = new GooglePlayAuthProvider();
+            AppleAuthProvider appleProvider = new AppleAuthProvider();
+
+            AuthService = new AuthService(
+                localAuthStorage,
+                guestProvider,
+                googlePlayProvider,
+                appleProvider
+            );
+
             ProfileService = new ProfileService(new LocalProfileRepository());
 
             AuthService.SessionChanged += OnSessionChanged;
             ProfileService.ProfileChanged += OnProfileChanged;
 
-            await AuthService.InitializeAsync();
+            await AuthService.InitializeAsync(CancellationToken.None);
 
             if (AuthService.CurrentSession == null || !AuthService.CurrentSession.HasUsableIdentity())
-                await AuthService.SignInAsGuestAsync(initialGuestDisplayName);
+                await AuthService.SignInAsGuestAsync(CancellationToken.None);
 
             string playerId = AuthService.CurrentSession.Identity.PlayerId;
             string authDisplayName = AuthService.CurrentSession.Identity.DisplayName;
@@ -97,7 +109,7 @@ namespace UncballArena.Core.Bootstrap
                 ProfileService.ProfileChanged -= OnProfileChanged;
         }
 
-        private void OnSessionChanged(Core.Auth.Models.AuthSession session)
+        private void OnSessionChanged(AuthSession session)
         {
             AuthRuntimeState?.Set(session);
         }

@@ -1,24 +1,24 @@
-using System;
-using UncballArena.Core.Auth.Models;
-
-namespace UncballArena.Core.Runtime
+namespace UncballArena.Core.Auth
 {
     public sealed class AuthRuntimeState
     {
-        public AuthSession CurrentSession { get; private set; }
+        public AuthSession Session { get; private set; } = AuthSession.SignedOut;
 
-        public event Action<AuthSession> Changed;
+        public bool IsAuthenticated => Session != null && Session.IsAuthenticated;
+        public string PlayerId => Session != null ? Session.PlayerId : string.Empty;
+        public string DisplayName => Session != null ? Session.DisplayName : string.Empty;
+        public bool IsGuest => Session != null && Session.IsGuest;
+        public bool IsLinked => Session != null && Session.IsLinked;
+        public AuthProviderType ProviderType => Session != null ? Session.ProviderType : AuthProviderType.None;
 
         public void Set(AuthSession session)
         {
-            CurrentSession = session;
-            Changed?.Invoke(CurrentSession);
+            Session = session ?? AuthSession.SignedOut;
         }
 
         public void Clear()
         {
-            CurrentSession = null;
-            Changed?.Invoke(CurrentSession);
+            Session = AuthSession.SignedOut;
         }
     }
 }

@@ -870,7 +870,6 @@ public class PlayerProfileManager : MonoBehaviour
             return;
 
         await GameCompositionRoot.Instance.ProfileService.SetDisplayNameAsync(newDisplayName);
-        await GameCompositionRoot.Instance.AuthService.UpdateDisplayNameAsync(newDisplayName);
     }
 
     private async void PushProfileStatsToCompositionRoot()
@@ -919,9 +918,6 @@ public class PlayerProfileManager : MonoBehaviour
         );
 
         await GameCompositionRoot.Instance.ProfileService.ApplyAuthoritativeSnapshotAsync(updated);
-
-        if (!string.IsNullOrWhiteSpace(activeProfile.displayName))
-            await GameCompositionRoot.Instance.AuthService.UpdateDisplayNameAsync(activeProfile.displayName);
     }
 
     private void MarkRuntimeRootPersistentIfNeeded()
