@@ -7,16 +7,21 @@ namespace UncballArena.Core.Auth.UI
 {
     public sealed class AccountPresenter : MonoBehaviour
     {
+        [Header("Behavior")]
         [SerializeField] private bool autoRefreshOnEnable = true;
         [SerializeField] private bool logDebug = true;
+        [SerializeField] private bool preventDoubleClick = true;
 
         public event Action<AccountOverview> AccountOverviewChanged;
 
         private IAuthService authService;
         private IProfileService profileService;
         private bool subscribed;
+        private bool actionInProgress;
 
         public AccountOverview CurrentOverview { get; private set; }
+
+        public bool IsBusy => actionInProgress;
 
         private void OnEnable()
         {
@@ -29,23 +34,33 @@ namespace UncballArena.Core.Auth.UI
         private void OnDisable()
         {
             Unsubscribe();
+            actionInProgress = false;
         }
 
         private void OnDestroy()
         {
             Unsubscribe();
+            actionInProgress = false;
         }
 
         public bool TryBind()
         {
             if (!AccountServiceLocator.TryGetServices(out authService, out profileService))
+            {
+                if (logDebug)
+                    Debug.LogWarning("[AccountPresenter] TryBind failed. Services not available yet.", this);
+
                 return false;
+            }
 
             if (!subscribed)
             {
                 authService.SessionChanged += HandleSessionChanged;
                 profileService.ProfileChanged += HandleProfileChanged;
                 subscribed = true;
+
+                if (logDebug)
+                    Debug.Log("[AccountPresenter] Services bound and event subscriptions registered.", this);
             }
 
             return true;
@@ -60,12 +75,18 @@ namespace UncballArena.Core.Auth.UI
             AccountOverviewChanged?.Invoke(CurrentOverview);
 
             if (logDebug)
-                Debug.Log($"[AccountPresenter] Refresh -> {CurrentOverview}", this);
+            {
+                Debug.Log(
+                    $"[AccountPresenter] Refresh -> Provider={CurrentOverview.CurrentProviderType} | " +
+                    $"Authenticated={CurrentOverview.IsAuthenticated} | Guest={CurrentOverview.IsGuest} | " +
+                    $"Linked={CurrentOverview.IsLinked} | DisplayName={CurrentOverview.DisplayName}",
+                    this);
+            }
         }
 
         public async void SignInAsGuest(string displayName = "")
         {
-            if (!TryBind())
+            if (!BeginAction("SignInAsGuest"))
                 return;
 
             try
@@ -81,11 +102,15 @@ namespace UncballArena.Core.Auth.UI
             {
                 Debug.LogError($"[AccountPresenter] SignInAsGuest failed: {ex.Message}", this);
             }
+            finally
+            {
+                EndAction("SignInAsGuest");
+            }
         }
 
         public async void SignInWithGoogle()
         {
-            if (!TryBind())
+            if (!BeginAction("SignInWithGoogle"))
                 return;
 
             try
@@ -97,11 +122,15 @@ namespace UncballArena.Core.Auth.UI
             {
                 Debug.LogError($"[AccountPresenter] SignInWithGoogle failed: {ex.Message}", this);
             }
+            finally
+            {
+                EndAction("SignInWithGoogle");
+            }
         }
 
         public async void SignInWithApple()
         {
-            if (!TryBind())
+            if (!BeginAction("SignInWithApple"))
                 return;
 
             try
@@ -113,11 +142,15 @@ namespace UncballArena.Core.Auth.UI
             {
                 Debug.LogError($"[AccountPresenter] SignInWithApple failed: {ex.Message}", this);
             }
+            finally
+            {
+                EndAction("SignInWithApple");
+            }
         }
 
         public async void LinkGoogle()
         {
-            if (!TryBind())
+            if (!BeginAction("LinkGoogle"))
                 return;
 
             try
@@ -129,11 +162,15 @@ namespace UncballArena.Core.Auth.UI
             {
                 Debug.LogError($"[AccountPresenter] LinkGoogle failed: {ex.Message}", this);
             }
+            finally
+            {
+                EndAction("LinkGoogle");
+            }
         }
 
         public async void LinkApple()
         {
-            if (!TryBind())
+            if (!BeginAction("LinkApple"))
                 return;
 
             try
@@ -145,31 +182,86 @@ namespace UncballArena.Core.Auth.UI
             {
                 Debug.LogError($"[AccountPresenter] LinkApple failed: {ex.Message}", this);
             }
+            finally
+            {
+                EndAction("LinkApple");
+            }
         }
 
         public async void UpdateDisplayName(string newDisplayName)
         {
-            if (!TryBind())
+            if (!BeginAction("UpdateDisplayName"))
                 return;
 
             try
             {
-                await profileService.SetDisplayNameAsync(newDisplayName);
+                if (string.IsNullOrWhiteSpace(newDisplayName))
+                {
+                    Debug.LogWarning("[AccountPresenter] UpdateDisplayName ignored because input is empty.", this);
+                    return;
+                }
+
+                await profileService.SetDisplayNameAsync(newDisplayName.Trim());
                 Refresh();
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[AccountPresenter] UpdateDisplayName failed: {ex.Message}", this);
             }
+            finally
+            {
+                EndAction("UpdateDisplayName");
+            }
+        }
+
+        private bool BeginAction(string actionName)
+        {
+            if (!TryBind())
+                return false;
+
+            if (preventDoubleClick && actionInProgress)
+            {
+                if (logDebug)
+                    Debug.LogWarning($"[AccountPresenter] Ignored {actionName} because another auth action is already running.", this);
+
+                return false;
+            }
+
+            actionInProgress = true;
+
+            if (logDebug)
+                Debug.Log($"[AccountPresenter] Starting action: {actionName}", this);
+
+            return true;
+        }
+
+        private void EndAction(string actionName)
+        {
+            actionInProgress = false;
+
+            if (logDebug)
+                Debug.Log($"[AccountPresenter] Finished action: {actionName}", this);
         }
 
         private void HandleSessionChanged(AuthSession session)
         {
+            if (logDebug)
+            {
+                Debug.Log(
+                    $"[AccountPresenter] SessionChanged received -> Provider={session.ProviderType} | " +
+                    $"Authenticated={session.IsAuthenticated} | Guest={session.IsGuest} | " +
+                    $"Linked={session.IsLinked} | DisplayName={session.DisplayName}",
+                    this);
+            }
+
             Refresh();
         }
 
         private void HandleProfileChanged(Core.Profile.Models.ProfileSnapshot snapshot)
         {
+            if (logDebug)
+                Debug.Log("[AccountPresenter] ProfileChanged received.", this);
+
             Refresh();
         }
 
@@ -185,6 +277,9 @@ namespace UncballArena.Core.Auth.UI
                 profileService.ProfileChanged -= HandleProfileChanged;
 
             subscribed = false;
+
+            if (logDebug)
+                Debug.Log("[AccountPresenter] Event subscriptions removed.", this);
         }
     }
 }

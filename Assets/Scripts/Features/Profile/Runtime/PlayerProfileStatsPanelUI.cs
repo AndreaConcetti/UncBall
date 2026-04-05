@@ -11,20 +11,9 @@ public class PlayerProfileStatsPanelUI : MonoBehaviour
         public string suffix = "";
     }
 
-    [System.Serializable]
-    public class StringTextFormat
-    {
-        public string prefix = "";
-        public string suffix = "";
-    }
-
     [Header("Dependencies")]
     [SerializeField] private PlayerProfileManager profileManager;
     [SerializeField] private PlayerProgressionRules progressionRules;
-
-    [Header("Identity UI")]
-    [SerializeField] private TMP_Text displayNameText;
-    [SerializeField] private StringTextFormat displayNameFormat = new StringTextFormat();
 
     [Header("Level / XP UI")]
     [SerializeField] private TMP_Text levelText;
@@ -115,9 +104,6 @@ public class PlayerProfileStatsPanelUI : MonoBehaviour
         int xpIntoCurrentLevel = progressionRules.GetXpIntoCurrentLevel(totalXp);
         int xpNeededForNextLevel = progressionRules.GetXpNeededForNextLevel(totalXp);
 
-        if (displayNameText != null)
-            displayNameText.text = ApplyStringFormat(profile.displayName, displayNameFormat);
-
         if (levelText != null)
             levelText.text = ApplyIntFormat(currentLevel, levelFormat);
 
@@ -201,9 +187,6 @@ public class PlayerProfileStatsPanelUI : MonoBehaviour
 
     private void ClearUI()
     {
-        if (displayNameText != null)
-            displayNameText.text = ApplyStringFormat(string.Empty, displayNameFormat);
-
         if (levelText != null)
             levelText.text = ApplyIntFormat(1, levelFormat);
 
@@ -238,13 +221,6 @@ public class PlayerProfileStatsPanelUI : MonoBehaviour
     }
 
     private string ApplyIntFormat(int value, IntTextFormat format)
-    {
-        string prefix = format != null ? format.prefix : string.Empty;
-        string suffix = format != null ? format.suffix : string.Empty;
-        return prefix + value + suffix;
-    }
-
-    private string ApplyStringFormat(string value, StringTextFormat format)
     {
         string prefix = format != null ? format.prefix : string.Empty;
         string suffix = format != null ? format.suffix : string.Empty;

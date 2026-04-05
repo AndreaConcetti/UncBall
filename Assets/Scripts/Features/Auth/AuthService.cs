@@ -89,14 +89,7 @@ namespace UncballArena.Core.Auth
                     : result.ErrorMessage);
             }
 
-            string displayName = GetPreferredDisplayName(result.Identity.DisplayName);
-            PlayerIdentity identity = new PlayerIdentity(
-                CurrentIdentity.IsValid ? CurrentIdentity.PlayerId : storage.GetOrCreateGuestPlayerId(),
-                AuthProviderType.GooglePlayGames,
-                result.Identity.ProviderUserId,
-                displayName,
-                false,
-                true);
+            PlayerIdentity identity = BuildGoogleIdentityFromResult(result.Identity);
 
             storage.SetGoogleLinked(true);
             storage.SetGoogleProviderUserId(identity.ProviderUserId);
@@ -105,7 +98,7 @@ namespace UncballArena.Core.Auth
 
             SetCurrentIdentity(identity);
 
-            Debug.Log($"[AuthService] Signed in with Google. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName}");
+            Debug.Log($"[AuthService] Signed in with Google. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
             return CurrentIdentity;
         }
 
@@ -126,14 +119,7 @@ namespace UncballArena.Core.Auth
                     : result.ErrorMessage);
             }
 
-            string displayName = GetPreferredDisplayName(result.Identity.DisplayName);
-            PlayerIdentity identity = new PlayerIdentity(
-                CurrentIdentity.IsValid ? CurrentIdentity.PlayerId : storage.GetOrCreateGuestPlayerId(),
-                AuthProviderType.Apple,
-                result.Identity.ProviderUserId,
-                displayName,
-                false,
-                true);
+            PlayerIdentity identity = BuildAppleIdentityFromResult(result.Identity);
 
             storage.SetAppleLinked(true);
             storage.SetAppleProviderUserId(identity.ProviderUserId);
@@ -142,7 +128,7 @@ namespace UncballArena.Core.Auth
 
             SetCurrentIdentity(identity);
 
-            Debug.Log($"[AuthService] Signed in with Apple. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName}");
+            Debug.Log($"[AuthService] Signed in with Apple. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
             return CurrentIdentity;
         }
 
@@ -158,14 +144,16 @@ namespace UncballArena.Core.Auth
                     : result.ErrorMessage);
             }
 
-            storage.SetGoogleLinked(true);
-            storage.SetGoogleProviderUserId(result.Identity.ProviderUserId);
+            PlayerIdentity identity = BuildGoogleIdentityFromResult(result.Identity);
 
-            PlayerIdentity identity = CurrentIdentity.Clone();
-            identity.IsLinked = storage.IsGoogleLinked() || storage.IsAppleLinked();
+            storage.SetGoogleLinked(true);
+            storage.SetGoogleProviderUserId(identity.ProviderUserId);
+            storage.SetCurrentProvider(AuthProviderType.GooglePlayGames);
+            storage.SetDisplayName(identity.DisplayName);
+
             SetCurrentIdentity(identity);
 
-            Debug.Log($"[AuthService] Google linked. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName}");
+            Debug.Log($"[AuthService] Google linked. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
             return CurrentIdentity;
         }
 
@@ -186,14 +174,16 @@ namespace UncballArena.Core.Auth
                     : result.ErrorMessage);
             }
 
-            storage.SetAppleLinked(true);
-            storage.SetAppleProviderUserId(result.Identity.ProviderUserId);
+            PlayerIdentity identity = BuildAppleIdentityFromResult(result.Identity);
 
-            PlayerIdentity identity = CurrentIdentity.Clone();
-            identity.IsLinked = storage.IsGoogleLinked() || storage.IsAppleLinked();
+            storage.SetAppleLinked(true);
+            storage.SetAppleProviderUserId(identity.ProviderUserId);
+            storage.SetCurrentProvider(AuthProviderType.Apple);
+            storage.SetDisplayName(identity.DisplayName);
+
             SetCurrentIdentity(identity);
 
-            Debug.Log($"[AuthService] Apple linked. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName}");
+            Debug.Log($"[AuthService] Apple linked. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
             return CurrentIdentity;
         }
 
@@ -317,11 +307,45 @@ namespace UncballArena.Core.Auth
             SessionChanged?.Invoke(CurrentSession);
         }
 
+        private PlayerIdentity BuildGoogleIdentityFromResult(PlayerIdentity providerIdentity)
+        {
+            string playerId = CurrentIdentity.IsValid
+                ? CurrentIdentity.PlayerId
+                : storage.GetOrCreateGuestPlayerId();
+
+            string displayName = GetPreferredDisplayName(providerIdentity.DisplayName);
+
+            return new PlayerIdentity(
+                playerId: playerId,
+                providerType: AuthProviderType.GooglePlayGames,
+                providerUserId: providerIdentity.ProviderUserId,
+                displayName: displayName,
+                isGuest: false,
+                isLinked: true);
+        }
+
+        private PlayerIdentity BuildAppleIdentityFromResult(PlayerIdentity providerIdentity)
+        {
+            string playerId = CurrentIdentity.IsValid
+                ? CurrentIdentity.PlayerId
+                : storage.GetOrCreateGuestPlayerId();
+
+            string displayName = GetPreferredDisplayName(providerIdentity.DisplayName);
+
+            return new PlayerIdentity(
+                playerId: playerId,
+                providerType: AuthProviderType.Apple,
+                providerUserId: providerIdentity.ProviderUserId,
+                displayName: displayName,
+                isGuest: false,
+                isLinked: true);
+        }
+
         private string GetPreferredDisplayName(string providerDisplayName)
         {
             string current = storage.GetDisplayName("Guest");
             if (!string.IsNullOrWhiteSpace(current))
-                return current;
+                return current.Trim();
 
             if (!string.IsNullOrWhiteSpace(providerDisplayName))
                 return providerDisplayName.Trim();
