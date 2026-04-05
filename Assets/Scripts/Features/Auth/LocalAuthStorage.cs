@@ -4,42 +4,47 @@ namespace UncballArena.Core.Auth
 {
     public sealed class LocalAuthStorage
     {
-        private const string KeyGuestPlayerId = "AUTH_GUEST_PLAYER_ID";
-        private const string KeyDisplayName = "AUTH_DISPLAY_NAME";
-        private const string KeyCurrentProvider = "AUTH_CURRENT_PROVIDER";
-        private const string KeyGoogleLinked = "AUTH_GOOGLE_LINKED";
-        private const string KeyAppleLinked = "AUTH_APPLE_LINKED";
-        private const string KeyGoogleProviderUserId = "AUTH_GOOGLE_PROVIDER_USER_ID";
-        private const string KeyAppleProviderUserId = "AUTH_APPLE_PROVIDER_USER_ID";
+        private const string KeyGuestPlayerId = "auth.guest.playerId";
+        private const string KeyDisplayName = "auth.displayName";
+        private const string KeyCurrentProvider = "auth.currentProvider";
+
+        private const string KeyGoogleLinked = "auth.google.linked";
+        private const string KeyGoogleProviderUserId = "auth.google.providerUserId";
+
+        private const string KeyAppleLinked = "auth.apple.linked";
+        private const string KeyAppleProviderUserId = "auth.apple.providerUserId";
 
         public string GetOrCreateGuestPlayerId()
         {
-            string playerId = PlayerPrefs.GetString(KeyGuestPlayerId, string.Empty);
-            if (!string.IsNullOrWhiteSpace(playerId))
-            {
-                return playerId;
-            }
+            string existing = PlayerPrefs.GetString(KeyGuestPlayerId, string.Empty);
+            if (!string.IsNullOrWhiteSpace(existing))
+                return existing;
 
-            playerId = "guest_" + System.Guid.NewGuid().ToString("N");
-            PlayerPrefs.SetString(KeyGuestPlayerId, playerId);
+            string created = System.Guid.NewGuid().ToString("N");
+            PlayerPrefs.SetString(KeyGuestPlayerId, created);
             PlayerPrefs.Save();
-            return playerId;
+            return created;
         }
 
-        public string GetDisplayName(string fallback)
+        public string GetDisplayName(string fallback = "Guest")
         {
-            return PlayerPrefs.GetString(KeyDisplayName, fallback ?? string.Empty);
+            string value = PlayerPrefs.GetString(KeyDisplayName, string.Empty);
+            return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         }
 
         public void SetDisplayName(string displayName)
         {
-            PlayerPrefs.SetString(KeyDisplayName, displayName ?? string.Empty);
+            string safeValue = string.IsNullOrWhiteSpace(displayName) ? "Guest" : displayName.Trim();
+            PlayerPrefs.SetString(KeyDisplayName, safeValue);
             PlayerPrefs.Save();
         }
 
-        public AuthProviderType GetCurrentProvider()
+        public AuthProviderType GetCurrentProvider(AuthProviderType fallback = AuthProviderType.Guest)
         {
-            return (AuthProviderType)PlayerPrefs.GetInt(KeyCurrentProvider, (int)AuthProviderType.Guest);
+            if (!PlayerPrefs.HasKey(KeyCurrentProvider))
+                return fallback;
+
+            return (AuthProviderType)PlayerPrefs.GetInt(KeyCurrentProvider, (int)fallback);
         }
 
         public void SetCurrentProvider(AuthProviderType providerType)
@@ -59,6 +64,24 @@ namespace UncballArena.Core.Auth
             PlayerPrefs.Save();
         }
 
+        public string GetGoogleProviderUserId()
+        {
+            return PlayerPrefs.GetString(KeyGoogleProviderUserId, string.Empty).Trim();
+        }
+
+        public void SetGoogleProviderUserId(string providerUserId)
+        {
+            PlayerPrefs.SetString(KeyGoogleProviderUserId, providerUserId ?? string.Empty);
+            PlayerPrefs.Save();
+        }
+
+        public void ClearGoogleLink()
+        {
+            PlayerPrefs.SetInt(KeyGoogleLinked, 0);
+            PlayerPrefs.DeleteKey(KeyGoogleProviderUserId);
+            PlayerPrefs.Save();
+        }
+
         public bool IsAppleLinked()
         {
             return PlayerPrefs.GetInt(KeyAppleLinked, 0) == 1;
@@ -70,26 +93,29 @@ namespace UncballArena.Core.Auth
             PlayerPrefs.Save();
         }
 
-        public string GetGoogleProviderUserId()
-        {
-            return PlayerPrefs.GetString(KeyGoogleProviderUserId, string.Empty);
-        }
-
-        public void SetGoogleProviderUserId(string providerUserId)
-        {
-            PlayerPrefs.SetString(KeyGoogleProviderUserId, providerUserId ?? string.Empty);
-            PlayerPrefs.Save();
-        }
-
         public string GetAppleProviderUserId()
         {
-            return PlayerPrefs.GetString(KeyAppleProviderUserId, string.Empty);
+            return PlayerPrefs.GetString(KeyAppleProviderUserId, string.Empty).Trim();
         }
 
         public void SetAppleProviderUserId(string providerUserId)
         {
             PlayerPrefs.SetString(KeyAppleProviderUserId, providerUserId ?? string.Empty);
             PlayerPrefs.Save();
+        }
+
+        public void ClearAppleLink()
+        {
+            PlayerPrefs.SetInt(KeyAppleLinked, 0);
+            PlayerPrefs.DeleteKey(KeyAppleProviderUserId);
+            PlayerPrefs.Save();
+        }
+
+        public void ClearAllExternalLinks()
+        {
+            ClearGoogleLink();
+            ClearAppleLink();
+            SetCurrentProvider(AuthProviderType.Guest);
         }
     }
 }

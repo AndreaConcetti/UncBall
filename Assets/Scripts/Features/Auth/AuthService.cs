@@ -12,6 +12,7 @@ namespace UncballArena.Core.Auth
         private readonly GuestAuthProvider guestAuthProvider;
         private readonly GooglePlayAuthProvider googlePlayAuthProvider;
         private readonly AppleAuthProvider appleAuthProvider;
+        private readonly SemaphoreSlim actionLock = new SemaphoreSlim(1, 1);
 
         public bool IsInitialized { get; private set; }
         public PlayerIdentity CurrentIdentity { get; private set; } = PlayerIdentity.Invalid();
@@ -47,29 +48,54 @@ namespace UncballArena.Core.Auth
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            PlayerIdentity identity = await SignInGuestAsync(cancellationToken);
-            SetCurrentIdentity(identity);
+            await actionLock.WaitAsync(cancellationToken);
+            try
+            {
+                if (IsInitialized)
+                    return;
 
-            IsInitialized = true;
+                PlayerIdentity identity = RestoreOrCreateIdentity();
+                SetCurrentIdentity(identity);
 
-            Debug.Log($"[AuthService] Initialized. IsAuthenticated={CurrentSession.IsAuthenticated} | Identity={CurrentIdentity}");
+                IsInitialized = true;
+
+                Debug.Log(
+                    $"[AuthService] Initialized. Provider={CurrentSession.ProviderType} | " +
+                    $"Authenticated={CurrentSession.IsAuthenticated} | Guest={CurrentSession.IsGuest} | " +
+                    $"Linked={CurrentSession.IsLinked} | DisplayName={CurrentSession.DisplayName}");
+            }
+            finally
+            {
+                actionLock.Release();
+            }
         }
 
         public async Task<PlayerIdentity> SignInGuestAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            AuthProviderSignInResult result = await guestAuthProvider.SignInAsync();
-            if (!result.Succeeded || !result.Identity.IsValid)
+            await actionLock.WaitAsync(cancellationToken);
+            try
             {
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "Guest sign in failed."
-                    : result.ErrorMessage);
-            }
+                AuthProviderSignInResult result = await guestAuthProvider.SignInAsync();
+                if (!result.Succeeded || !result.Identity.IsValid)
+                {
+                    throw new InvalidOperationException(
+                        string.IsNullOrWhiteSpace(result.ErrorMessage)
+                            ? "Guest sign in failed."
+                            : result.ErrorMessage);
+                }
 
-            storage.SetCurrentProvider(AuthProviderType.Guest);
-            SetCurrentIdentity(result.Identity);
-            return CurrentIdentity;
+                PlayerIdentity identity = BuildGuestIdentity();
+                storage.SetCurrentProvider(AuthProviderType.Guest);
+                SetCurrentIdentity(identity);
+
+                return CurrentIdentity;
+            }
+            finally
+            {
+                actionLock.Release();
+            }
         }
 
         public Task<PlayerIdentity> SignInAsGuestAsync(CancellationToken cancellationToken)
@@ -81,25 +107,39 @@ namespace UncballArena.Core.Auth
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            AuthProviderSignInResult result = await googlePlayAuthProvider.SignInAsync();
-            if (!result.Succeeded || !result.Identity.IsValid)
+            await actionLock.WaitAsync(cancellationToken);
+            try
             {
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "Google sign in failed."
-                    : result.ErrorMessage);
+                AuthProviderSignInResult result = await googlePlayAuthProvider.SignInAsync();
+                if (!result.Succeeded || !result.Identity.IsValid)
+                {
+                    throw new InvalidOperationException(
+                        string.IsNullOrWhiteSpace(result.ErrorMessage)
+                            ? "Google sign in failed."
+                            : result.ErrorMessage);
+                }
+
+                ClearAllExternalLinksInternal();
+
+                PlayerIdentity identity = BuildGoogleIdentityFromResult(result.Identity);
+
+                storage.SetGoogleLinked(true);
+                storage.SetGoogleProviderUserId(identity.ProviderUserId);
+                storage.SetCurrentProvider(AuthProviderType.GooglePlayGames);
+                storage.SetDisplayName(identity.DisplayName);
+
+                SetCurrentIdentity(identity);
+
+                Debug.Log(
+                    $"[AuthService] Signed in with Google. " +
+                    $"DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
+
+                return CurrentIdentity;
             }
-
-            PlayerIdentity identity = BuildGoogleIdentityFromResult(result.Identity);
-
-            storage.SetGoogleLinked(true);
-            storage.SetGoogleProviderUserId(identity.ProviderUserId);
-            storage.SetCurrentProvider(AuthProviderType.GooglePlayGames);
-            storage.SetDisplayName(identity.DisplayName);
-
-            SetCurrentIdentity(identity);
-
-            Debug.Log($"[AuthService] Signed in with Google. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
-            return CurrentIdentity;
+            finally
+            {
+                actionLock.Release();
+            }
         }
 
         public Task<PlayerIdentity> SignInWithGooglePlayAsync(CancellationToken cancellationToken)
@@ -111,50 +151,87 @@ namespace UncballArena.Core.Auth
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            AuthProviderSignInResult result = await appleAuthProvider.SignInAsync();
-            if (!result.Succeeded || !result.Identity.IsValid)
+            await actionLock.WaitAsync(cancellationToken);
+            try
             {
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "Apple sign in failed."
-                    : result.ErrorMessage);
+                AuthProviderSignInResult result = await appleAuthProvider.SignInAsync();
+                if (!result.Succeeded || !result.Identity.IsValid)
+                {
+                    throw new InvalidOperationException(
+                        string.IsNullOrWhiteSpace(result.ErrorMessage)
+                            ? "Apple sign in failed."
+                            : result.ErrorMessage);
+                }
+
+                ClearAllExternalLinksInternal();
+
+                PlayerIdentity identity = BuildAppleIdentityFromResult(result.Identity);
+
+                storage.SetAppleLinked(true);
+                storage.SetAppleProviderUserId(identity.ProviderUserId);
+                storage.SetCurrentProvider(AuthProviderType.Apple);
+                storage.SetDisplayName(identity.DisplayName);
+
+                SetCurrentIdentity(identity);
+
+                Debug.Log(
+                    $"[AuthService] Signed in with Apple. " +
+                    $"DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
+
+                return CurrentIdentity;
             }
-
-            PlayerIdentity identity = BuildAppleIdentityFromResult(result.Identity);
-
-            storage.SetAppleLinked(true);
-            storage.SetAppleProviderUserId(identity.ProviderUserId);
-            storage.SetCurrentProvider(AuthProviderType.Apple);
-            storage.SetDisplayName(identity.DisplayName);
-
-            SetCurrentIdentity(identity);
-
-            Debug.Log($"[AuthService] Signed in with Apple. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
-            return CurrentIdentity;
+            finally
+            {
+                actionLock.Release();
+            }
         }
 
         public async Task<PlayerIdentity> LinkGoogleAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            AuthProviderSignInResult result = await googlePlayAuthProvider.SignInAsync();
-            if (!result.Succeeded || !result.Identity.IsValid)
+            await actionLock.WaitAsync(cancellationToken);
+            try
             {
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "Google link failed."
-                    : result.ErrorMessage);
+                AuthProviderSignInResult result = await googlePlayAuthProvider.SignInAsync();
+                if (!result.Succeeded || !result.Identity.IsValid)
+                {
+                    throw new InvalidOperationException(
+                        string.IsNullOrWhiteSpace(result.ErrorMessage)
+                            ? "Google link failed."
+                            : result.ErrorMessage);
+                }
+
+                string stablePlayerId = GetStablePlayerId();
+                string displayName = GetPreferredDisplayName(result.Identity.DisplayName);
+
+                ClearAllExternalLinksInternal();
+
+                storage.SetGoogleLinked(true);
+                storage.SetGoogleProviderUserId(result.Identity.ProviderUserId);
+                storage.SetCurrentProvider(AuthProviderType.GooglePlayGames);
+                storage.SetDisplayName(displayName);
+
+                PlayerIdentity identity = new PlayerIdentity(
+                    playerId: stablePlayerId,
+                    providerType: AuthProviderType.GooglePlayGames,
+                    providerUserId: result.Identity.ProviderUserId,
+                    displayName: displayName,
+                    isGuest: false,
+                    isLinked: true);
+
+                SetCurrentIdentity(identity);
+
+                Debug.Log(
+                    $"[AuthService] Google linked successfully. " +
+                    $"StablePlayerId={identity.PlayerId} | ProviderUserId={identity.ProviderUserId}");
+
+                return CurrentIdentity;
             }
-
-            PlayerIdentity identity = BuildGoogleIdentityFromResult(result.Identity);
-
-            storage.SetGoogleLinked(true);
-            storage.SetGoogleProviderUserId(identity.ProviderUserId);
-            storage.SetCurrentProvider(AuthProviderType.GooglePlayGames);
-            storage.SetDisplayName(identity.DisplayName);
-
-            SetCurrentIdentity(identity);
-
-            Debug.Log($"[AuthService] Google linked. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
-            return CurrentIdentity;
+            finally
+            {
+                actionLock.Release();
+            }
         }
 
         public Task<PlayerIdentity> LinkCurrentGuestToGooglePlayAsync(CancellationToken cancellationToken)
@@ -166,25 +243,48 @@ namespace UncballArena.Core.Auth
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            AuthProviderSignInResult result = await appleAuthProvider.SignInAsync();
-            if (!result.Succeeded || !result.Identity.IsValid)
+            await actionLock.WaitAsync(cancellationToken);
+            try
             {
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "Apple link failed."
-                    : result.ErrorMessage);
+                AuthProviderSignInResult result = await appleAuthProvider.SignInAsync();
+                if (!result.Succeeded || !result.Identity.IsValid)
+                {
+                    throw new InvalidOperationException(
+                        string.IsNullOrWhiteSpace(result.ErrorMessage)
+                            ? "Apple link failed."
+                            : result.ErrorMessage);
+                }
+
+                string stablePlayerId = GetStablePlayerId();
+                string displayName = GetPreferredDisplayName(result.Identity.DisplayName);
+
+                ClearAllExternalLinksInternal();
+
+                storage.SetAppleLinked(true);
+                storage.SetAppleProviderUserId(result.Identity.ProviderUserId);
+                storage.SetCurrentProvider(AuthProviderType.Apple);
+                storage.SetDisplayName(displayName);
+
+                PlayerIdentity identity = new PlayerIdentity(
+                    playerId: stablePlayerId,
+                    providerType: AuthProviderType.Apple,
+                    providerUserId: result.Identity.ProviderUserId,
+                    displayName: displayName,
+                    isGuest: false,
+                    isLinked: true);
+
+                SetCurrentIdentity(identity);
+
+                Debug.Log(
+                    $"[AuthService] Apple linked successfully. " +
+                    $"StablePlayerId={identity.PlayerId} | ProviderUserId={identity.ProviderUserId}");
+
+                return CurrentIdentity;
             }
-
-            PlayerIdentity identity = BuildAppleIdentityFromResult(result.Identity);
-
-            storage.SetAppleLinked(true);
-            storage.SetAppleProviderUserId(identity.ProviderUserId);
-            storage.SetCurrentProvider(AuthProviderType.Apple);
-            storage.SetDisplayName(identity.DisplayName);
-
-            SetCurrentIdentity(identity);
-
-            Debug.Log($"[AuthService] Apple linked. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName} | ProviderUserId={identity.ProviderUserId}");
-            return CurrentIdentity;
+            finally
+            {
+                actionLock.Release();
+            }
         }
 
         public Task<PlayerIdentity> LinkCurrentGuestToAppleAsync(CancellationToken cancellationToken)
@@ -192,33 +292,130 @@ namespace UncballArena.Core.Auth
             return LinkAppleAsync(cancellationToken);
         }
 
-        public Task<PlayerIdentity> UpdateDisplayNameAsync(string displayName, CancellationToken cancellationToken)
+        public async Task<PlayerIdentity> UpdateDisplayNameAsync(string displayName, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            string sanitized = (displayName ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(sanitized))
-                throw new InvalidOperationException("Display name cannot be empty.");
+            await actionLock.WaitAsync(cancellationToken);
+            try
+            {
+                string sanitized = (displayName ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(sanitized))
+                    throw new InvalidOperationException("Display name cannot be empty.");
 
-            storage.SetDisplayName(sanitized);
+                storage.SetDisplayName(sanitized);
 
-            PlayerIdentity identity = CurrentIdentity.Clone();
-            identity.DisplayName = sanitized;
-            SetCurrentIdentity(identity);
+                PlayerIdentity identity = CurrentIdentity.Clone();
+                identity.DisplayName = sanitized;
+                SetCurrentIdentity(identity);
 
-            Debug.Log($"[AuthService] Display name updated. PlayerId={identity.PlayerId} | DisplayName={identity.DisplayName}");
-            return Task.FromResult(CurrentIdentity);
+                return CurrentIdentity;
+            }
+            finally
+            {
+                actionLock.Release();
+            }
         }
 
-        public Task SignOutAsync(CancellationToken cancellationToken)
+        public Task UnlinkGoogleAsync(CancellationToken cancellationToken)
+        {
+            return UnlinkProviderAsync(AuthProviderType.GooglePlayGames, cancellationToken);
+        }
+
+        public Task UnlinkAppleAsync(CancellationToken cancellationToken)
+        {
+            return UnlinkProviderAsync(AuthProviderType.Apple, cancellationToken);
+        }
+
+        public async Task UnlinkProviderAsync(AuthProviderType providerType, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            SetCurrentIdentity(PlayerIdentity.Invalid());
-            storage.SetCurrentProvider(AuthProviderType.Guest);
+            await actionLock.WaitAsync(cancellationToken);
+            try
+            {
+                if (CurrentSession == null || !CurrentSession.IsAuthenticated)
+                {
+                    Debug.LogWarning("[AuthService] UnlinkProviderAsync ignored because there is no authenticated session.");
+                    return;
+                }
 
-            Debug.Log("[AuthService] Signed out.");
-            return Task.CompletedTask;
+                switch (providerType)
+                {
+                    case AuthProviderType.GooglePlayGames:
+                        storage.ClearGoogleLink();
+                        storage.SetCurrentProvider(AuthProviderType.Guest);
+
+                        try
+                        {
+                            await googlePlayAuthProvider.SignOutAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[AuthService] Google provider SignOutAsync warning: {ex.Message}");
+                        }
+
+                        break;
+
+                    case AuthProviderType.Apple:
+                        storage.ClearAppleLink();
+                        storage.SetCurrentProvider(AuthProviderType.Guest);
+
+                        try
+                        {
+                            await appleAuthProvider.SignOutAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[AuthService] Apple provider SignOutAsync warning: {ex.Message}");
+                        }
+
+                        break;
+
+                    default:
+                        throw new InvalidOperationException($"Unlink for provider {providerType} is not supported.");
+                }
+
+                PlayerIdentity guestIdentity = BuildGuestIdentity();
+                SetCurrentIdentity(guestIdentity);
+
+                Debug.Log(
+                    $"[AuthService] Unlinked provider {providerType}. " +
+                    $"Now back to Guest. PlayerId={guestIdentity.PlayerId} | DisplayName={guestIdentity.DisplayName}");
+            }
+            finally
+            {
+                actionLock.Release();
+            }
+        }
+
+        public async Task SignOutAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await actionLock.WaitAsync(cancellationToken);
+            try
+            {
+                try
+                {
+                    await googlePlayAuthProvider.SignOutAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[AuthService] Google provider SignOutAsync warning during SignOutAsync: {ex.Message}");
+                }
+
+                storage.SetCurrentProvider(AuthProviderType.Guest);
+
+                PlayerIdentity guestIdentity = BuildGuestIdentity();
+                SetCurrentIdentity(guestIdentity);
+
+                Debug.Log("[AuthService] Signed out to guest.");
+            }
+            finally
+            {
+                actionLock.Release();
+            }
         }
 
         public bool IsProviderAvailable(AuthProviderType providerType)
@@ -256,7 +453,7 @@ namespace UncballArena.Core.Auth
             if (!CurrentSession.IsAuthenticated)
                 return false;
 
-            if (!CurrentIdentity.IsGuest)
+            if (!CurrentSession.IsGuest)
                 return false;
 
             return IsProviderAvailable(providerType) && !IsProviderLinked(providerType);
@@ -264,7 +461,7 @@ namespace UncballArena.Core.Auth
 
         public IReadOnlyList<ProviderLinkStatus> GetProviderStatuses()
         {
-            List<ProviderLinkStatus> list = new List<ProviderLinkStatus>
+            List<ProviderLinkStatus> statuses = new List<ProviderLinkStatus>
             {
                 new ProviderLinkStatus(
                     AuthProviderType.Guest,
@@ -285,7 +482,7 @@ namespace UncballArena.Core.Auth
                     CanLinkProvider(AuthProviderType.Apple))
             };
 
-            return list;
+            return statuses;
         }
 
         public AccountOverview GetAccountOverview()
@@ -300,19 +497,72 @@ namespace UncballArena.Core.Auth
                 GetProviderStatuses());
         }
 
-        private void SetCurrentIdentity(PlayerIdentity identity)
+        private PlayerIdentity RestoreOrCreateIdentity()
         {
-            CurrentIdentity = identity ?? PlayerIdentity.Invalid();
-            CurrentSession = new AuthSession(CurrentIdentity, CurrentIdentity.IsValid);
-            SessionChanged?.Invoke(CurrentSession);
+            AuthProviderType currentProvider = storage.GetCurrentProvider(AuthProviderType.Guest);
+
+            if (currentProvider == AuthProviderType.GooglePlayGames && storage.IsGoogleLinked())
+                return BuildStoredGoogleIdentity();
+
+            if (currentProvider == AuthProviderType.Apple && storage.IsAppleLinked())
+                return BuildStoredAppleIdentity();
+
+            if (storage.IsGoogleLinked())
+                return BuildStoredGoogleIdentity();
+
+            if (storage.IsAppleLinked())
+                return BuildStoredAppleIdentity();
+
+            return BuildGuestIdentity();
+        }
+
+        private PlayerIdentity BuildGuestIdentity()
+        {
+            string playerId = GetStablePlayerId();
+            string displayName = storage.GetDisplayName("Guest");
+
+            return new PlayerIdentity(
+                playerId: playerId,
+                providerType: AuthProviderType.Guest,
+                providerUserId: playerId,
+                displayName: displayName,
+                isGuest: true,
+                isLinked: false);
+        }
+
+        private PlayerIdentity BuildStoredGoogleIdentity()
+        {
+            string playerId = GetStablePlayerId();
+            string displayName = storage.GetDisplayName("Guest");
+            string providerUserId = storage.GetGoogleProviderUserId();
+
+            return new PlayerIdentity(
+                playerId: playerId,
+                providerType: AuthProviderType.GooglePlayGames,
+                providerUserId: providerUserId,
+                displayName: displayName,
+                isGuest: false,
+                isLinked: true);
+        }
+
+        private PlayerIdentity BuildStoredAppleIdentity()
+        {
+            string playerId = GetStablePlayerId();
+            string displayName = storage.GetDisplayName("Guest");
+            string providerUserId = storage.GetAppleProviderUserId();
+
+            return new PlayerIdentity(
+                playerId: playerId,
+                providerType: AuthProviderType.Apple,
+                providerUserId: providerUserId,
+                displayName: displayName,
+                isGuest: false,
+                isLinked: true);
         }
 
         private PlayerIdentity BuildGoogleIdentityFromResult(PlayerIdentity providerIdentity)
         {
-            string playerId = CurrentIdentity.IsValid
-                ? CurrentIdentity.PlayerId
-                : storage.GetOrCreateGuestPlayerId();
-
+            string playerId = GetStablePlayerId();
             string displayName = GetPreferredDisplayName(providerIdentity.DisplayName);
 
             return new PlayerIdentity(
@@ -326,10 +576,7 @@ namespace UncballArena.Core.Auth
 
         private PlayerIdentity BuildAppleIdentityFromResult(PlayerIdentity providerIdentity)
         {
-            string playerId = CurrentIdentity.IsValid
-                ? CurrentIdentity.PlayerId
-                : storage.GetOrCreateGuestPlayerId();
-
+            string playerId = GetStablePlayerId();
             string displayName = GetPreferredDisplayName(providerIdentity.DisplayName);
 
             return new PlayerIdentity(
@@ -341,16 +588,41 @@ namespace UncballArena.Core.Auth
                 isLinked: true);
         }
 
+        private string GetStablePlayerId()
+        {
+            if (CurrentIdentity != null &&
+                CurrentIdentity.IsValid &&
+                !string.IsNullOrWhiteSpace(CurrentIdentity.PlayerId))
+            {
+                return CurrentIdentity.PlayerId;
+            }
+
+            return storage.GetOrCreateGuestPlayerId();
+        }
+
         private string GetPreferredDisplayName(string providerDisplayName)
         {
-            string current = storage.GetDisplayName("Guest");
-            if (!string.IsNullOrWhiteSpace(current))
-                return current.Trim();
+            string currentStored = storage.GetDisplayName(string.Empty);
+            if (!string.IsNullOrWhiteSpace(currentStored))
+                return currentStored.Trim();
 
             if (!string.IsNullOrWhiteSpace(providerDisplayName))
                 return providerDisplayName.Trim();
 
             return "Guest";
+        }
+
+        private void ClearAllExternalLinksInternal()
+        {
+            storage.ClearGoogleLink();
+            storage.ClearAppleLink();
+        }
+
+        private void SetCurrentIdentity(PlayerIdentity identity)
+        {
+            CurrentIdentity = identity ?? PlayerIdentity.Invalid();
+            CurrentSession = new AuthSession(CurrentIdentity, CurrentIdentity.IsValid);
+            SessionChanged?.Invoke(CurrentSession);
         }
     }
 }

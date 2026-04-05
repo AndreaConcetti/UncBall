@@ -5,31 +5,38 @@ namespace UncballArena.Core.Auth
     public sealed class GuestAuthProvider : IAuthProvider
     {
         private readonly LocalAuthStorage storage;
-        private readonly string fallbackGuestName;
+        private readonly string defaultGuestDisplayName;
 
         public AuthProviderType ProviderType => AuthProviderType.Guest;
         public bool IsAvailable => true;
 
-        public GuestAuthProvider(LocalAuthStorage storage, string fallbackGuestName = "Guest")
+        public GuestAuthProvider(LocalAuthStorage storage, string defaultGuestDisplayName = "Guest")
         {
             this.storage = storage;
-            this.fallbackGuestName = string.IsNullOrWhiteSpace(fallbackGuestName) ? "Guest" : fallbackGuestName;
+            this.defaultGuestDisplayName = string.IsNullOrWhiteSpace(defaultGuestDisplayName)
+                ? "Guest"
+                : defaultGuestDisplayName.Trim();
         }
 
         public Task<AuthProviderSignInResult> SignInAsync()
         {
-            string guestPlayerId = storage.GetOrCreateGuestPlayerId();
-            string displayName = storage.GetDisplayName(fallbackGuestName);
+            string playerId = storage.GetOrCreateGuestPlayerId();
+            string displayName = storage.GetDisplayName(defaultGuestDisplayName);
 
             PlayerIdentity identity = new PlayerIdentity(
-                guestPlayerId,
-                AuthProviderType.Guest,
-                guestPlayerId,
-                displayName,
-                true,
-                storage.IsGoogleLinked() || storage.IsAppleLinked());
+                playerId: playerId,
+                providerType: AuthProviderType.Guest,
+                providerUserId: playerId,
+                displayName: displayName,
+                isGuest: true,
+                isLinked: false);
 
             return Task.FromResult(AuthProviderSignInResult.Success(identity));
+        }
+
+        public Task SignOutAsync()
+        {
+            return Task.CompletedTask;
         }
     }
 }

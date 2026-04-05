@@ -20,7 +20,6 @@ namespace UncballArena.Core.Auth.UI
         private bool actionInProgress;
 
         public AccountOverview CurrentOverview { get; private set; }
-
         public bool IsBusy => actionInProgress;
 
         private void OnEnable()
@@ -84,7 +83,27 @@ namespace UncballArena.Core.Auth.UI
             }
         }
 
-        public async void SignInAsGuest(string displayName = "")
+        public async void SignInAsGuest()
+        {
+            if (!BeginAction("SignInAsGuest"))
+                return;
+
+            try
+            {
+                await authService.SignInAsGuestAsync(CancellationToken.None);
+                Refresh();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[AccountPresenter] SignInAsGuest failed: {ex.Message}", this);
+            }
+            finally
+            {
+                EndAction("SignInAsGuest");
+            }
+        }
+
+        public async void SignInAsGuest(string guestDisplayName)
         {
             if (!BeginAction("SignInAsGuest"))
                 return;
@@ -93,8 +112,8 @@ namespace UncballArena.Core.Auth.UI
             {
                 await authService.SignInAsGuestAsync(CancellationToken.None);
 
-                if (!string.IsNullOrWhiteSpace(displayName))
-                    await profileService.SetDisplayNameAsync(displayName.Trim());
+                if (!string.IsNullOrWhiteSpace(guestDisplayName))
+                    await profileService.SetDisplayNameAsync(guestDisplayName.Trim());
 
                 Refresh();
             }
@@ -115,7 +134,7 @@ namespace UncballArena.Core.Auth.UI
 
             try
             {
-                await authService.SignInWithGooglePlayAsync(CancellationToken.None);
+                await authService.SignInWithGoogleAsync(CancellationToken.None);
                 Refresh();
             }
             catch (Exception ex)
@@ -185,6 +204,94 @@ namespace UncballArena.Core.Auth.UI
             finally
             {
                 EndAction("LinkApple");
+            }
+        }
+
+        public async void UnlinkGoogle()
+        {
+            if (!BeginAction("UnlinkGoogle"))
+                return;
+
+            try
+            {
+                await authService.UnlinkGoogleAsync(CancellationToken.None);
+                Refresh();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[AccountPresenter] UnlinkGoogle failed: {ex.Message}", this);
+            }
+            finally
+            {
+                EndAction("UnlinkGoogle");
+            }
+        }
+
+        public async void UnlinkApple()
+        {
+            if (!BeginAction("UnlinkApple"))
+                return;
+
+            try
+            {
+                await authService.UnlinkAppleAsync(CancellationToken.None);
+                Refresh();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[AccountPresenter] UnlinkApple failed: {ex.Message}", this);
+            }
+            finally
+            {
+                EndAction("UnlinkApple");
+            }
+        }
+
+        public async void UnlinkCurrentProvider()
+        {
+            if (!BeginAction("UnlinkCurrentProvider"))
+                return;
+
+            try
+            {
+                if (!TryBind())
+                    return;
+
+                AccountOverview overview = authService.GetAccountOverview();
+
+                if (logDebug)
+                {
+                    Debug.Log(
+                        $"[AccountPresenter] UnlinkCurrentProvider requested. CurrentProvider={overview.CurrentProviderType}",
+                        this);
+                }
+
+                switch (overview.CurrentProviderType)
+                {
+                    case AuthProviderType.GooglePlayGames:
+                        await authService.UnlinkGoogleAsync(CancellationToken.None);
+                        break;
+
+                    case AuthProviderType.Apple:
+                        await authService.UnlinkAppleAsync(CancellationToken.None);
+                        break;
+
+                    case AuthProviderType.Guest:
+                    default:
+                        if (logDebug)
+                            Debug.Log("[AccountPresenter] UnlinkCurrentProvider ignored because current provider is Guest.", this);
+                        break;
+                }
+
+                Refresh();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[AccountPresenter] UnlinkCurrentProvider failed: {ex.Message}", this);
+            }
+            finally
+            {
+                EndAction("UnlinkCurrentProvider");
             }
         }
 

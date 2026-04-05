@@ -43,13 +43,28 @@ namespace UncballArena.Core.Auth
             }
 #else
             if (logDebug)
-            {
                 Debug.Log("[GooglePlayAuthProvider] SignInAsync skipped. Google Play Games is not available on this platform/build.");
-            }
 
             return Task.FromResult(AuthProviderSignInResult.Failure(
                 "Google Play Games is not available on this platform/build."));
 #endif
+        }
+
+        public Task SignOutAsync()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[GooglePlayAuthProvider] SignOutAsync requested. " +
+                    "This plugin version does not expose PlayGamesPlatform.SignOut(). " +
+                    "Skipping provider-level sign-out and relying on app-level unlink/session cleanup.");
+            }
+#else
+            if (logDebug)
+                Debug.Log("[GooglePlayAuthProvider] SignOutAsync skipped on unsupported platform.");
+#endif
+            return Task.CompletedTask;
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -91,8 +106,7 @@ namespace UncballArena.Core.Auth
 
             if (alreadyAuthenticated)
             {
-                AuthProviderSignInResult immediateResult = BuildSuccessResult(platform, "AlreadyAuthenticated");
-                tcs.TrySetResult(immediateResult);
+                tcs.TrySetResult(BuildSuccessResult(platform, "AlreadyAuthenticated"));
                 return tcs.Task;
             }
 
@@ -199,7 +213,7 @@ namespace UncballArena.Core.Auth
                 displayName = "GooglePlayer";
 
             PlayerIdentity identity = new PlayerIdentity(
-                playerId: string.Empty,
+                playerId: providerUserId,
                 providerType: AuthProviderType.GooglePlayGames,
                 providerUserId: providerUserId,
                 displayName: displayName,

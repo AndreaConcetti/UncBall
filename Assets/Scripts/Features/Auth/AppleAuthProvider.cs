@@ -22,17 +22,24 @@ namespace UncballArena.Core.Auth
 
         public Task<AuthProviderSignInResult> SignInAsync()
         {
-            if (!IsAvailable)
-            {
-                return Task.FromResult(AuthProviderSignInResult.Failure("Apple Sign In is not available on this platform/build."));
-            }
-
             if (logDebug)
             {
-                Debug.Log("[AppleAuthProvider] SignInAsync called. Real plugin flow not wired yet.");
+                Debug.Log(
+                    "[AppleAuthProvider] SignInAsync not implemented yet or unavailable on this platform.");
             }
 
-            return Task.FromResult(AuthProviderSignInResult.Failure("Apple Sign In plugin not wired yet."));
+            return Task.FromResult(AuthProviderSignInResult.Failure(
+                "Apple Sign In is not implemented yet or unavailable on this platform."));
+        }
+
+        public Task SignOutAsync()
+        {
+            if (logDebug)
+            {
+                Debug.Log("[AppleAuthProvider] SignOutAsync skipped.");
+            }
+
+            return Task.CompletedTask;
         }
     }
 }

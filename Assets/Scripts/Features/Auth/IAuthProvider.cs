@@ -8,5 +8,6 @@ namespace UncballArena.Core.Auth
         bool IsAvailable { get; }
 
         Task<AuthProviderSignInResult> SignInAsync();
+        Task SignOutAsync();
     }
 }
