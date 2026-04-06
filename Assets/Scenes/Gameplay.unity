@@ -5816,6 +5816,7 @@ MonoBehaviour:
   gameplayCamera: {fileID: 2130389375}
   ballVisualRoll: {fileID: 0}
   onlineAuthority: {fileID: 1394314180}
+  settingsPanelUI: {fileID: 466075161}
   activePlacementArea: {fileID: 0}
   placementYOffset: 0
   placementPickRadiusScreen: 140
@@ -11992,7 +11993,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1173458655}
-  - component: {fileID: 1173458658}
   - component: {fileID: 1173458657}
   - component: {fileID: 1173458656}
   m_Layer: 5
@@ -12059,24 +12059,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1173458654}
   m_CullTransparentMesh: 1
---- !u!114 &1173458658
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1173458654}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0a5d82fbeb319724db5685f07f2fd0d5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::GameplayInputBlockerBySettingsPanel
-  settingsPanelUI: {fileID: 466075161}
-  inputBlockerRoot: {fileID: 1173458654}
-  inputBlockerImage: {fileID: 1173458656}
-  applyOnAwake: 1
-  applyOnEnable: 1
-  logDebug: 0
 --- !u!1 &1187159597
 GameObject:
   m_ObjectHideFlags: 0
@@ -12263,7 +12245,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 45.4
+  m_fontSize: 40.15
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -21025,7 +21007,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 4.568859
+  orthographic size: 5.568297
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2

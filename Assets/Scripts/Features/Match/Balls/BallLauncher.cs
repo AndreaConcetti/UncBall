@@ -20,6 +20,9 @@ public class BallLauncher : MonoBehaviour
     public BallVisualRoll ballVisualRoll;
     public OnlineGameplayAuthority onlineAuthority;
 
+    [Header("Optional UI Lock")]
+    [SerializeField] private SettingsPanelUI settingsPanelUI;
+
     [Header("Placement")]
     public BoxCollider activePlacementArea;
     public float placementYOffset = 0f;
@@ -89,11 +92,17 @@ public class BallLauncher : MonoBehaviour
             onlineAuthority = FindFirstObjectByType<OnlineGameplayAuthority>();
 
         cachedSpawner = FindFirstObjectByType<BallTurnSpawner>();
+
+        if (settingsPanelUI == null)
+            settingsPanelUI = FindFirstObjectByType<SettingsPanelUI>();
 #else
         if (onlineAuthority == null)
             onlineAuthority = FindObjectOfType<OnlineGameplayAuthority>();
 
         cachedSpawner = FindObjectOfType<BallTurnSpawner>();
+
+        if (settingsPanelUI == null)
+            settingsPanelUI = FindObjectOfType<SettingsPanelUI>();
 #endif
 
         RefreshBallVisualRollReference();
@@ -123,6 +132,7 @@ public class BallLauncher : MonoBehaviour
     {
         ResolveOnlineController();
         ResolveSpawner();
+        ResolveSettingsPanel();
         SyncOnlineCurrentBallBinding();
         AbortLocalPresentationIfStateInvalid();
 
@@ -167,6 +177,18 @@ public class BallLauncher : MonoBehaviour
         cachedController = FindFirstObjectByType<FusionOnlineMatchController>();
 #else
         cachedController = FindObjectOfType<FusionOnlineMatchController>();
+#endif
+    }
+
+    private void ResolveSettingsPanel()
+    {
+        if (settingsPanelUI != null)
+            return;
+
+#if UNITY_2023_1_OR_NEWER
+        settingsPanelUI = FindFirstObjectByType<SettingsPanelUI>();
+#else
+        settingsPanelUI = FindObjectOfType<SettingsPanelUI>();
 #endif
     }
 
@@ -839,6 +861,11 @@ public class BallLauncher : MonoBehaviour
 
     bool IsGameplayInputLocked()
     {
+        ResolveSettingsPanel();
+
+        if (settingsPanelUI != null && settingsPanelUI.IsPanelOpen)
+            return true;
+
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
             return true;
 
