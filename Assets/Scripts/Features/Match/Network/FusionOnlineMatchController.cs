@@ -1101,15 +1101,19 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         if (rb != null)
         {
-            rb.isKinematic = true;
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
-            rb.constraints = RigidbodyConstraints.FreezeAll;
-            rb.position = finalTarget;
+            if (!rb.isKinematic)
+                rb.isKinematic = true;
+
+            if (rb.constraints != RigidbodyConstraints.FreezeAll)
+                rb.constraints = RigidbodyConstraints.FreezeAll;
+
+            if (Vector3.SqrMagnitude(rb.position - finalTarget) > 0.0000001f)
+                rb.position = finalTarget;
         }
         else
         {
-            ball.transform.position = finalTarget;
+            if (Vector3.SqrMagnitude(ball.transform.position - finalTarget) > 0.0000001f)
+                ball.transform.position = finalTarget;
         }
     }
 
@@ -1489,6 +1493,4 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         return onlineFlowController.RuntimeContext.currentSession;
     }
-
-
 }

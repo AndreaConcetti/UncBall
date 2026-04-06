@@ -29,6 +29,9 @@ public class BallLauncher : MonoBehaviour
     public float placementPickRadiusScreen = 140f;
     public float placementSmoothSpeed = 20f;
 
+    [Header("Placement Network Sync")]
+    [SerializeField] private float placementNetworkSendThreshold = 0.02f;
+
     [Header("Confirm")]
     public bool allowKeyboardConfirm = true;
     public bool allowDoubleTapConfirm = true;
@@ -81,6 +84,9 @@ public class BallLauncher : MonoBehaviour
     private bool hasPlacementDragStart;
     private Vector3 placementDragStartWorldPoint;
     private Vector3 placementDragStartBallWorldPosition;
+
+    private bool hasLastRequestedPlacement;
+    private Vector3 lastRequestedPlacementWorld;
 
     private FusionOnlineMatchController cachedController;
     private BallTurnSpawner cachedSpawner;
@@ -287,6 +293,9 @@ public class BallLauncher : MonoBehaviour
         placementDragStartWorldPoint = Vector3.zero;
         placementDragStartBallWorldPosition = Vector3.zero;
 
+        hasLastRequestedPlacement = false;
+        lastRequestedPlacementWorld = Vector3.zero;
+
         CurrentPhase = LaunchPhase.Placement;
 
         RefreshBallVisualRollReference();
@@ -298,11 +307,9 @@ public class BallLauncher : MonoBehaviour
             Rigidbody rb = ball.GetComponent<Rigidbody>();
             if (rb != null)
             {
-                rb.isKinematic = false;
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                rb.constraints = RigidbodyConstraints.FreezeAll;
                 rb.isKinematic = true;
+                rb.constraints = RigidbodyConstraints.FreezeAll;
+                rb.position = ball.transform.position;
             }
         }
 
@@ -351,6 +358,9 @@ public class BallLauncher : MonoBehaviour
         mouseAimDragging = false;
         hasPlacementDragStart = false;
         activeFinger = null;
+
+        hasLastRequestedPlacement = false;
+        lastRequestedPlacementWorld = Vector3.zero;
 
         ChargeRatio = 0f;
         LaunchDirection = Vector3.zero;
@@ -610,16 +620,41 @@ public class BallLauncher : MonoBehaviour
 
         Rigidbody rb = ball.GetComponent<Rigidbody>();
         if (rb != null)
+        {
             rb.position = targetWorld;
+        }
         else
+        {
             ball.transform.position = targetWorld;
+        }
 
         if (cachedController != null && cachedController.IsNetworkStateReadable)
-            cachedController.RequestSetCurrentBallPlacement(targetWorld);
+        {
+            if (!hasLastRequestedPlacement ||
+                Vector3.SqrMagnitude(targetWorld - lastRequestedPlacementWorld) >= placementNetworkSendThreshold * placementNetworkSendThreshold)
+            {
+                cachedController.RequestSetCurrentBallPlacement(targetWorld);
+                lastRequestedPlacementWorld = targetWorld;
+                hasLastRequestedPlacement = true;
+            }
+        }
     }
 
     void EndPlacementDrag()
     {
+        if (ball != null && cachedController != null && cachedController.IsNetworkStateReadable)
+        {
+            Vector3 finalWorld = ball.transform.position;
+
+            if (!hasLastRequestedPlacement ||
+                Vector3.SqrMagnitude(finalWorld - lastRequestedPlacementWorld) > 0.000001f)
+            {
+                cachedController.RequestSetCurrentBallPlacement(finalWorld);
+                lastRequestedPlacementWorld = finalWorld;
+                hasLastRequestedPlacement = true;
+            }
+        }
+
         isPlacementDragging = false;
         hasPlacementDragStart = false;
         ClearActiveFinger();
@@ -627,6 +662,19 @@ public class BallLauncher : MonoBehaviour
 
     void EndMousePlacementDrag()
     {
+        if (ball != null && cachedController != null && cachedController.IsNetworkStateReadable)
+        {
+            Vector3 finalWorld = ball.transform.position;
+
+            if (!hasLastRequestedPlacement ||
+                Vector3.SqrMagnitude(finalWorld - lastRequestedPlacementWorld) > 0.000001f)
+            {
+                cachedController.RequestSetCurrentBallPlacement(finalWorld);
+                lastRequestedPlacementWorld = finalWorld;
+                hasLastRequestedPlacement = true;
+            }
+        }
+
         mousePlacementDragging = false;
         hasPlacementDragStart = false;
     }

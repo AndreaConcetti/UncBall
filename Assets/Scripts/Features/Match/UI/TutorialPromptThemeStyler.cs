@@ -7,24 +7,24 @@ public class TutorialPromptThemeStyler : MonoBehaviour
     [SerializeField] private SettingsPanelUI settingsPanelUI;
 
     [Header("Tutorial Prompt Texts")]
-    [SerializeField] private TextMeshProUGUI tipTextLock;
-    [SerializeField] private TextMeshProUGUI tipTextShoot;
+    [SerializeField] private TMP_Text tipTextLock;
+    [SerializeField] private TMP_Text tipTextShoot;
 
     [Header("Score Popup Texts")]
-    [SerializeField] private TextMeshProUGUI comboText;
-    [SerializeField] private TextMeshProUGUI addPointsText;
+    [SerializeField] private TMP_Text comboText;
+    [SerializeField] private TMP_Text addPointsText;
 
-    [Header("Light Theme - Dark Text Gradient")]
-    [SerializeField] private Color lightTopLeft = new Color32(35, 35, 35, 255);
-    [SerializeField] private Color lightTopRight = new Color32(35, 35, 35, 255);
-    [SerializeField] private Color lightBottomLeft = new Color32(95, 95, 95, 255);
-    [SerializeField] private Color lightBottomRight = new Color32(95, 95, 95, 255);
+    [Header("Light Theme - Dark Gradient")]
+    [SerializeField] private Color lightTopLeft = Color.black;
+    [SerializeField] private Color lightTopRight = Color.black;
+    [SerializeField] private Color lightBottomLeft = Color.gray;
+    [SerializeField] private Color lightBottomRight = Color.gray;
 
-    [Header("Dark Theme - Bright Text Gradient")]
-    [SerializeField] private Color darkTopLeft = new Color32(255, 245, 170, 255);
-    [SerializeField] private Color darkTopRight = new Color32(255, 245, 170, 255);
-    [SerializeField] private Color darkBottomLeft = new Color32(255, 255, 255, 255);
-    [SerializeField] private Color darkBottomRight = new Color32(255, 255, 255, 255);
+    [Header("Dark Theme - Bright Gradient")]
+    [SerializeField] private Color darkTopLeft = Color.white;
+    [SerializeField] private Color darkTopRight = Color.white;
+    [SerializeField] private Color darkBottomLeft = Color.yellow;
+    [SerializeField] private Color darkBottomRight = Color.red;
 
     [Header("Behavior")]
     [SerializeField] private bool applyOnAwake = true;
@@ -35,16 +35,12 @@ public class TutorialPromptThemeStyler : MonoBehaviour
 
     private void Awake()
     {
-        ResolveDependencies();
-
         if (applyOnAwake)
             ApplyCurrentTheme();
     }
 
     private void OnEnable()
     {
-        ResolveDependencies();
-
         if (settingsPanelUI != null)
             settingsPanelUI.TableThemeDarkModeChanged += HandleThemeChanged;
 
@@ -58,49 +54,43 @@ public class TutorialPromptThemeStyler : MonoBehaviour
             settingsPanelUI.TableThemeDarkModeChanged -= HandleThemeChanged;
     }
 
-    public void ApplyCurrentTheme()
-    {
-        ApplyTheme(LocalGameSettings.TableDarkModeEnabled);
-    }
-
-    public void ApplyTheme(bool darkMode)
-    {
-        VertexGradient gradient = darkMode
-            ? new VertexGradient(darkTopLeft, darkTopRight, darkBottomLeft, darkBottomRight)
-            : new VertexGradient(lightTopLeft, lightTopRight, lightBottomLeft, lightBottomRight);
-
-        ApplyGradientToText(tipTextLock, gradient);
-        ApplyGradientToText(tipTextShoot, gradient);
-        ApplyGradientToText(comboText, gradient);
-        ApplyGradientToText(addPointsText, gradient);
-
-        if (logDebug)
-            Debug.Log("[TutorialPromptThemeStyler] ApplyTheme -> DarkMode=" + darkMode, this);
-    }
-
     private void HandleThemeChanged(bool darkMode)
     {
         ApplyTheme(darkMode);
     }
 
-    private void ApplyGradientToText(TextMeshProUGUI textComponent, VertexGradient gradient)
+    private void ApplyCurrentTheme()
     {
-        if (textComponent == null)
+        if (settingsPanelUI == null)
             return;
 
-        textComponent.enableVertexGradient = true;
-        textComponent.colorGradient = gradient;
-        textComponent.ForceMeshUpdate();
+        ApplyTheme(settingsPanelUI.DarkThemeEnabled);
     }
 
-    private void ResolveDependencies()
+    private void ApplyTheme(bool darkMode)
     {
-#if UNITY_2023_1_OR_NEWER
-        if (settingsPanelUI == null)
-            settingsPanelUI = FindFirstObjectByType<SettingsPanelUI>(FindObjectsInactive.Include);
-#else
-        if (settingsPanelUI == null)
-            settingsPanelUI = FindObjectOfType<SettingsPanelUI>();
-#endif
+        Color tl = darkMode ? darkTopLeft : lightTopLeft;
+        Color tr = darkMode ? darkTopRight : lightTopRight;
+        Color bl = darkMode ? darkBottomLeft : lightBottomLeft;
+        Color br = darkMode ? darkBottomRight : lightBottomRight;
+
+        ApplyVertexGradient(tipTextLock, tl, tr, bl, br);
+        ApplyVertexGradient(tipTextShoot, tl, tr, bl, br);
+        ApplyVertexGradient(comboText, tl, tr, bl, br);
+        ApplyVertexGradient(addPointsText, tl, tr, bl, br);
+
+        if (logDebug)
+            Debug.Log("[TutorialPromptThemeStyler] Applied theme -> darkMode=" + darkMode, this);
+    }
+
+    private static void ApplyVertexGradient(TMP_Text text, Color tl, Color tr, Color bl, Color br)
+    {
+        if (text == null)
+            return;
+
+        text.color = Color.white;
+        text.enableVertexGradient = true;
+        text.colorGradient = new VertexGradient(tl, tr, bl, br);
+        text.ForceMeshUpdate();
     }
 }

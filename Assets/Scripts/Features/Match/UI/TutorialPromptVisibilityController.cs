@@ -15,60 +15,44 @@ public class TutorialPromptVisibilityController : MonoBehaviour
 
     private void Awake()
     {
-        ResolveDependencies();
-
         if (applyOnAwake)
-            ApplyVisibility();
+            ApplyCurrentState();
     }
 
     private void OnEnable()
     {
-        ResolveDependencies();
-
         if (settingsPanelUI != null)
-            settingsPanelUI.TutorialPromptSettingChanged += HandleTutorialPromptSettingChanged;
+            settingsPanelUI.TutorialPromptSettingChanged += HandleTutorialPromptChanged;
 
         if (applyOnEnable)
-            ApplyVisibility();
+            ApplyCurrentState();
     }
 
     private void OnDisable()
     {
         if (settingsPanelUI != null)
-            settingsPanelUI.TutorialPromptSettingChanged -= HandleTutorialPromptSettingChanged;
+            settingsPanelUI.TutorialPromptSettingChanged -= HandleTutorialPromptChanged;
     }
 
-    public void ApplyVisibility()
+    private void HandleTutorialPromptChanged(bool enabled)
     {
-        if (tutorialPromptsRoot == null)
+        ApplyVisibility(enabled);
+    }
+
+    private void ApplyCurrentState()
+    {
+        if (settingsPanelUI == null)
             return;
 
-        bool visible = TutorialPromptSettings.TutorialPromptsEnabled;
-        tutorialPromptsRoot.SetActive(visible);
-
-        if (logDebug)
-            Debug.Log("[TutorialPromptVisibilityController] ApplyVisibility -> " + visible, this);
+        ApplyVisibility(settingsPanelUI.TutorialPromptsEnabled);
     }
 
-    private void HandleTutorialPromptSettingChanged(bool enabled)
+    private void ApplyVisibility(bool enabled)
     {
-        if (tutorialPromptsRoot == null)
-            return;
-
-        tutorialPromptsRoot.SetActive(enabled);
+        if (tutorialPromptsRoot != null)
+            tutorialPromptsRoot.SetActive(enabled);
 
         if (logDebug)
-            Debug.Log("[TutorialPromptVisibilityController] HandleTutorialPromptSettingChanged -> " + enabled, this);
-    }
-
-    private void ResolveDependencies()
-    {
-#if UNITY_2023_1_OR_NEWER
-        if (settingsPanelUI == null)
-            settingsPanelUI = FindFirstObjectByType<SettingsPanelUI>(FindObjectsInactive.Include);
-#else
-        if (settingsPanelUI == null)
-            settingsPanelUI = FindObjectOfType<SettingsPanelUI>();
-#endif
+            Debug.Log("[TutorialPromptVisibilityController] TutorialPromptsRoot -> " + enabled, this);
     }
 }

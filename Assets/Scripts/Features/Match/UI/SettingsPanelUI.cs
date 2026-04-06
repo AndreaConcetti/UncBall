@@ -21,30 +21,24 @@ public class SettingsPanelUI : MonoBehaviour
     [SerializeField] private Image tutorialPromptStateImage;
     [SerializeField] private Sprite tutorialPromptEnabledSprite;
     [SerializeField] private Sprite tutorialPromptDisabledSprite;
-    [SerializeField] private TMP_Text tutorialPromptValueText;
-    [SerializeField] private string tutorialPromptEnabledText = "ON";
-    [SerializeField] private string tutorialPromptDisabledText = "OFF";
 
     [Header("Audio")]
     [SerializeField] private Button audioButton;
     [SerializeField] private Image audioStateImage;
     [SerializeField] private Sprite audioEnabledSprite;
     [SerializeField] private Sprite audioDisabledSprite;
-    [SerializeField] private TMP_Text audioValueText;
-    [SerializeField] private string audioEnabledText = "ON";
-    [SerializeField] private string audioDisabledText = "OFF";
 
     [Header("Table Theme")]
     [SerializeField] private Button tableThemeButton;
-    [SerializeField] private Image tableThemeStateImage;
-    [SerializeField] private Sprite tableThemeLightSprite;
-    [SerializeField] private Sprite tableThemeDarkSprite;
     [SerializeField] private TMP_Text tableThemeValueText;
     [SerializeField] private string tableThemeLightText = "LIGHT";
     [SerializeField] private string tableThemeDarkText = "DARK";
 
-    [Header("Dependencies")]
-    [SerializeField] private TableThemeController tableThemeController;
+    [Header("Direct Table Theme Apply")]
+    [SerializeField] private Renderer[] tableThemeTargetRenderers;
+    [SerializeField] private Material lightTableMaterial;
+    [SerializeField] private Material darkTableMaterial;
+    [SerializeField] private bool instantiateMaterialsAtRuntime = true;
 
     [Header("Behavior")]
     [SerializeField] private bool startClosed = true;
@@ -57,45 +51,48 @@ public class SettingsPanelUI : MonoBehaviour
     private bool audioEnabled = true;
     private bool darkThemeEnabled = false;
 
+    private Material runtimeLightMaterialInstance;
+    private Material runtimeDarkMaterialInstance;
+
     public bool IsPanelOpen => panelRoot != null && panelRoot.activeSelf;
     public bool TutorialPromptsEnabled => tutorialPromptsEnabled;
     public bool AudioEnabled => audioEnabled;
     public bool DarkThemeEnabled => darkThemeEnabled;
 
-    // Eventi legacy attesi dagli altri script del progetto
     public event Action<bool> TutorialPromptSettingChanged;
     public event Action<bool> AudioSettingChanged;
     public event Action<bool> TableThemeDarkModeChanged;
     public event Action<bool> PanelOpenStateChanged;
 
-    // Eventi alias aggiuntivi, per compatibilità futura
-    public event Action<bool> OnTutorialPromptsChanged;
-    public event Action<bool> OnAudioChanged;
-    public event Action<bool> OnTableThemeChanged;
-    public event Action<bool> OnPanelOpenStateChanged;
-
     private void Awake()
     {
         LoadPreferences();
-        ResolveDependencies();
+        PrepareRuntimeMaterials();
 
         if (autoWireUi)
             WireButtons();
 
-        SetPanelOpen(!startClosed, true);
+        if (panelRoot != null)
+            panelRoot.SetActive(!startClosed);
+
         ApplyAllVisualState();
-        ApplyAllRuntimeState(true);
+        ApplyAllRuntimeState(notifyListeners: true);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                $"[SettingsPanelUI] Awake -> Tutorial={tutorialPromptsEnabled} | Audio={audioEnabled} | DarkTheme={darkThemeEnabled}",
+                this);
+        }
     }
 
     private void OnEnable()
     {
-        ResolveDependencies();
-
         if (autoWireUi)
             WireButtons();
 
         ApplyAllVisualState();
-        ApplyAllRuntimeState(true);
+        ApplyAllRuntimeState(notifyListeners: true);
     }
 
     private void OnDisable()
@@ -103,16 +100,13 @@ public class SettingsPanelUI : MonoBehaviour
         UnwireButtons();
     }
 
-    private void ResolveDependencies()
+    private void OnDestroy()
     {
-        if (tableThemeController == null)
-        {
-#if UNITY_2023_1_OR_NEWER
-            tableThemeController = FindFirstObjectByType<TableThemeController>();
-#else
-            tableThemeController = FindObjectOfType<TableThemeController>();
-#endif
-        }
+        if (runtimeLightMaterialInstance != null)
+            Destroy(runtimeLightMaterialInstance);
+
+        if (runtimeDarkMaterialInstance != null)
+            Destroy(runtimeDarkMaterialInstance);
     }
 
     private void WireButtons()
@@ -168,31 +162,42 @@ public class SettingsPanelUI : MonoBehaviour
         PlayerPrefs.Save();
     }
 
+    private void PrepareRuntimeMaterials()
+    {
+        if (!instantiateMaterialsAtRuntime)
+            return;
+
+        if (lightTableMaterial != null && runtimeLightMaterialInstance == null)
+            runtimeLightMaterialInstance = new Material(lightTableMaterial);
+
+        if (darkTableMaterial != null && runtimeDarkMaterialInstance == null)
+            runtimeDarkMaterialInstance = new Material(darkTableMaterial);
+    }
+
     public void OpenPanel()
     {
-        SetPanelOpen(true, false);
+        SetPanelOpen(true);
     }
 
     public void ClosePanel()
     {
-        SetPanelOpen(false, false);
+        SetPanelOpen(false);
     }
 
     public void TogglePanel()
     {
-        SetPanelOpen(!IsPanelOpen, false);
+        SetPanelOpen(!IsPanelOpen);
     }
 
-    public void SetPanelOpen(bool open, bool silent)
+    public void SetPanelOpen(bool open)
     {
         if (panelRoot != null)
             panelRoot.SetActive(open);
 
+        PanelOpenStateChanged?.Invoke(open);
+
         if (logDebug)
             Debug.Log("[SettingsPanelUI] SetPanelOpen -> " + open, this);
-
-        if (!silent)
-            RaisePanelOpenStateChanged(open);
     }
 
     public void ToggleTutorialPrompt()
@@ -219,10 +224,10 @@ public class SettingsPanelUI : MonoBehaviour
         SavePreferences();
 
         ApplyTutorialPromptVisualState();
-        RaiseTutorialPromptChanged(enabled);
+        TutorialPromptSettingChanged?.Invoke(enabled);
 
         if (logDebug)
-            Debug.Log("[SettingsPanelUI] Tutorial prompts -> " + enabled, this);
+            Debug.Log("[SettingsPanelUI] TutorialPrompts -> " + enabled, this);
     }
 
     public void SetAudioEnabled(bool enabled)
@@ -234,7 +239,7 @@ public class SettingsPanelUI : MonoBehaviour
         SavePreferences();
 
         ApplyAudioVisualState();
-        RaiseAudioChanged(enabled);
+        AudioSettingChanged?.Invoke(enabled);
 
         if (logDebug)
             Debug.Log("[SettingsPanelUI] Audio -> " + enabled, this);
@@ -249,10 +254,11 @@ public class SettingsPanelUI : MonoBehaviour
         SavePreferences();
 
         ApplyTableThemeVisualState();
-        RaiseTableThemeChanged(enabled);
+        ApplyTableThemeToRenderers();
+        TableThemeDarkModeChanged?.Invoke(enabled);
 
         if (logDebug)
-            Debug.Log("[SettingsPanelUI] Dark theme -> " + enabled, this);
+            Debug.Log("[SettingsPanelUI] DarkTheme -> " + enabled, this);
     }
 
     private void ApplyAllVisualState()
@@ -264,62 +270,78 @@ public class SettingsPanelUI : MonoBehaviour
 
     private void ApplyAllRuntimeState(bool notifyListeners)
     {
-        if (!notifyListeners)
-            return;
+        ApplyTableThemeToRenderers();
 
-        RaiseTutorialPromptChanged(tutorialPromptsEnabled);
-        RaiseAudioChanged(audioEnabled);
-        RaiseTableThemeChanged(darkThemeEnabled);
+        if (notifyListeners)
+        {
+            TutorialPromptSettingChanged?.Invoke(tutorialPromptsEnabled);
+            AudioSettingChanged?.Invoke(audioEnabled);
+            TableThemeDarkModeChanged?.Invoke(darkThemeEnabled);
+        }
     }
 
     private void ApplyTutorialPromptVisualState()
     {
         if (tutorialPromptStateImage != null)
-            tutorialPromptStateImage.sprite = tutorialPromptsEnabled ? tutorialPromptEnabledSprite : tutorialPromptDisabledSprite;
-
-        if (tutorialPromptValueText != null)
-            tutorialPromptValueText.text = tutorialPromptsEnabled ? tutorialPromptEnabledText : tutorialPromptDisabledText;
+        {
+            tutorialPromptStateImage.sprite = tutorialPromptsEnabled
+                ? tutorialPromptEnabledSprite
+                : tutorialPromptDisabledSprite;
+        }
     }
 
     private void ApplyAudioVisualState()
     {
         if (audioStateImage != null)
-            audioStateImage.sprite = audioEnabled ? audioEnabledSprite : audioDisabledSprite;
-
-        if (audioValueText != null)
-            audioValueText.text = audioEnabled ? audioEnabledText : audioDisabledText;
+        {
+            audioStateImage.sprite = audioEnabled
+                ? audioEnabledSprite
+                : audioDisabledSprite;
+        }
     }
 
     private void ApplyTableThemeVisualState()
     {
-        if (tableThemeStateImage != null)
-            tableThemeStateImage.sprite = darkThemeEnabled ? tableThemeDarkSprite : tableThemeLightSprite;
-
         if (tableThemeValueText != null)
-            tableThemeValueText.text = darkThemeEnabled ? tableThemeDarkText : tableThemeLightText;
+        {
+            tableThemeValueText.text = darkThemeEnabled
+                ? tableThemeDarkText
+                : tableThemeLightText;
+        }
     }
 
-    private void RaiseTutorialPromptChanged(bool value)
+    private void ApplyTableThemeToRenderers()
     {
-        TutorialPromptSettingChanged?.Invoke(value);
-        OnTutorialPromptsChanged?.Invoke(value);
+        if (tableThemeTargetRenderers == null || tableThemeTargetRenderers.Length == 0)
+            return;
+
+        Material targetMaterial = GetTargetThemeMaterial();
+        if (targetMaterial == null)
+            return;
+
+        for (int i = 0; i < tableThemeTargetRenderers.Length; i++)
+        {
+            Renderer targetRenderer = tableThemeTargetRenderers[i];
+            if (targetRenderer == null)
+                continue;
+
+            targetRenderer.sharedMaterial = targetMaterial;
+        }
     }
 
-    private void RaiseAudioChanged(bool value)
+    private Material GetTargetThemeMaterial()
     {
-        AudioSettingChanged?.Invoke(value);
-        OnAudioChanged?.Invoke(value);
-    }
+        if (darkThemeEnabled)
+        {
+            if (instantiateMaterialsAtRuntime && runtimeDarkMaterialInstance != null)
+                return runtimeDarkMaterialInstance;
 
-    private void RaiseTableThemeChanged(bool value)
-    {
-        TableThemeDarkModeChanged?.Invoke(value);
-        OnTableThemeChanged?.Invoke(value);
-    }
+            return darkTableMaterial;
+        }
 
-    private void RaisePanelOpenStateChanged(bool value)
-    {
-        PanelOpenStateChanged?.Invoke(value);
-        OnPanelOpenStateChanged?.Invoke(value);
+        if (instantiateMaterialsAtRuntime && runtimeLightMaterialInstance != null)
+            return runtimeLightMaterialInstance;
+
+        return lightTableMaterial;
     }
 }
