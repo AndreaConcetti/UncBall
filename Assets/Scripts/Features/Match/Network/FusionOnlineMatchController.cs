@@ -156,6 +156,11 @@ public class FusionOnlineMatchController : NetworkBehaviour
         Object.IsValid &&
         Runner != null;
 
+    public bool IsTerminalOutcomeLocked =>
+        localForcedEndActive ||
+        cachedMatchEnded ||
+        (IsNetworkStateReadable && NetMatchEnded);
+
     public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : cachedMatchMode;
     public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : cachedPointsToWin;
     public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : cachedConfiguredMatchDuration;
@@ -391,6 +396,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void RequestLocalRematch()
     {
+        if (IsTerminalOutcomeLocked == false)
+            return;
+
         if (!MatchEnded || EndReason != MatchEndReason.NormalCompletion)
             return;
 
@@ -433,7 +441,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void RequestLocalSurrender()
     {
-        if (!MatchStarted || MatchEnded)
+        if (!MatchStarted || MatchEnded || IsTerminalOutcomeLocked)
             return;
 
         if (Object.HasStateAuthority)
@@ -447,7 +455,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void RequestSetCurrentBallPlacement(Vector3 targetWorldPosition)
     {
-        if (!IsNetworkStateReadable)
+        if (!IsNetworkStateReadable || IsTerminalOutcomeLocked)
             return;
 
         if (!MatchStarted || MatchEnded || MidMatchBreakActive || NetShotInFlight || NetPostShotDelayRemaining > 0f)
@@ -475,7 +483,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void RequestLaunchCurrentBall(Vector3 direction, float force)
     {
-        if (!IsNetworkStateReadable)
+        if (!IsNetworkStateReadable || IsTerminalOutcomeLocked)
             return;
 
         if (!NetMatchStarted || NetMatchEnded || NetBreakActive || NetPostShotDelayRemaining > 0f)
@@ -492,7 +500,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void RequestResumeAfterHalftime()
     {
-        if (!MidMatchBreakActive || MatchEnded)
+        if (!MidMatchBreakActive || MatchEnded || IsTerminalOutcomeLocked)
             return;
 
         if (Object.HasStateAuthority)
@@ -506,6 +514,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void NotifyRunnerPlayerLeft(PlayerRef player)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!MatchStarted || MatchEnded)
             return;
 
@@ -520,6 +531,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void NotifyLocalDisconnectedFromSession()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!MatchStarted || MatchEnded)
             return;
 
@@ -533,6 +547,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void NotifyRunnerShutdown(ShutdownReason reason)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!MatchStarted || MatchEnded)
             return;
 
@@ -546,6 +563,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void NotifyRemoteAuthorityLostAsClient()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!MatchStarted || MatchEnded)
             return;
 
@@ -562,6 +582,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestSetPlacement(Vector3 targetWorldPosition, RpcInfo info = default)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         PlayerID requester = ResolvePlayerIdFromRpc(info);
         ApplyPlacementAuthority(requester, SanitizePlacementTarget(targetWorldPosition));
     }
@@ -569,30 +592,45 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestRematch(byte requesterRaw)
     {
+        if (localForcedEndActive)
+            return;
+
         AuthorityStartRematchRequest((PlayerID)requesterRaw);
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_AcceptRematch(byte accepterRaw)
     {
+        if (localForcedEndActive)
+            return;
+
         AuthorityAcceptRematch((PlayerID)accepterRaw);
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_DeclineRematch(byte declinerRaw)
     {
+        if (localForcedEndActive)
+            return;
+
         AuthorityDeclineRematch((PlayerID)declinerRaw);
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_SubmitLocalPresentation(byte playerRaw, string displayName, string skinId)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         ApplyPresentationForPlayer((PlayerID)playerRaw, displayName, skinId);
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestLaunch(Vector3 direction, float force, RpcInfo info = default)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         PlayerID requester = ResolvePlayerIdFromRpc(info);
         ApplyLaunchAuthority(requester, direction, force);
     }
@@ -600,17 +638,26 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestResumeAfterHalftime()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         ResumeAfterMidMatchBreakAuthority();
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestSurrender(byte surrenderingPlayerRaw)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         AuthorityResolveSurrender((PlayerID)surrenderingPlayerRaw);
     }
 
     private void AuthorityStartRematchRequest(PlayerID requester)
     {
+        if (localForcedEndActive)
+            return;
+
         if (!Object.HasStateAuthority || !MatchEnded || EndReason != MatchEndReason.NormalCompletion)
             return;
 
@@ -628,6 +675,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void AuthorityAcceptRematch(PlayerID accepter)
     {
+        if (localForcedEndActive)
+            return;
+
         if (!Object.HasStateAuthority || !MatchEnded || EndReason != MatchEndReason.NormalCompletion)
             return;
 
@@ -645,6 +695,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void AuthorityDeclineRematch(PlayerID decliner)
     {
+        if (localForcedEndActive)
+            return;
+
         if (!Object.HasStateAuthority || !MatchEnded)
             return;
 
@@ -659,6 +712,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void AuthorityResolveSurrender(PlayerID surrenderingPlayer)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || !NetMatchStarted || NetMatchEnded)
             return;
 
@@ -672,6 +728,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void AuthorityEndByOpponentDisconnect()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || NetMatchEnded || !NetMatchStarted)
             return;
 
@@ -680,7 +739,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ForceLocalEnd(MatchEndReason reason, PlayerID winner)
     {
-        if (localForcedEndActive)
+        if (IsTerminalOutcomeLocked)
             return;
 
         localForcedEndActive = true;
@@ -703,7 +762,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
                 cachedScoreP1,
                 cachedScoreP2,
                 winner,
-                ConvertToOnlineMatchEndReason(reason)
+                ConvertToOnlineMatchEndReason(reason),
+                reason == MatchEndReason.OpponentDisconnected
             );
         }
 
@@ -721,6 +781,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void TickAuthorityHeartbeat()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority)
             return;
 
@@ -737,6 +800,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void TickLocalAuthorityHeartbeatWatchdog()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!IsNetworkStateReadable)
             return;
 
@@ -827,6 +893,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void RefreshAuthoritativePresentationFromSession()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         MatchSessionContext session = GetCurrentSessionContext();
         if (session == null)
             return;
@@ -1003,7 +1072,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void SubmitLocalPresentationIfNeeded()
     {
-        if (localPresentationSubmitted || !IsNetworkStateReadable)
+        if (localPresentationSubmitted || !IsNetworkStateReadable || IsTerminalOutcomeLocked)
             return;
 
         string localName = ResolveLocalDisplayName();
@@ -1033,6 +1102,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ApplyPresentationForPlayer(PlayerID player, string displayName, string skinId)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         string safeName = string.IsNullOrWhiteSpace(displayName)
             ? (player == PlayerID.Player1 ? "Player 1" : "Player 2")
             : displayName.Trim();
@@ -1074,6 +1146,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void TickAuthority()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!NetMatchStarted || NetMatchEnded)
             return;
 
@@ -1259,6 +1334,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void StartMidMatchBreakAuthority()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || NetMatchEnded || NetBreakTriggered)
             return;
 
@@ -1292,6 +1370,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ResumeAfterMidMatchBreakAuthority()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || !NetBreakActive || NetMatchEnded)
             return;
 
@@ -1313,6 +1394,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ResolveIdleTimeoutAuthority()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || NetMatchEnded)
             return;
 
@@ -1325,6 +1409,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ResolveScoringTurnCompletedAuthority()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || NetMatchEnded)
             return;
 
@@ -1364,6 +1451,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ResolveMissTurnCompletedAuthority()
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || NetMatchEnded)
             return;
 
@@ -1425,6 +1515,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ApplyPlacementAuthority(PlayerID requester, Vector3 targetWorldPosition)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || !IsNetworkStateReadable)
             return;
 
@@ -1494,6 +1587,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void ApplyLaunchAuthority(PlayerID requester, Vector3 direction, float force)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority)
             return;
 
@@ -1534,6 +1630,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void NotifyAuthoritativeBallLost(BallPhysics ball)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || NetMatchEnded)
             return;
 
@@ -1706,6 +1805,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void SpawnNewActiveBallAuthority(PlayerID owner)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || ballTurnSpawner == null)
             return;
 
@@ -1767,6 +1869,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void EndMatchAuthority(MatchEndReason reason, PlayerID forcedWinner)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || NetMatchEnded)
             return;
 
@@ -1806,7 +1911,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
                 NetScoreP1,
                 NetScoreP2,
                 (PlayerID)NetWinnerRaw,
-                ConvertToOnlineMatchEndReason(reason)
+                ConvertToOnlineMatchEndReason(reason),
+                reason == MatchEndReason.OpponentDisconnected
             );
         }
 
@@ -1827,6 +1933,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void OnScoreManagerPointsScored(PlayerID player, int newTotal)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || scoreManager == null)
             return;
 
@@ -1839,6 +1948,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void OnShotScoreDetailed(ShotScoreData data)
     {
+        if (IsTerminalOutcomeLocked)
+            return;
+
         if (!Object.HasStateAuthority || data == null)
             return;
 

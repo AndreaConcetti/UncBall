@@ -86,6 +86,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     private bool postGameDelayActive;
     private float postGameDelayRemaining;
     private bool forcedPostGameRequested;
+    private bool forcedShowOpponentDisconnectedText;
 
     private void Awake()
     {
@@ -290,9 +291,11 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         int scoreP1,
         int scoreP2,
         PlayerID winner,
-        OnlineMatchEndReason endReason)
+        OnlineMatchEndReason endReason,
+        bool showOpponentDisconnectedExplicitly)
     {
         forcedPostGameRequested = true;
+        forcedShowOpponentDisconnectedText = showOpponentDisconnectedExplicitly;
         hasReceivedNetworkState = true;
 
         string safeP1 = string.IsNullOrWhiteSpace(player1Name) ? player1FallbackName : player1Name;
@@ -335,7 +338,8 @@ public class FusionOnlineMatchHUD : MonoBehaviour
                 "P1=" + safeP1 +
                 " | P2=" + safeP2 +
                 " | Winner=" + winner +
-                " | EndReason=" + endReason,
+                " | EndReason=" + endReason +
+                " | ShowOpponentDisconnected=" + showOpponentDisconnectedExplicitly,
                 this
             );
         }
@@ -441,7 +445,9 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         }
 
         bool showOpponentDisconnected =
-            endReason == OnlineMatchEndReason.DisconnectWin;
+            forcedPostGameRequested
+                ? forcedShowOpponentDisconnectedText
+                : endReason == OnlineMatchEndReason.DisconnectWin;
 
         SetTextVisible(opponentDisconnectedText, showOpponentDisconnected);
 
@@ -582,6 +588,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         postGameDelayActive = false;
         postGameDelayRemaining = 0f;
         forcedPostGameRequested = false;
+        forcedShowOpponentDisconnectedText = false;
     }
 
     private void ResolveDependencies()

@@ -34581,6 +34581,7 @@ GameObject:
   - component: {fileID: 1801468259}
   - component: {fileID: 1801468267}
   - component: {fileID: 1801468268}
+  - component: {fileID: 1801468269}
   m_Layer: 0
   m_Name: MatchRuntime
   m_TagString: Untagged
@@ -34745,6 +34746,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::OnlinePlayerPresentationResolver
   onlineFlowController: {fileID: 1801468267}
   logDebug: 0
+--- !u!114 &1801468269
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1801468248}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c32b9d4eab2b5b48b2ceca724c886aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FusionOnlineMatchAppLifecycleGuard
+  matchController: {fileID: 0}
+  monitorApplicationPause: 1
+  monitorApplicationFocusLoss: 1
+  backgroundForfeitDelaySeconds: 6
+  logDebug: 1
 --- !u!1 &1805039842
 GameObject:
   m_ObjectHideFlags: 0
