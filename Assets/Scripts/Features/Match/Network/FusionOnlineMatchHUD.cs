@@ -32,6 +32,15 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     [SerializeField] private GameObject postGamePanel;
     [SerializeField] private GameObject pausePanel;
 
+    [Header("Post Game Delay")]
+    [SerializeField] private float postGamePanelShowDelaySeconds = 0f;
+
+    [Header("Reconnect Overlay")]
+    [SerializeField] private GameObject reconnectPanel;
+    [SerializeField] private TMP_Text reconnectTitleText;
+    [SerializeField] private TMP_Text reconnectMessageText;
+    [SerializeField] private TMP_Text reconnectCountdownText;
+
     [Header("Half Time Panel UI")]
     [SerializeField] private TMP_Text halfTimeCountdownText;
     [SerializeField] private TMP_Text halfTimePlayer1NameText;
@@ -51,7 +60,12 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     [SerializeField] private TMP_Text endgamePlayer2NameText;
     [SerializeField] private TMP_Text endgamePlayer1ScoreText;
     [SerializeField] private TMP_Text endgamePlayer2ScoreText;
-    [SerializeField] private TMP_Text winnerNameText;
+
+    [Header("Game Result Texts")]
+    [SerializeField] private TMP_Text gameResultWinnerText;
+    [SerializeField] private TMP_Text gameResultLoserText;
+    [SerializeField] private TMP_Text drawText;
+    [SerializeField] private TMP_Text opponentDisconnectedText;
 
     [Header("Layout")]
     [SerializeField] private BottomBarOrderSwapper bottomBarOrderSwapper;
@@ -68,10 +82,15 @@ public class FusionOnlineMatchHUD : MonoBehaviour
 
     private bool hasAppliedInitialLayout;
     private bool hasReceivedNetworkState;
+    private bool previousMatchEnded;
+    private bool postGameDelayActive;
+    private float postGameDelayRemaining;
+    private bool forcedPostGameRequested;
 
     private void Awake()
     {
         ResolveDependencies();
+        ResetPostGameDelayState();
     }
 
     private void OnEnable()
@@ -84,6 +103,22 @@ public class FusionOnlineMatchHUD : MonoBehaviour
 
     private void Update()
     {
+        if (postGameDelayActive)
+        {
+            postGameDelayRemaining -= Time.unscaledDeltaTime;
+            if (postGameDelayRemaining <= 0f)
+            {
+                postGameDelayRemaining = 0f;
+                postGameDelayActive = false;
+
+                if (postGamePanel != null)
+                    postGamePanel.SetActive(true);
+
+                if (logDebug)
+                    Debug.Log("[FusionOnlineMatchHUD] Post game panel shown after delay.", this);
+            }
+        }
+
         if (!applySessionPreviewBeforeNetworkState)
             return;
 
@@ -111,7 +146,11 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         string player1Name,
         string player2Name,
         PlayerID winner,
-        bool player1OnLeft)
+        bool player1OnLeft,
+        bool reconnectPending,
+        PlayerID reconnectMissingPlayer,
+        float reconnectTimeRemaining,
+        OnlineMatchEndReason endReason)
     {
         hasReceivedNetworkState = true;
 
@@ -144,20 +183,25 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         if (sharedModeValueText != null)
             sharedModeValueText.text = isTimeMode ? FormatClock(matchTimeRemaining) : pointsToWin.ToString();
 
+        bool showGameplayHud = matchStarted && !matchEnded && !midBreakActive && !reconnectPending && !forcedPostGameRequested;
+
         if (gameUIPanel != null)
-            gameUIPanel.SetActive(matchStarted && !matchEnded && !midBreakActive);
+            gameUIPanel.SetActive(showGameplayHud);
 
         if (halfTimePanel != null)
-            halfTimePanel.SetActive(isTimeHalftime && !matchEnded);
+            halfTimePanel.SetActive(isTimeHalftime && !matchEnded && !reconnectPending && !forcedPostGameRequested);
 
         if (halfPointPanel != null)
-            halfPointPanel.SetActive(isHalfPoint && !matchEnded);
+            halfPointPanel.SetActive(isHalfPoint && !matchEnded && !reconnectPending && !forcedPostGameRequested);
 
-        if (postGamePanel != null)
-            postGamePanel.SetActive(matchEnded);
+        if (!forcedPostGameRequested)
+            HandlePostGamePanelVisibility(matchEnded);
 
         if (pausePanel != null)
             pausePanel.SetActive(false);
+
+        if (reconnectPanel != null)
+            reconnectPanel.SetActive(false);
 
         if (turnOwnerText != null)
             turnOwnerText.text = currentTurnOwner == PlayerID.Player1 ? safeP1 : safeP2;
@@ -222,21 +266,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         if (endgamePlayer2ScoreText != null)
             endgamePlayer2ScoreText.text = FormatScoreForMode(matchMode, scoreP2, pointsToWin);
 
-        if (winnerNameText != null)
-        {
-            switch (winner)
-            {
-                case PlayerID.Player1:
-                    winnerNameText.text = safeP1;
-                    break;
-                case PlayerID.Player2:
-                    winnerNameText.text = safeP2;
-                    break;
-                default:
-                    winnerNameText.text = "DRAW";
-                    break;
-            }
-        }
+        ApplyGameResultTexts(winner, safeP1, safeP2, endReason);
 
         if (logDebug)
         {
@@ -245,11 +275,186 @@ public class FusionOnlineMatchHUD : MonoBehaviour
                 "Mode=" + matchMode +
                 " | P1=" + safeP1 +
                 " | P2=" + safeP2 +
-                " | MatchTime=" + matchTimeRemaining +
-                " | TurnTime=" + turnTimeRemaining,
+                " | MatchEnded=" + matchEnded +
+                " | EndReason=" + endReason,
                 this
             );
         }
+    }
+
+    public void ForceShowPostGame(
+        MatchMode matchMode,
+        int pointsToWin,
+        string player1Name,
+        string player2Name,
+        int scoreP1,
+        int scoreP2,
+        PlayerID winner,
+        OnlineMatchEndReason endReason)
+    {
+        forcedPostGameRequested = true;
+        hasReceivedNetworkState = true;
+
+        string safeP1 = string.IsNullOrWhiteSpace(player1Name) ? player1FallbackName : player1Name;
+        string safeP2 = string.IsNullOrWhiteSpace(player2Name) ? player2FallbackName : player2Name;
+
+        if (gameUIPanel != null)
+            gameUIPanel.SetActive(false);
+
+        if (halfTimePanel != null)
+            halfTimePanel.SetActive(false);
+
+        if (halfPointPanel != null)
+            halfPointPanel.SetActive(false);
+
+        if (pausePanel != null)
+            pausePanel.SetActive(false);
+
+        if (reconnectPanel != null)
+            reconnectPanel.SetActive(false);
+
+        if (endgamePlayer1NameText != null)
+            endgamePlayer1NameText.text = safeP1;
+
+        if (endgamePlayer2NameText != null)
+            endgamePlayer2NameText.text = safeP2;
+
+        if (endgamePlayer1ScoreText != null)
+            endgamePlayer1ScoreText.text = FormatScoreForMode(matchMode, scoreP1, pointsToWin);
+
+        if (endgamePlayer2ScoreText != null)
+            endgamePlayer2ScoreText.text = FormatScoreForMode(matchMode, scoreP2, pointsToWin);
+
+        ApplyGameResultTexts(winner, safeP1, safeP2, endReason);
+        TriggerPostGamePanelVisibility();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchHUD] ForceShowPostGame -> " +
+                "P1=" + safeP1 +
+                " | P2=" + safeP2 +
+                " | Winner=" + winner +
+                " | EndReason=" + endReason,
+                this
+            );
+        }
+    }
+
+    private void TriggerPostGamePanelVisibility()
+    {
+        previousMatchEnded = true;
+
+        float delay = Mathf.Max(0f, postGamePanelShowDelaySeconds);
+        if (delay <= 0f)
+        {
+            postGameDelayActive = false;
+            postGameDelayRemaining = 0f;
+
+            if (postGamePanel != null)
+                postGamePanel.SetActive(true);
+
+            return;
+        }
+
+        postGameDelayActive = true;
+        postGameDelayRemaining = delay;
+
+        if (postGamePanel != null)
+            postGamePanel.SetActive(false);
+    }
+
+    private void HandlePostGamePanelVisibility(bool matchEnded)
+    {
+        if (!matchEnded)
+        {
+            previousMatchEnded = false;
+            postGameDelayActive = false;
+            postGameDelayRemaining = 0f;
+
+            if (postGamePanel != null)
+                postGamePanel.SetActive(false);
+
+            return;
+        }
+
+        if (!previousMatchEnded)
+        {
+            previousMatchEnded = true;
+
+            float delay = Mathf.Max(0f, postGamePanelShowDelaySeconds);
+            if (delay <= 0f)
+            {
+                postGameDelayActive = false;
+                postGameDelayRemaining = 0f;
+
+                if (postGamePanel != null)
+                    postGamePanel.SetActive(true);
+            }
+            else
+            {
+                postGameDelayActive = true;
+                postGameDelayRemaining = delay;
+
+                if (postGamePanel != null)
+                    postGamePanel.SetActive(false);
+            }
+
+            return;
+        }
+
+        if (!postGameDelayActive && postGamePanel != null)
+            postGamePanel.SetActive(true);
+    }
+
+    private void ApplyGameResultTexts(
+        PlayerID winner,
+        string player1Name,
+        string player2Name,
+        OnlineMatchEndReason endReason)
+    {
+        bool isDraw = winner == PlayerID.None;
+
+        if (isDraw)
+        {
+            SetTextVisible(gameResultWinnerText, false);
+            SetTextVisible(gameResultLoserText, false);
+            SetTextVisible(drawText, true);
+
+            if (drawText != null)
+                drawText.text = "DRAW";
+        }
+        else
+        {
+            string winnerName = winner == PlayerID.Player1 ? player1Name : player2Name;
+            string loserName = winner == PlayerID.Player1 ? player2Name : player1Name;
+
+            SetTextVisible(gameResultWinnerText, true);
+            SetTextVisible(gameResultLoserText, true);
+            SetTextVisible(drawText, false);
+
+            if (gameResultWinnerText != null)
+                gameResultWinnerText.text = winnerName.ToUpperInvariant() + " WIN";
+
+            if (gameResultLoserText != null)
+                gameResultLoserText.text = loserName.ToUpperInvariant() + " LOST";
+        }
+
+        bool showOpponentDisconnected =
+            endReason == OnlineMatchEndReason.DisconnectWin;
+
+        SetTextVisible(opponentDisconnectedText, showOpponentDisconnected);
+
+        if (showOpponentDisconnected && opponentDisconnectedText != null)
+            opponentDisconnectedText.text = "OPPONENT DISCONNECTED";
+    }
+
+    private void SetTextVisible(TMP_Text textComponent, bool visible)
+    {
+        if (textComponent == null)
+            return;
+
+        textComponent.gameObject.SetActive(visible);
     }
 
     private void ApplySessionPreviewIfPossible()
@@ -348,8 +553,16 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         if (endgamePlayer2ScoreText != null)
             endgamePlayer2ScoreText.text = previewP2Score;
 
-        if (winnerNameText != null && !hasReceivedNetworkState)
-            winnerNameText.text = string.Empty;
+        SetTextVisible(gameResultWinnerText, false);
+        SetTextVisible(gameResultLoserText, false);
+        SetTextVisible(drawText, false);
+        SetTextVisible(opponentDisconnectedText, false);
+
+        if (reconnectPanel != null)
+            reconnectPanel.SetActive(false);
+
+        if (postGamePanel != null)
+            postGamePanel.SetActive(false);
 
         if (logDebug)
         {
@@ -357,12 +570,18 @@ public class FusionOnlineMatchHUD : MonoBehaviour
                 "[FusionOnlineMatchHUD] ApplySessionPreviewIfPossible -> " +
                 "Mode=" + mode +
                 " | P1=" + safeP1 +
-                " | P2=" + safeP2 +
-                " | MatchDuration=" + matchDuration +
-                " | TurnDuration=" + turnDuration,
+                " | P2=" + safeP2,
                 this
             );
         }
+    }
+
+    private void ResetPostGameDelayState()
+    {
+        previousMatchEnded = false;
+        postGameDelayActive = false;
+        postGameDelayRemaining = 0f;
+        forcedPostGameRequested = false;
     }
 
     private void ResolveDependencies()

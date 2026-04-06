@@ -4,6 +4,18 @@ using UnityEngine;
 [RequireComponent(typeof(NetworkObject))]
 public class FusionOnlineMatchController : NetworkBehaviour
 {
+    public enum MatchEndReason : byte
+    {
+        None = 0,
+        NormalCompletion = 1,
+        OpponentDisconnected = 2,
+        LocalDisconnected = 3,
+        OpponentSurrendered = 4,
+        LocalSurrendered = 5,
+        MatchCancelled = 6,
+        ReconnectTimeout = 7
+    }
+
     private enum MidMatchBreakReason : byte
     {
         None = 0,
@@ -35,6 +47,10 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [SerializeField] private bool enableStuckBallCheck = true;
     [SerializeField] private float stuckTimeout = 2.5f;
     [SerializeField] private float stuckVelocityThreshold = 0.05f;
+
+    [Header("Heartbeat / Disconnect Watchdog")]
+    [SerializeField] private float authorityHeartbeatSendInterval = 0.25f;
+    [SerializeField] private float authorityHeartbeatTimeoutSeconds = 2.0f;
 
     [Header("Fallback Match Config")]
     [SerializeField] private MatchMode fallbackMatchMode = MatchMode.TimeLimit;
@@ -91,6 +107,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [Networked] private byte NetRematchRequesterRaw { get; set; }
     [Networked] private byte NetRematchStateRaw { get; set; }
 
+    [Networked] private byte NetEndReasonRaw { get; set; }
+    [Networked] private int NetAuthorityHeartbeat { get; set; }
+
     private BallPhysics watchedBall;
     private Rigidbody watchedBallRb;
     private float stuckTimer;
@@ -102,48 +121,134 @@ public class FusionOnlineMatchController : NetworkBehaviour
     private bool hasSpawnedNetworkState;
     private bool hasInitializedAuthorityState;
 
+    private bool localForcedEndActive;
+    private MatchEndReason localForcedEndReason = MatchEndReason.None;
+    private PlayerID localForcedWinner = PlayerID.None;
+
+    private MatchMode cachedMatchMode = MatchMode.TimeLimit;
+    private int cachedPointsToWin = 0;
+    private float cachedConfiguredMatchDuration = 0f;
+    private PlayerID cachedCurrentTurnOwner = PlayerID.Player1;
+    private float cachedTurnTimeRemaining = 0f;
+    private float cachedMatchTimeRemaining = 0f;
+    private int cachedScoreP1 = 0;
+    private int cachedScoreP2 = 0;
+    private bool cachedMatchStarted = false;
+    private bool cachedMatchEnded = false;
+    private bool cachedMidBreakActive = false;
+    private bool cachedIsTimeHalftime = false;
+    private bool cachedIsHalfPoint = false;
+    private float cachedBreakTimeRemaining = 0f;
+    private string cachedPlayer1Name = "Player 1";
+    private string cachedPlayer2Name = "Player 2";
+    private PlayerID cachedWinner = PlayerID.None;
+    private bool cachedPlayer1OnLeft = true;
+
+    private float authorityHeartbeatSendTimer;
+    private int lastObservedAuthorityHeartbeat = int.MinValue;
+    private float authorityHeartbeatStaleTimer;
+
     public bool HasSpawnedNetworkState => hasSpawnedNetworkState;
+
     public bool IsNetworkStateReadable =>
         hasSpawnedNetworkState &&
         Object != null &&
         Object.IsValid &&
         Runner != null;
 
-    public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : fallbackMatchMode;
-    public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : fallbackPointsToWin;
-    public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : fallbackMatchDurationSeconds;
+    public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : cachedMatchMode;
+    public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : cachedPointsToWin;
+    public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : cachedConfiguredMatchDuration;
     public float ConfiguredTurnDuration => IsNetworkStateReadable ? NetConfiguredTurnDuration : defaultTurnDuration;
 
-    public PlayerID CurrentTurnOwner => IsNetworkStateReadable ? (PlayerID)NetCurrentTurnOwnerRaw : PlayerID.None;
-    public float CurrentTurnTimeRemaining => IsNetworkStateReadable ? NetTurnTimeRemaining : 0f;
-    public float CurrentMatchTimeRemaining => IsNetworkStateReadable ? NetMatchTimeRemaining : 0f;
+    public PlayerID CurrentTurnOwner => IsNetworkStateReadable ? (PlayerID)NetCurrentTurnOwnerRaw : cachedCurrentTurnOwner;
+    public float CurrentTurnTimeRemaining => IsNetworkStateReadable ? NetTurnTimeRemaining : cachedTurnTimeRemaining;
+    public float CurrentMatchTimeRemaining => IsNetworkStateReadable ? NetMatchTimeRemaining : cachedMatchTimeRemaining;
 
-    public bool MatchStarted => IsNetworkStateReadable && NetMatchStarted;
-    public bool MatchEnded => IsNetworkStateReadable && NetMatchEnded;
+    public bool MatchStarted
+    {
+        get
+        {
+            if (localForcedEndActive)
+                return false;
 
-    public bool MidMatchBreakActive => IsNetworkStateReadable && NetBreakActive;
-    public float CurrentBreakTimeRemaining => IsNetworkStateReadable ? NetBreakTimeRemaining : 0f;
+            if (IsNetworkStateReadable)
+                return NetMatchStarted;
+
+            return cachedMatchStarted;
+        }
+    }
+
+    public bool MatchEnded
+    {
+        get
+        {
+            if (localForcedEndActive)
+                return true;
+
+            if (IsNetworkStateReadable)
+                return NetMatchEnded;
+
+            return cachedMatchEnded;
+        }
+    }
+
+    public bool MidMatchBreakActive => IsNetworkStateReadable ? NetBreakActive : cachedMidBreakActive;
+    public float CurrentBreakTimeRemaining => IsNetworkStateReadable ? NetBreakTimeRemaining : cachedBreakTimeRemaining;
+
     public bool IsTimeHalftimeActive =>
-        IsNetworkStateReadable &&
-        NetBreakActive &&
-        (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.TimeHalftime;
+        IsNetworkStateReadable
+            ? NetBreakActive && (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.TimeHalftime
+            : cachedIsTimeHalftime;
 
     public bool IsHalfPointActive =>
-        IsNetworkStateReadable &&
-        NetBreakActive &&
-        (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.ScoreHalfPoint;
+        IsNetworkStateReadable
+            ? NetBreakActive && (MidMatchBreakReason)NetBreakReasonRaw == MidMatchBreakReason.ScoreHalfPoint
+            : cachedIsHalfPoint;
 
-    public int ScoreP1 => IsNetworkStateReadable ? NetScoreP1 : 0;
-    public int ScoreP2 => IsNetworkStateReadable ? NetScoreP2 : 0;
+    public int ScoreP1 => IsNetworkStateReadable ? NetScoreP1 : cachedScoreP1;
+    public int ScoreP2 => IsNetworkStateReadable ? NetScoreP2 : cachedScoreP2;
 
-    public PlayerID Winner => IsNetworkStateReadable ? (PlayerID)NetWinnerRaw : PlayerID.None;
+    public PlayerID Winner
+    {
+        get
+        {
+            if (localForcedEndActive)
+                return localForcedWinner;
+
+            if (IsNetworkStateReadable)
+                return (PlayerID)NetWinnerRaw;
+
+            return cachedWinner;
+        }
+    }
+
+    public MatchEndReason EndReason
+    {
+        get
+        {
+            if (localForcedEndActive)
+                return localForcedEndReason;
+
+            if (IsNetworkStateReadable)
+                return (MatchEndReason)NetEndReasonRaw;
+
+            return MatchEndReason.None;
+        }
+    }
+
+    public bool IsReconnectPending => false;
+    public bool ReconnectPending => false;
+    public float ReconnectTimeRemaining => 0f;
+    public PlayerID MissingPlayerId => PlayerID.None;
+    public PlayerID ReconnectMissingPlayer => PlayerID.None;
 
     public string Player1DisplayName
     {
         get
         {
             if (!IsNetworkStateReadable)
-                return "Player 1";
+                return string.IsNullOrWhiteSpace(cachedPlayer1Name) ? "Player 1" : cachedPlayer1Name;
 
             string value = NetPlayer1DisplayName.ToString();
             return string.IsNullOrWhiteSpace(value) ? "Player 1" : value;
@@ -155,7 +260,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         get
         {
             if (!IsNetworkStateReadable)
-                return "Player 2";
+                return string.IsNullOrWhiteSpace(cachedPlayer2Name) ? "Player 2" : cachedPlayer2Name;
 
             string value = NetPlayer2DisplayName.ToString();
             return string.IsNullOrWhiteSpace(value) ? "Player 2" : value;
@@ -165,8 +270,31 @@ public class FusionOnlineMatchController : NetworkBehaviour
     public string Player1SkinId => IsNetworkStateReadable ? NetPlayer1SkinId.ToString() : string.Empty;
     public string Player2SkinId => IsNetworkStateReadable ? NetPlayer2SkinId.ToString() : string.Empty;
 
-    public PlayerID EffectiveLocalPlayerId => Runner != null && Runner.IsServer ? PlayerID.Player1 : PlayerID.Player2;
-    public PlayerID EffectiveRemotePlayerId => EffectiveLocalPlayerId == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
+    public PlayerID EffectiveLocalPlayerId
+    {
+        get
+        {
+            ResolveReferences();
+
+            if (onlineGameplayAuthority != null && onlineGameplayAuthority.IsOnlineSession)
+                return onlineGameplayAuthority.LocalPlayerId;
+
+            return Runner != null && Runner.IsServer ? PlayerID.Player1 : PlayerID.Player2;
+        }
+    }
+
+    public PlayerID EffectiveRemotePlayerId
+    {
+        get
+        {
+            ResolveReferences();
+
+            if (onlineGameplayAuthority != null && onlineGameplayAuthority.IsOnlineSession)
+                return onlineGameplayAuthority.RemotePlayerId;
+
+            return EffectiveLocalPlayerId == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
+        }
+    }
 
     public int RematchNonce => IsNetworkStateReadable ? NetRematchNonce : 0;
     public PlayerID RematchRequester => IsNetworkStateReadable ? (PlayerID)NetRematchRequesterRaw : PlayerID.None;
@@ -202,6 +330,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
             hasInitializedAuthorityState = true;
         }
 
+        lastObservedAuthorityHeartbeat = IsNetworkStateReadable ? NetAuthorityHeartbeat : int.MinValue;
+        authorityHeartbeatStaleTimer = 0f;
+
         SubmitLocalPresentationIfNeeded();
         ApplyReplicaToLocalSystems();
     }
@@ -210,6 +341,19 @@ public class FusionOnlineMatchController : NetworkBehaviour
     {
         hasSpawnedNetworkState = false;
         UnsubscribeFromScore();
+    }
+
+    private void Update()
+    {
+        ResolveReferences();
+
+        if (localForcedEndActive)
+        {
+            ApplyLocalOverrideToHud();
+            return;
+        }
+
+        TickLocalAuthorityHeartbeatWatchdog();
     }
 
     public override void FixedUpdateNetwork()
@@ -225,7 +369,10 @@ public class FusionOnlineMatchController : NetworkBehaviour
         RegisterAuthorityLocally();
 
         if (Object.HasStateAuthority)
+        {
+            TickAuthorityHeartbeat();
             TickAuthority();
+        }
 
         SubmitLocalPresentationIfNeeded();
     }
@@ -244,7 +391,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void RequestLocalRematch()
     {
-        if (!MatchEnded)
+        if (!MatchEnded || EndReason != MatchEndReason.NormalCompletion)
             return;
 
         if (Object.HasStateAuthority)
@@ -258,7 +405,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public void AcceptLocalRematch()
     {
-        if (!MatchEnded)
+        if (!MatchEnded || EndReason != MatchEndReason.NormalCompletion)
             return;
 
         if (Object.HasStateAuthority)
@@ -282,6 +429,20 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
 
         RPC_DeclineRematch((byte)EffectiveLocalPlayerId);
+    }
+
+    public void RequestLocalSurrender()
+    {
+        if (!MatchStarted || MatchEnded)
+            return;
+
+        if (Object.HasStateAuthority)
+        {
+            AuthorityResolveSurrender(EffectiveLocalPlayerId);
+            return;
+        }
+
+        RPC_RequestSurrender((byte)EffectiveLocalPlayerId);
     }
 
     public void RequestSetCurrentBallPlacement(Vector3 targetWorldPosition)
@@ -310,6 +471,92 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
 
         RPC_RequestSetPlacement(sanitizedTarget);
+    }
+
+    public void RequestLaunchCurrentBall(Vector3 direction, float force)
+    {
+        if (!IsNetworkStateReadable)
+            return;
+
+        if (!NetMatchStarted || NetMatchEnded || NetBreakActive || NetPostShotDelayRemaining > 0f)
+            return;
+
+        if (Object.HasStateAuthority)
+        {
+            ApplyLaunchAuthority(CurrentTurnOwner, direction, force);
+            return;
+        }
+
+        RPC_RequestLaunch(direction, force);
+    }
+
+    public void RequestResumeAfterHalftime()
+    {
+        if (!MidMatchBreakActive || MatchEnded)
+            return;
+
+        if (Object.HasStateAuthority)
+        {
+            ResumeAfterMidMatchBreakAuthority();
+            return;
+        }
+
+        RPC_RequestResumeAfterHalftime();
+    }
+
+    public void NotifyRunnerPlayerLeft(PlayerRef player)
+    {
+        if (!MatchStarted || MatchEnded)
+            return;
+
+        if (!Object.HasStateAuthority)
+            return;
+
+        if (logDebug)
+            Debug.LogWarning("[FusionOnlineMatchController] NotifyRunnerPlayerLeft -> " + player, this);
+
+        AuthorityEndByOpponentDisconnect();
+    }
+
+    public void NotifyLocalDisconnectedFromSession()
+    {
+        if (!MatchStarted || MatchEnded)
+            return;
+
+        bool localWasAuthority = Object != null && Object.HasStateAuthority;
+
+        if (localWasAuthority)
+            ForceLocalEnd(MatchEndReason.LocalDisconnected, EffectiveRemotePlayerId);
+        else
+            ForceLocalEnd(MatchEndReason.OpponentDisconnected, EffectiveLocalPlayerId);
+    }
+
+    public void NotifyRunnerShutdown(ShutdownReason reason)
+    {
+        if (!MatchStarted || MatchEnded)
+            return;
+
+        bool localWasAuthority = Object != null && Object.HasStateAuthority;
+
+        if (localWasAuthority)
+            ForceLocalEnd(MatchEndReason.LocalDisconnected, EffectiveRemotePlayerId);
+        else
+            ForceLocalEnd(MatchEndReason.OpponentDisconnected, EffectiveLocalPlayerId);
+    }
+
+    public void NotifyRemoteAuthorityLostAsClient()
+    {
+        if (!MatchStarted || MatchEnded)
+            return;
+
+        if (Object != null && Object.HasStateAuthority)
+            return;
+
+        ForceLocalEnd(MatchEndReason.OpponentDisconnected, EffectiveLocalPlayerId);
+    }
+
+    public void NotifyLocalReconnectedToSession()
+    {
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -356,9 +603,15 @@ public class FusionOnlineMatchController : NetworkBehaviour
         ResumeAfterMidMatchBreakAuthority();
     }
 
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestSurrender(byte surrenderingPlayerRaw)
+    {
+        AuthorityResolveSurrender((PlayerID)surrenderingPlayerRaw);
+    }
+
     private void AuthorityStartRematchRequest(PlayerID requester)
     {
-        if (!Object.HasStateAuthority || !MatchEnded)
+        if (!Object.HasStateAuthority || !MatchEnded || EndReason != MatchEndReason.NormalCompletion)
             return;
 
         if ((RematchState)NetRematchStateRaw == RematchState.Pending ||
@@ -375,7 +628,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private void AuthorityAcceptRematch(PlayerID accepter)
     {
-        if (!Object.HasStateAuthority || !MatchEnded)
+        if (!Object.HasStateAuthority || !MatchEnded || EndReason != MatchEndReason.NormalCompletion)
             return;
 
         if ((RematchState)NetRematchStateRaw != RematchState.Pending)
@@ -402,6 +655,126 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         if (logDebug)
             Debug.Log("[FusionOnlineMatchController] Rematch declined by " + decliner, this);
+    }
+
+    private void AuthorityResolveSurrender(PlayerID surrenderingPlayer)
+    {
+        if (!Object.HasStateAuthority || !NetMatchStarted || NetMatchEnded)
+            return;
+
+        PlayerID winner = surrenderingPlayer == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
+        MatchEndReason reason = surrenderingPlayer == EffectiveLocalPlayerId
+            ? MatchEndReason.LocalSurrendered
+            : MatchEndReason.OpponentSurrendered;
+
+        EndMatchAuthority(reason, winner);
+    }
+
+    private void AuthorityEndByOpponentDisconnect()
+    {
+        if (!Object.HasStateAuthority || NetMatchEnded || !NetMatchStarted)
+            return;
+
+        EndMatchAuthority(MatchEndReason.OpponentDisconnected, EffectiveLocalPlayerId);
+    }
+
+    private void ForceLocalEnd(MatchEndReason reason, PlayerID winner)
+    {
+        if (localForcedEndActive)
+            return;
+
+        localForcedEndActive = true;
+        localForcedEndReason = reason;
+        localForcedWinner = winner;
+
+        cachedMatchStarted = false;
+        cachedMatchEnded = true;
+        cachedWinner = winner;
+
+        ResolveReferences();
+
+        if (hud != null)
+        {
+            hud.ForceShowPostGame(
+                cachedMatchMode,
+                cachedPointsToWin,
+                cachedPlayer1Name,
+                cachedPlayer2Name,
+                cachedScoreP1,
+                cachedScoreP2,
+                winner,
+                ConvertToOnlineMatchEndReason(reason)
+            );
+        }
+
+        if (onlineFlowController != null)
+            onlineFlowController.NotifyMatchEnded();
+
+        if (logDebug)
+        {
+            Debug.LogWarning(
+                "[FusionOnlineMatchController] ForceLocalEnd -> Reason=" + reason +
+                " | Winner=" + winner,
+                this);
+        }
+    }
+
+    private void TickAuthorityHeartbeat()
+    {
+        if (!Object.HasStateAuthority)
+            return;
+
+        if (!NetMatchStarted || NetMatchEnded)
+            return;
+
+        authorityHeartbeatSendTimer += Runner.DeltaTime;
+        if (authorityHeartbeatSendTimer < Mathf.Max(0.01f, authorityHeartbeatSendInterval))
+            return;
+
+        authorityHeartbeatSendTimer = 0f;
+        NetAuthorityHeartbeat += 1;
+    }
+
+    private void TickLocalAuthorityHeartbeatWatchdog()
+    {
+        if (!IsNetworkStateReadable)
+            return;
+
+        if (Object != null && Object.HasStateAuthority)
+            return;
+
+        if (!MatchStarted || MatchEnded)
+            return;
+
+        int currentHeartbeat = NetAuthorityHeartbeat;
+
+        if (lastObservedAuthorityHeartbeat == int.MinValue)
+        {
+            lastObservedAuthorityHeartbeat = currentHeartbeat;
+            authorityHeartbeatStaleTimer = 0f;
+            return;
+        }
+
+        if (currentHeartbeat != lastObservedAuthorityHeartbeat)
+        {
+            lastObservedAuthorityHeartbeat = currentHeartbeat;
+            authorityHeartbeatStaleTimer = 0f;
+            return;
+        }
+
+        authorityHeartbeatStaleTimer += Time.unscaledDeltaTime;
+
+        if (authorityHeartbeatStaleTimer < Mathf.Max(0.25f, authorityHeartbeatTimeoutSeconds))
+            return;
+
+        if (logDebug)
+        {
+            Debug.LogWarning(
+                "[FusionOnlineMatchController] Heartbeat watchdog timeout. Forcing local disconnect win for client.",
+                this);
+        }
+
+        NotifyRemoteAuthorityLostAsClient();
     }
 
     private void ResolveReferences()
@@ -599,6 +972,10 @@ public class FusionOnlineMatchController : NetworkBehaviour
         NetRematchRequesterRaw = (byte)PlayerID.None;
         NetRematchStateRaw = (byte)RematchState.None;
 
+        NetEndReasonRaw = (byte)MatchEndReason.None;
+        NetAuthorityHeartbeat = 0;
+        authorityHeartbeatSendTimer = 0f;
+
         if (scoreManager != null)
             scoreManager.StartMatch();
 
@@ -718,7 +1095,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
                 if (NetPendingEndAfterShot)
                 {
                     NetPendingEndAfterShot = false;
-                    EndMatchAuthority();
+                    EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
                     return;
                 }
             }
@@ -802,7 +1179,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
                 if (NetBreakTriggered && NetMatchTimeRemaining <= 0f)
                 {
                     NetMatchTimeRemaining = 0f;
-                    EndMatchAuthority();
+                    EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
                     return;
                 }
             }
@@ -810,7 +1187,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
             {
                 if (ShouldEndMatchNow())
                 {
-                    EndMatchAuthority();
+                    EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
                     return;
                 }
 
@@ -913,20 +1290,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
             bottomBarOrderSwapper.SetOrder(NetPlayer1OnLeft);
     }
 
-    public void RequestResumeAfterHalftime()
-    {
-        if (!MidMatchBreakActive || MatchEnded)
-            return;
-
-        if (Object.HasStateAuthority)
-        {
-            ResumeAfterMidMatchBreakAuthority();
-            return;
-        }
-
-        RPC_RequestResumeAfterHalftime();
-    }
-
     private void ResumeAfterMidMatchBreakAuthority()
     {
         if (!Object.HasStateAuthority || !NetBreakActive || NetMatchEnded)
@@ -985,7 +1348,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         {
             if (ShouldEndMatchNow())
             {
-                EndMatchAuthority();
+                EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
                 return;
             }
 
@@ -1024,7 +1387,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         {
             if (ShouldEndMatchNow())
             {
-                EndMatchAuthority();
+                EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
                 return;
             }
 
@@ -1047,23 +1410,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
         stuckTimer = 0f;
         currentPlayerScoredThisTurn = false;
         NetActiveBallId = default;
-    }
-
-    public void RequestLaunchCurrentBall(Vector3 direction, float force)
-    {
-        if (!IsNetworkStateReadable)
-            return;
-
-        if (!NetMatchStarted || NetMatchEnded || NetBreakActive || NetPostShotDelayRemaining > 0f)
-            return;
-
-        if (Object.HasStateAuthority)
-        {
-            ApplyLaunchAuthority(CurrentTurnOwner, direction, force);
-            return;
-        }
-
-        RPC_RequestLaunch(direction, force);
     }
 
     private PlayerID ResolvePlayerIdFromRpc(RpcInfo info)
@@ -1226,7 +1572,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         if (CurrentMatchMode == MatchMode.ScoreTarget && ShouldEndMatchNow())
         {
-            EndMatchAuthority();
+            EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
             return;
         }
 
@@ -1237,6 +1583,25 @@ public class FusionOnlineMatchController : NetworkBehaviour
     {
         if (!IsNetworkStateReadable)
             return;
+
+        cachedMatchMode = CurrentMatchMode;
+        cachedPointsToWin = PointsToWin;
+        cachedConfiguredMatchDuration = ConfiguredMatchDuration;
+        cachedCurrentTurnOwner = CurrentTurnOwner;
+        cachedTurnTimeRemaining = NetTurnTimeRemaining;
+        cachedMatchTimeRemaining = NetMatchTimeRemaining;
+        cachedScoreP1 = NetScoreP1;
+        cachedScoreP2 = NetScoreP2;
+        cachedMatchStarted = NetMatchStarted;
+        cachedMatchEnded = NetMatchEnded;
+        cachedMidBreakActive = NetBreakActive;
+        cachedIsTimeHalftime = IsTimeHalftimeActive;
+        cachedIsHalfPoint = IsHalfPointActive;
+        cachedBreakTimeRemaining = NetBreakTimeRemaining;
+        cachedPlayer1Name = Player1DisplayName;
+        cachedPlayer2Name = Player2DisplayName;
+        cachedWinner = (PlayerID)NetWinnerRaw;
+        cachedPlayer1OnLeft = NetPlayer1OnLeft;
 
         if (ballTurnSpawner != null)
             ballTurnSpawner.SetPlayer1Side(NetPlayer1OnLeft);
@@ -1280,9 +1645,44 @@ public class FusionOnlineMatchController : NetworkBehaviour
                 Player1DisplayName,
                 Player2DisplayName,
                 Winner,
-                NetPlayer1OnLeft
+                NetPlayer1OnLeft,
+                false,
+                PlayerID.None,
+                0f,
+                ConvertToOnlineMatchEndReason((MatchEndReason)NetEndReasonRaw)
             );
         }
+    }
+
+    private void ApplyLocalOverrideToHud()
+    {
+        if (hud == null)
+            return;
+
+        hud.ApplyState(
+            cachedMatchMode,
+            cachedPointsToWin,
+            cachedConfiguredMatchDuration,
+            cachedCurrentTurnOwner,
+            cachedTurnTimeRemaining,
+            cachedMatchTimeRemaining,
+            cachedScoreP1,
+            cachedScoreP2,
+            false,
+            true,
+            false,
+            false,
+            false,
+            0f,
+            cachedPlayer1Name,
+            cachedPlayer2Name,
+            localForcedWinner,
+            cachedPlayer1OnLeft,
+            false,
+            PlayerID.None,
+            0f,
+            ConvertToOnlineMatchEndReason(localForcedEndReason)
+        );
     }
 
     private void ConsumeReplicatedShotPopupIfNeeded()
@@ -1365,7 +1765,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         watchedBallRb = watchedBall != null ? watchedBall.GetComponent<Rigidbody>() : null;
     }
 
-    private void EndMatchAuthority()
+    private void EndMatchAuthority(MatchEndReason reason, PlayerID forcedWinner)
     {
         if (!Object.HasStateAuthority || NetMatchEnded)
             return;
@@ -1375,18 +1775,54 @@ public class FusionOnlineMatchController : NetworkBehaviour
         NetBreakActive = false;
         NetShotInFlight = false;
         NetPendingEndAfterShot = false;
+        NetPendingBreakAfterShot = false;
         NetPostShotDelayRemaining = 0f;
         NetBreakReasonRaw = (byte)MidMatchBreakReason.None;
+        NetEndReasonRaw = (byte)reason;
 
-        if (NetScoreP1 > NetScoreP2)
-            NetWinnerRaw = (byte)PlayerID.Player1;
-        else if (NetScoreP2 > NetScoreP1)
-            NetWinnerRaw = (byte)PlayerID.Player2;
+        if (forcedWinner != PlayerID.None)
+        {
+            NetWinnerRaw = (byte)forcedWinner;
+        }
         else
-            NetWinnerRaw = (byte)PlayerID.None;
+        {
+            if (NetScoreP1 > NetScoreP2)
+                NetWinnerRaw = (byte)PlayerID.Player1;
+            else if (NetScoreP2 > NetScoreP1)
+                NetWinnerRaw = (byte)PlayerID.Player2;
+            else
+                NetWinnerRaw = (byte)PlayerID.None;
+        }
+
+        ResolveReferences();
+
+        if (hud != null)
+        {
+            hud.ForceShowPostGame(
+                CurrentMatchMode,
+                PointsToWin,
+                Player1DisplayName,
+                Player2DisplayName,
+                NetScoreP1,
+                NetScoreP2,
+                (PlayerID)NetWinnerRaw,
+                ConvertToOnlineMatchEndReason(reason)
+            );
+        }
 
         if (scoreManager != null)
             scoreManager.EndMatch((PlayerID)NetWinnerRaw);
+
+        if (onlineFlowController != null)
+            onlineFlowController.NotifyMatchEnded();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchController] EndMatchAuthority -> Reason=" + reason +
+                " | Winner=" + (PlayerID)NetWinnerRaw,
+                this);
+        }
     }
 
     private void OnScoreManagerPointsScored(PlayerID player, int newTotal)
@@ -1492,5 +1928,28 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
 
         return onlineFlowController.RuntimeContext.currentSession;
+    }
+
+    private OnlineMatchEndReason ConvertToOnlineMatchEndReason(MatchEndReason reason)
+    {
+        switch (reason)
+        {
+            case MatchEndReason.NormalCompletion:
+                return OnlineMatchEndReason.NormalCompletion;
+            case MatchEndReason.OpponentDisconnected:
+                return OnlineMatchEndReason.DisconnectWin;
+            case MatchEndReason.LocalDisconnected:
+                return OnlineMatchEndReason.DisconnectLoss;
+            case MatchEndReason.OpponentSurrendered:
+                return OnlineMatchEndReason.SurrenderWin;
+            case MatchEndReason.LocalSurrendered:
+                return OnlineMatchEndReason.SurrenderLoss;
+            case MatchEndReason.MatchCancelled:
+                return OnlineMatchEndReason.MatchCancelled;
+            case MatchEndReason.ReconnectTimeout:
+                return OnlineMatchEndReason.ReconnectTimeout;
+            default:
+                return OnlineMatchEndReason.None;
+        }
     }
 }

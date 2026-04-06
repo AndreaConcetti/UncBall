@@ -103,12 +103,12 @@ public class OnlineMatchEndFlow : MonoBehaviour
         }
 
         bool canReadMatch = matchController != null && matchController.IsNetworkStateReadable;
-        bool matchEnded = canReadMatch && matchController.MatchEnded;
+        bool matchEnded = (matchController != null) && matchController.MatchEnded;
 
         if (matchEnded)
             ApplyEndMatchRewardsIfNeeded();
 
-        if (matchEnded)
+        if (matchEnded && CanUseRematch())
             HandleRematchVisualRefresh();
         else
             HideAllRematchPanels();
@@ -133,7 +133,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
     {
         ResolveDependencies();
 
-        if (exitTriggered || rematchController == null)
+        if (exitTriggered || rematchController == null || !CanUseRematch())
             return;
 
         rematchController.RequestLocalRematch();
@@ -145,7 +145,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
     {
         ResolveDependencies();
 
-        if (exitTriggered || rematchController == null)
+        if (exitTriggered || rematchController == null || !CanUseRematch())
             return;
 
         rematchController.CancelLocalRematchRequest();
@@ -157,7 +157,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
     {
         ResolveDependencies();
 
-        if (exitTriggered || rematchController == null)
+        if (exitTriggered || rematchController == null || !CanUseRematch())
             return;
 
         rematchController.AcceptLocalRematch();
@@ -169,7 +169,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
     {
         ResolveDependencies();
 
-        if (exitTriggered || rematchController == null)
+        if (exitTriggered || rematchController == null || !CanUseRematch())
             return;
 
         rematchController.DeclineLocalRematch();
@@ -183,9 +183,18 @@ public class OnlineMatchEndFlow : MonoBehaviour
         }
     }
 
+    private bool CanUseRematch()
+    {
+        if (matchController == null || !matchController.MatchEnded)
+            return false;
+
+        OnlineMatchEndReason endReason = GetMatchEndReason();
+        return endReason == OnlineMatchEndReason.NormalCompletion;
+    }
+
     private void HandleRematchVisualRefresh()
     {
-        if (rematchController == null || matchController == null || !matchController.IsNetworkStateReadable || !matchController.MatchEnded)
+        if (rematchController == null || matchController == null || !matchController.MatchEnded)
             return;
 
         if (lastConsumedRematchNonce != rematchController.RematchNonce)
@@ -238,12 +247,9 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
     private void RefreshAllVisualState()
     {
-        bool matchEnded =
-            matchController != null &&
-            matchController.IsNetworkStateReadable &&
-            matchController.MatchEnded;
+        bool matchEnded = matchController != null && matchController.MatchEnded;
 
-        if (!matchEnded || rematchController == null)
+        if (!matchEnded || rematchController == null || !CanUseRematch())
         {
             HideAllRematchPanels();
             return;
@@ -291,9 +297,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
             onlineFlowController != null &&
             onlineFlowController.CurrentState == OnlineFlowState.ReturningToMenu;
 
-        bool canReadMatch = matchController != null && matchController.IsNetworkStateReadable;
-        bool matchEnded = canReadMatch && matchController.MatchEnded;
-        bool canRequest = rematchController != null && matchEnded && rematchController.CanLocalRequestRematch();
+        bool matchEnded = matchController != null && matchController.MatchEnded;
+        bool canRequest = rematchController != null && matchEnded && CanUseRematch() && rematchController.CanLocalRequestRematch();
 
         if (requestRematchButton != null)
             requestRematchButton.interactable = !exitTriggered && !returningToMenu && canRequest;
@@ -302,6 +307,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
             cancelRequestButton.interactable =
                 !exitTriggered &&
                 !returningToMenu &&
+                CanUseRematch() &&
                 rematchController != null &&
                 rematchController.HasOutgoingRequestFromLocalPlayer();
 
@@ -309,6 +315,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
             acceptRequestButton.interactable =
                 !exitTriggered &&
                 !returningToMenu &&
+                CanUseRematch() &&
                 rematchController != null &&
                 rematchController.HasIncomingRequestForLocalPlayer();
 
@@ -316,6 +323,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
             declineRequestButton.interactable =
                 !exitTriggered &&
                 !returningToMenu &&
+                CanUseRematch() &&
                 rematchController != null &&
                 rematchController.HasIncomingRequestForLocalPlayer();
 
@@ -374,7 +382,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
         ResolveDependencies();
         ApplyRuntimeRewardFlagsIfAvailable();
 
-        if (profileManager == null || matchController == null || !matchController.IsNetworkStateReadable)
+        if (profileManager == null || matchController == null)
             return;
 
         PlayerID localPlayerId = matchController.EffectiveLocalPlayerId;
@@ -577,5 +585,13 @@ public class OnlineMatchEndFlow : MonoBehaviour
         }
 
         return MatchMode.ScoreTarget;
+    }
+
+    private OnlineMatchEndReason GetMatchEndReason()
+    {
+        if (matchController == null)
+            return OnlineMatchEndReason.None;
+
+        return (OnlineMatchEndReason)matchController.EndReason;
     }
 }
