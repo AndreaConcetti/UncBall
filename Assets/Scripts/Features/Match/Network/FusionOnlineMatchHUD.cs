@@ -3,6 +3,9 @@ using UnityEngine;
 
 public class FusionOnlineMatchHUD : MonoBehaviour
 {
+    [Header("Dependencies")]
+    [SerializeField] private OnlineFlowController onlineFlowController;
+
     [Header("Top HUD")]
     [SerializeField] private TMP_Text turnOwnerText;
     [SerializeField] private TMP_Text turnTimerText;
@@ -57,10 +60,38 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     [SerializeField] private string player1FallbackName = "Player 1";
     [SerializeField] private string player2FallbackName = "Player 2";
 
+    [Header("Preview")]
+    [SerializeField] private bool applySessionPreviewBeforeNetworkState = true;
+
     [Header("Debug")]
     [SerializeField] private bool logDebug = false;
 
     private bool hasAppliedInitialLayout;
+    private bool hasReceivedNetworkState;
+
+    private void Awake()
+    {
+        ResolveDependencies();
+    }
+
+    private void OnEnable()
+    {
+        ResolveDependencies();
+
+        if (applySessionPreviewBeforeNetworkState)
+            ApplySessionPreviewIfPossible();
+    }
+
+    private void Update()
+    {
+        if (!applySessionPreviewBeforeNetworkState)
+            return;
+
+        if (hasReceivedNetworkState)
+            return;
+
+        ApplySessionPreviewIfPossible();
+    }
 
     public void ApplyState(
         MatchMode matchMode,
@@ -82,6 +113,8 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         PlayerID winner,
         bool player1OnLeft)
     {
+        hasReceivedNetworkState = true;
+
         string safeP1 = string.IsNullOrWhiteSpace(player1Name) ? player1FallbackName : player1Name;
         string safeP2 = string.IsNullOrWhiteSpace(player2Name) ? player2FallbackName : player2Name;
 
@@ -210,12 +243,140 @@ public class FusionOnlineMatchHUD : MonoBehaviour
             Debug.Log(
                 "[FusionOnlineMatchHUD] ApplyState -> " +
                 "Mode=" + matchMode +
-                " | SharedModeText=" + (sharedModeValueText != null ? sharedModeValueText.text : "NULL") +
-                " | ScoreP1=" + bottomP1Score +
-                " | ScoreP2=" + bottomP2Score,
+                " | P1=" + safeP1 +
+                " | P2=" + safeP2 +
+                " | MatchTime=" + matchTimeRemaining +
+                " | TurnTime=" + turnTimeRemaining,
                 this
             );
         }
+    }
+
+    private void ApplySessionPreviewIfPossible()
+    {
+        ResolveDependencies();
+
+        if (onlineFlowController == null)
+            return;
+
+        OnlineRuntimeContext runtime = onlineFlowController.RuntimeContext;
+        if (runtime == null || runtime.currentSession == null)
+            return;
+
+        MatchSessionContext session = runtime.currentSession;
+
+        string safeP1 = string.IsNullOrWhiteSpace(session.player1DisplayName) ? player1FallbackName : session.player1DisplayName.Trim();
+        string safeP2 = string.IsNullOrWhiteSpace(session.player2DisplayName) ? player2FallbackName : session.player2DisplayName.Trim();
+
+        MatchMode mode = session.matchMode;
+        int pointsToWin = Mathf.Max(1, session.pointsToWin);
+        float matchDuration = Mathf.Max(1f, session.matchDurationSeconds);
+        float turnDuration = Mathf.Max(1f, session.turnDurationSeconds);
+
+        bool isTimeMode = mode == MatchMode.TimeLimit;
+        bool isScoreMode = mode == MatchMode.ScoreTarget;
+
+        if (timeModeInfoRoot != null)
+            timeModeInfoRoot.SetActive(isTimeMode);
+
+        if (scoreModeInfoRoot != null)
+            scoreModeInfoRoot.SetActive(isScoreMode);
+
+        if (timeModeCountdownText != null)
+            timeModeCountdownText.text = FormatClock(matchDuration);
+
+        if (scoreModeTargetText != null)
+            scoreModeTargetText.text = pointsToWin.ToString();
+
+        if (sharedModeValueText != null)
+            sharedModeValueText.text = isTimeMode ? FormatClock(matchDuration) : pointsToWin.ToString();
+
+        if (turnOwnerText != null)
+            turnOwnerText.text = safeP1;
+
+        if (turnTimerText != null)
+            turnTimerText.text = Mathf.CeilToInt(turnDuration).ToString();
+
+        string previewP1Score = FormatScoreForMode(mode, 0, pointsToWin);
+        string previewP2Score = FormatScoreForMode(mode, 0, pointsToWin);
+
+        if (player1ScoreText != null)
+            player1ScoreText.text = previewP1Score;
+
+        if (player2ScoreText != null)
+            player2ScoreText.text = previewP2Score;
+
+        if (player1NameText != null)
+            player1NameText.text = safeP1;
+
+        if (player2NameText != null)
+            player2NameText.text = safeP2;
+
+        if (halfTimePlayer1NameText != null)
+            halfTimePlayer1NameText.text = safeP1;
+
+        if (halfTimePlayer2NameText != null)
+            halfTimePlayer2NameText.text = safeP2;
+
+        if (halfTimePlayer1ScoreText != null)
+            halfTimePlayer1ScoreText.text = previewP1Score;
+
+        if (halfTimePlayer2ScoreText != null)
+            halfTimePlayer2ScoreText.text = previewP2Score;
+
+        if (halfPointPlayer1NameText != null)
+            halfPointPlayer1NameText.text = safeP1;
+
+        if (halfPointPlayer2NameText != null)
+            halfPointPlayer2NameText.text = safeP2;
+
+        if (halfPointPlayer1ScoreText != null)
+            halfPointPlayer1ScoreText.text = previewP1Score;
+
+        if (halfPointPlayer2ScoreText != null)
+            halfPointPlayer2ScoreText.text = previewP2Score;
+
+        if (endgamePlayer1NameText != null)
+            endgamePlayer1NameText.text = safeP1;
+
+        if (endgamePlayer2NameText != null)
+            endgamePlayer2NameText.text = safeP2;
+
+        if (endgamePlayer1ScoreText != null)
+            endgamePlayer1ScoreText.text = previewP1Score;
+
+        if (endgamePlayer2ScoreText != null)
+            endgamePlayer2ScoreText.text = previewP2Score;
+
+        if (winnerNameText != null && !hasReceivedNetworkState)
+            winnerNameText.text = string.Empty;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchHUD] ApplySessionPreviewIfPossible -> " +
+                "Mode=" + mode +
+                " | P1=" + safeP1 +
+                " | P2=" + safeP2 +
+                " | MatchDuration=" + matchDuration +
+                " | TurnDuration=" + turnDuration,
+                this
+            );
+        }
+    }
+
+    private void ResolveDependencies()
+    {
+        if (onlineFlowController == null)
+            onlineFlowController = OnlineFlowController.Instance;
+
+#if UNITY_2023_1_OR_NEWER
+        if (onlineFlowController == null)
+            onlineFlowController = FindFirstObjectByType<OnlineFlowController>();
+#else
+        if (onlineFlowController == null)
+            onlineFlowController = FindObjectOfType<OnlineFlowController>();
+#endif
     }
 
     private string FormatClock(float seconds)

@@ -6662,6 +6662,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5265f8af369a62243bbdd6d8414992fb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FusionOnlineMatchHUD
+  onlineFlowController: {fileID: 0}
   turnOwnerText: {fileID: 823328991}
   turnTimerText: {fileID: 371874522}
   timeModeInfoRoot: {fileID: 0}
@@ -6696,6 +6697,7 @@ MonoBehaviour:
   bottomBarOrderSwapper: {fileID: 357837724}
   player1FallbackName: Player 1
   player2FallbackName: Player 2
+  applySessionPreviewBeforeNetworkState: 1
   logDebug: 0
 --- !u!114 &596191369
 MonoBehaviour:
