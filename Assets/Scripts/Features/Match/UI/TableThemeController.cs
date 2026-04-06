@@ -3,9 +3,6 @@ using UnityEngine.UI;
 
 public class TableThemeController : MonoBehaviour
 {
-    [Header("Dependencies")]
-    [SerializeField] private LocalGameSettings localGameSettings;
-
     [Header("3D Renderers")]
     [SerializeField] private Renderer[] targetRenderers;
     [SerializeField] private Material lightTableMaterial;
@@ -17,10 +14,8 @@ public class TableThemeController : MonoBehaviour
     [SerializeField] private Sprite lightTableSprite;
     [SerializeField] private Sprite darkTableSprite;
 
-    [Header("State")]
-    [SerializeField] private bool appliedDarkMode;
-
     [Header("Debug")]
+    [SerializeField] private bool applyOnEnable = true;
     [SerializeField] private bool logDebug = false;
 
     private Material runtimeLightMaterial;
@@ -28,45 +23,24 @@ public class TableThemeController : MonoBehaviour
 
     private void Awake()
     {
-        ResolveDependencies();
         PrepareRuntimeMaterialsIfNeeded();
     }
 
     private void OnEnable()
     {
-        ResolveDependencies();
-
-        if (localGameSettings != null)
-        {
-            localGameSettings.TableDarkModeChanged -= HandleTableDarkModeChanged;
-            localGameSettings.TableDarkModeChanged += HandleTableDarkModeChanged;
-
-            ApplyTheme(localGameSettings.TableDarkModeEnabled);
-        }
-        else
-        {
-            ApplyTheme(false);
-        }
+        if (applyOnEnable)
+            RefreshTheme();
     }
 
-    private void OnDisable()
+    public void RefreshTheme()
     {
-        if (localGameSettings != null)
-            localGameSettings.TableDarkModeChanged -= HandleTableDarkModeChanged;
-    }
+        bool useDarkMode = LocalGameSettings.TableDarkModeEnabled;
 
-    private void ResolveDependencies()
-    {
-        if (localGameSettings == null)
-            localGameSettings = LocalGameSettings.Instance;
+        ApplyRendererTheme(useDarkMode);
+        ApplyImageTheme(useDarkMode);
 
-#if UNITY_2023_1_OR_NEWER
-        if (localGameSettings == null)
-            localGameSettings = FindFirstObjectByType<LocalGameSettings>(FindObjectsInactive.Include);
-#else
-        if (localGameSettings == null)
-            localGameSettings = FindObjectOfType<LocalGameSettings>();
-#endif
+        if (logDebug)
+            Debug.Log("[TableThemeController] RefreshTheme -> DarkMode=" + useDarkMode, this);
     }
 
     private void PrepareRuntimeMaterialsIfNeeded()
@@ -79,22 +53,6 @@ public class TableThemeController : MonoBehaviour
 
         if (darkTableMaterial != null && runtimeDarkMaterial == null)
             runtimeDarkMaterial = new Material(darkTableMaterial);
-    }
-
-    private void HandleTableDarkModeChanged(bool enabled)
-    {
-        ApplyTheme(enabled);
-    }
-
-    public void ApplyTheme(bool useDarkMode)
-    {
-        appliedDarkMode = useDarkMode;
-
-        ApplyRendererTheme(useDarkMode);
-        ApplyImageTheme(useDarkMode);
-
-        if (logDebug)
-            Debug.Log("[TableThemeController] ApplyTheme -> DarkMode=" + appliedDarkMode, this);
     }
 
     private void ApplyRendererTheme(bool useDarkMode)

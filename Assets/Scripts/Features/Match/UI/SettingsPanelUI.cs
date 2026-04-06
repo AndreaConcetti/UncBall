@@ -1,3 +1,4 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -35,20 +36,24 @@ public class SettingsPanelUI : MonoBehaviour
     [SerializeField] private Sprite tableThemeLightSprite;
     [SerializeField] private Sprite tableThemeDarkSprite;
     [SerializeField] private TMP_Text tableThemeValueText;
-    [SerializeField] private string tableThemeLightText = "DEFAULT";
+    [SerializeField] private string tableThemeLightText = "LIGHT";
     [SerializeField] private string tableThemeDarkText = "DARK";
 
     [Header("Dependencies")]
-    [SerializeField] private TutorialPromptSettings tutorialPromptSettings;
-    [SerializeField] private LocalGameSettings localGameSettings;
+    [SerializeField] private TableThemeController tableThemeController;
 
     [Header("Behavior")]
     [SerializeField] private bool startClosed = true;
-    [SerializeField] private bool autoFindDependencies = true;
     [SerializeField] private bool autoWireUi = true;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = false;
+
+    public event Action<bool> PanelVisibilityChanged;
+    public event Action<bool> TutorialPromptSettingChanged;
+    public event Action<bool> TableThemeDarkModeChanged;
+
+    public bool IsPanelOpen => panelRoot != null && panelRoot.activeSelf;
 
     private void Awake()
     {
@@ -56,40 +61,31 @@ public class SettingsPanelUI : MonoBehaviour
         WireButtonsIfNeeded();
 
         if (panelRoot != null && startClosed)
+        {
             panelRoot.SetActive(false);
+        }
     }
 
     private void OnEnable()
     {
         ResolveDependencies();
-        SubscribeToSettings();
+        WireButtonsIfNeeded();
         RefreshUiFromSettings();
     }
 
     private void OnDisable()
     {
-        UnsubscribeFromSettings();
         UnwireButtons();
     }
 
     public void OpenPanel()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(true);
-
-        RefreshUiFromSettings();
-
-        if (logDebug)
-            Debug.Log("[SettingsPanelUI] OpenPanel", this);
+        SetPanelOpen(true);
     }
 
     public void ClosePanel()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
-
-        if (logDebug)
-            Debug.Log("[SettingsPanelUI] ClosePanel", this);
+        SetPanelOpen(false);
     }
 
     public void TogglePanel()
@@ -97,23 +93,40 @@ public class SettingsPanelUI : MonoBehaviour
         if (panelRoot == null)
             return;
 
-        bool next = !panelRoot.activeSelf;
-        panelRoot.SetActive(next);
+        SetPanelOpen(!panelRoot.activeSelf);
+    }
 
-        if (next)
+    public void SetPanelOpen(bool open)
+    {
+        if (panelRoot == null)
+            return;
+
+        bool changed = panelRoot.activeSelf != open;
+        panelRoot.SetActive(open);
+
+        if (open)
+        {
+            ResolveDependencies();
+            WireButtonsIfNeeded();
             RefreshUiFromSettings();
+        }
+
+        if (changed)
+        {
+            PanelVisibilityChanged?.Invoke(open);
+        }
 
         if (logDebug)
-            Debug.Log("[SettingsPanelUI] TogglePanel -> " + next, this);
+            Debug.Log("[SettingsPanelUI] SetPanelOpen -> " + open, this);
     }
 
     public void RefreshUiFromSettings()
     {
         ResolveDependencies();
 
-        bool tutorialEnabled = tutorialPromptSettings == null || tutorialPromptSettings.TutorialPromptsEnabled;
-        bool audioEnabled = localGameSettings == null || localGameSettings.AudioEnabled;
-        bool tableDarkEnabled = localGameSettings != null && localGameSettings.TableDarkModeEnabled;
+        bool tutorialEnabled = TutorialPromptSettings.TutorialPromptsEnabled;
+        bool audioEnabled = LocalGameSettings.AudioEnabled;
+        bool tableDarkEnabled = LocalGameSettings.TableDarkModeEnabled;
 
         ApplyTutorialPromptVisual(tutorialEnabled);
         ApplyAudioVisual(audioEnabled);
@@ -133,46 +146,13 @@ public class SettingsPanelUI : MonoBehaviour
 
     private void ResolveDependencies()
     {
-        if (tutorialPromptSettings == null && autoFindDependencies)
-            tutorialPromptSettings = TutorialPromptSettings.Instance;
-
-        if (localGameSettings == null && autoFindDependencies)
-            localGameSettings = LocalGameSettings.Instance;
-
 #if UNITY_2023_1_OR_NEWER
-        if (tutorialPromptSettings == null && autoFindDependencies)
-            tutorialPromptSettings = FindFirstObjectByType<TutorialPromptSettings>(FindObjectsInactive.Include);
-
-        if (localGameSettings == null && autoFindDependencies)
-            localGameSettings = FindFirstObjectByType<LocalGameSettings>(FindObjectsInactive.Include);
+        if (tableThemeController == null)
+            tableThemeController = FindFirstObjectByType<TableThemeController>(FindObjectsInactive.Include);
 #else
-        if (tutorialPromptSettings == null && autoFindDependencies)
-            tutorialPromptSettings = FindObjectOfType<TutorialPromptSettings>();
-
-        if (localGameSettings == null && autoFindDependencies)
-            localGameSettings = FindObjectOfType<LocalGameSettings>();
+        if (tableThemeController == null)
+            tableThemeController = FindObjectOfType<TableThemeController>();
 #endif
-    }
-
-    private void SubscribeToSettings()
-    {
-        if (localGameSettings != null)
-        {
-            localGameSettings.AudioEnabledChanged -= HandleAudioChanged;
-            localGameSettings.AudioEnabledChanged += HandleAudioChanged;
-
-            localGameSettings.TableDarkModeChanged -= HandleTableThemeChanged;
-            localGameSettings.TableDarkModeChanged += HandleTableThemeChanged;
-        }
-    }
-
-    private void UnsubscribeFromSettings()
-    {
-        if (localGameSettings != null)
-        {
-            localGameSettings.AudioEnabledChanged -= HandleAudioChanged;
-            localGameSettings.TableDarkModeChanged -= HandleTableThemeChanged;
-        }
     }
 
     private void WireButtonsIfNeeded()
@@ -234,12 +214,11 @@ public class SettingsPanelUI : MonoBehaviour
 
     private void OnTutorialPromptClicked()
     {
-        if (tutorialPromptSettings == null)
-            return;
-
-        bool next = !tutorialPromptSettings.TutorialPromptsEnabled;
-        tutorialPromptSettings.SetEnabled(next);
+        bool next = !TutorialPromptSettings.TutorialPromptsEnabled;
+        TutorialPromptSettings.SetEnabled(next);
         ApplyTutorialPromptVisual(next);
+
+        TutorialPromptSettingChanged?.Invoke(next);
 
         if (logDebug)
             Debug.Log("[SettingsPanelUI] OnTutorialPromptClicked -> " + next, this);
@@ -247,11 +226,8 @@ public class SettingsPanelUI : MonoBehaviour
 
     private void OnAudioClicked()
     {
-        if (localGameSettings == null)
-            return;
-
-        bool next = !localGameSettings.AudioEnabled;
-        localGameSettings.SetAudioEnabled(next);
+        bool next = !LocalGameSettings.AudioEnabled;
+        LocalGameSettings.AudioEnabled = next;
         ApplyAudioVisual(next);
 
         if (logDebug)
@@ -260,25 +236,17 @@ public class SettingsPanelUI : MonoBehaviour
 
     private void OnTableThemeClicked()
     {
-        if (localGameSettings == null)
-            return;
-
-        bool next = !localGameSettings.TableDarkModeEnabled;
-        localGameSettings.SetTableDarkModeEnabled(next);
+        bool next = !LocalGameSettings.TableDarkModeEnabled;
+        LocalGameSettings.TableDarkModeEnabled = next;
         ApplyTableThemeVisual(next);
+
+        if (tableThemeController != null)
+            tableThemeController.RefreshTheme();
+
+        TableThemeDarkModeChanged?.Invoke(next);
 
         if (logDebug)
             Debug.Log("[SettingsPanelUI] OnTableThemeClicked -> " + next, this);
-    }
-
-    private void HandleAudioChanged(bool enabled)
-    {
-        ApplyAudioVisual(enabled);
-    }
-
-    private void HandleTableThemeChanged(bool enabled)
-    {
-        ApplyTableThemeVisual(enabled);
     }
 
     private void ApplyTutorialPromptVisual(bool enabled)
@@ -319,9 +287,10 @@ public class SettingsPanelUI : MonoBehaviour
     {
         if (tableThemeStateImage != null)
         {
-            tableThemeStateImage.sprite = darkEnabled
-                ? tableThemeDarkSprite
-                : tableThemeLightSprite;
+            if (darkEnabled && tableThemeDarkSprite != null)
+                tableThemeStateImage.sprite = tableThemeDarkSprite;
+            else if (!darkEnabled && tableThemeLightSprite != null)
+                tableThemeStateImage.sprite = tableThemeLightSprite;
         }
 
         if (tableThemeValueText != null)
