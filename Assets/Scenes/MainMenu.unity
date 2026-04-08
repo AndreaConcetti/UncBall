@@ -23745,7 +23745,7 @@ MonoBehaviour:
     pendingServerSync: 0
     lastServerSyncUnixTimeSeconds: 0
     lastLocalSaveUnixTimeSeconds: 0
-  logDebug: 0
+  logDebug: 1
 --- !u!114 &1445563843
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -34745,7 +34745,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OnlinePlayerPresentationResolver
   onlineFlowController: {fileID: 1801468267}
-  logDebug: 0
+  logDebug: 1
 --- !u!114 &1801468269
 MonoBehaviour:
   m_ObjectHideFlags: 0

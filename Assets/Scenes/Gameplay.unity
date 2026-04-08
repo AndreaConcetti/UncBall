@@ -656,8 +656,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -275}
-  m_SizeDelta: {x: 0, y: 50}
+  m_AnchoredPosition: {x: 370, y: -270}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &73647319
 CanvasRenderer:
@@ -4490,8 +4490,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -590}
-  m_SizeDelta: {x: 0, y: 100}
+  m_AnchoredPosition: {x: 370, y: -470}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &408431592
 CanvasRenderer:
@@ -6974,10 +6974,15 @@ MonoBehaviour:
   postGamePanel: {fileID: 2123206093}
   pausePanel: {fileID: 0}
   postGamePanelShowDelaySeconds: 0
-  reconnectPanel: {fileID: 0}
+  reconnectPanel: {fileID: 790069027}
   reconnectTitleText: {fileID: 1572722855}
   reconnectMessageText: {fileID: 1007081262}
   reconnectCountdownText: {fileID: 972165866}
+  authorityDisconnectedSuffix: DISCONNECTED
+  authorityDisconnectedMessage: WAITING FOR MATCH RESOLUTION...
+  localDisconnectedTitle: YOU DISCONNECTED FROM SERVER
+  localDisconnectedMessage: TRYING TO RESOLVE MATCH...
+  showReconnectTimerAsCountUp: 1
   halfTimeCountdownText: {fileID: 678370981}
   halfTimePlayer1NameText: {fileID: 254603463}
   halfTimePlayer2NameText: {fileID: 1878302621}
@@ -8894,8 +8899,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -360}
-  m_SizeDelta: {x: 494.49, y: 120}
+  m_AnchoredPosition: {x: 370, y: -320}
+  m_SizeDelta: {x: 494.49, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &758091455
 MonoBehaviour:
@@ -8964,7 +8969,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 72
+  m_fontSize: 68.15
   m_fontSizeBase: 40
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -10546,8 +10551,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -700}
-  m_SizeDelta: {x: 74.12, y: 120}
+  m_AnchoredPosition: {x: 370, y: -520}
+  m_SizeDelta: {x: 74.12, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &972165865
 MonoBehaviour:
@@ -10616,7 +10621,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 72
+  m_fontSize: 68.15
   m_fontSizeBase: 40
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -11303,8 +11308,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -480}
-  m_SizeDelta: {x: 338.82, y: 120}
+  m_AnchoredPosition: {x: 370, y: -420}
+  m_SizeDelta: {x: 338.82, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1007081261
 MonoBehaviour:
@@ -11373,7 +11378,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 72
+  m_fontSize: 68.15
   m_fontSizeBase: 40
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -13950,8 +13955,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8a2188b31bcbb4f46b6abd2d6ce93c6d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FusionOnlineMatchConnectionWatcher
-  runnerManager: {fileID: 0}
   matchController: {fileID: 0}
+  boundRunner: {fileID: 0}
   logDebug: 1
 --- !u!1 &1404626876
 GameObject:
@@ -14507,10 +14512,10 @@ RectTransform:
   - {fileID: 972165864}
   m_Father: {fileID: 100914574}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 740, y: 1007}
+  m_SizeDelta: {x: -340, y: -1200}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1460204473
 MonoBehaviour:
@@ -14548,7 +14553,7 @@ MonoBehaviour:
   m_ChildForceExpandWidth: 0
   m_ChildForceExpandHeight: 0
   m_ChildControlWidth: 1
-  m_ChildControlHeight: 0
+  m_ChildControlHeight: 1
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
@@ -15261,8 +15266,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -150}
-  m_SizeDelta: {x: 400, y: 200}
+  m_AnchoredPosition: {x: 370, y: -160}
+  m_SizeDelta: {x: 400, y: 220}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1572722854
 MonoBehaviour:
@@ -15334,7 +15339,7 @@ MonoBehaviour:
   m_fontSize: 72
   m_fontSizeBase: 72
   m_fontWeight: 400
-  m_enableAutoSizing: 0
+  m_enableAutoSizing: 1
   m_fontSizeMin: 18
   m_fontSizeMax: 72
   m_fontStyle: 16

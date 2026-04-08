@@ -8,14 +8,14 @@ public class FusionOnlineMatchAppLifecycleGuard : MonoBehaviour
     [Header("Suspend Policy")]
     [SerializeField] private bool monitorApplicationPause = true;
     [SerializeField] private bool monitorApplicationFocusLoss = true;
-    [SerializeField] private float backgroundForfeitDelaySeconds = 0.35f;
+    [SerializeField] private float backgroundForfeitDelaySeconds = 6f;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
-    private bool suspendPending;
+    private bool suspendTrackingActive;
     private bool localTerminalForfeitTriggered;
-    private float suspendCountdownRemaining;
+    private double suspendStartedRealtime;
 
     private void Awake()
     {
@@ -25,34 +25,34 @@ public class FusionOnlineMatchAppLifecycleGuard : MonoBehaviour
     private void OnEnable()
     {
         ResolveReferences();
-        CancelPendingSuspend();
+        ResetSuspendTracking();
         localTerminalForfeitTriggered = false;
     }
 
     private void Update()
     {
-        if (!suspendPending)
+        if (!suspendTrackingActive)
             return;
 
         ResolveReferences();
 
         if (matchController == null)
         {
-            CancelPendingSuspend();
+            ResetSuspendTracking();
             return;
         }
 
         if (!matchController.MatchStarted || matchController.MatchEnded || matchController.IsTerminalOutcomeLocked)
         {
-            CancelPendingSuspend();
+            ResetSuspendTracking();
             return;
         }
 
-        suspendCountdownRemaining -= Time.unscaledDeltaTime;
-        if (suspendCountdownRemaining > 0f)
+        double elapsed = Time.realtimeSinceStartupAsDouble - suspendStartedRealtime;
+        if (elapsed < Mathf.Max(0f, backgroundForfeitDelaySeconds))
             return;
 
-        TriggerLocalSuspendForfeit("CountdownExpired");
+        TriggerLocalSuspendForfeit("UpdateElapsed");
     }
 
     private void OnApplicationPause(bool pauseStatus)
@@ -61,9 +61,9 @@ public class FusionOnlineMatchAppLifecycleGuard : MonoBehaviour
             return;
 
         if (pauseStatus)
-            BeginSuspendCountdown("OnApplicationPause(true)");
+            BeginSuspendTracking("OnApplicationPause(true)");
         else
-            HandleResumeSignal("OnApplicationPause(false)");
+            EvaluateResume("OnApplicationPause(false)");
     }
 
     private void OnApplicationFocus(bool hasFocus)
@@ -72,12 +72,12 @@ public class FusionOnlineMatchAppLifecycleGuard : MonoBehaviour
             return;
 
         if (!hasFocus)
-            BeginSuspendCountdown("OnApplicationFocus(false)");
+            BeginSuspendTracking("OnApplicationFocus(false)");
         else
-            HandleResumeSignal("OnApplicationFocus(true)");
+            EvaluateResume("OnApplicationFocus(true)");
     }
 
-    private void BeginSuspendCountdown(string source)
+    private void BeginSuspendTracking(string source)
     {
         ResolveReferences();
 
@@ -90,39 +90,56 @@ public class FusionOnlineMatchAppLifecycleGuard : MonoBehaviour
         if (!matchController.MatchStarted || matchController.MatchEnded || matchController.IsTerminalOutcomeLocked)
             return;
 
-        float delay = Mathf.Max(0f, backgroundForfeitDelaySeconds);
+        if (suspendTrackingActive)
+            return;
 
-        if (delay <= 0f)
+        suspendTrackingActive = true;
+        suspendStartedRealtime = Time.realtimeSinceStartupAsDouble;
+
+        if (logDebug)
+        {
+            Debug.LogWarning(
+                "[FusionOnlineMatchAppLifecycleGuard] Suspend tracking started -> Source=" + source +
+                " | Delay=" + Mathf.Max(0f, backgroundForfeitDelaySeconds),
+                this);
+        }
+    }
+
+    private void EvaluateResume(string source)
+    {
+        if (!suspendTrackingActive)
+            return;
+
+        ResolveReferences();
+
+        if (matchController == null)
+        {
+            ResetSuspendTracking();
+            return;
+        }
+
+        double elapsed = Time.realtimeSinceStartupAsDouble - suspendStartedRealtime;
+        float threshold = Mathf.Max(0f, backgroundForfeitDelaySeconds);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchAppLifecycleGuard] Resume detected -> Source=" + source +
+                " | Elapsed=" + elapsed.ToString("F3") +
+                " | Threshold=" + threshold.ToString("F3"),
+                this);
+        }
+
+        if (elapsed >= threshold &&
+            matchController.MatchStarted &&
+            !matchController.MatchEnded &&
+            !matchController.IsTerminalOutcomeLocked)
         {
             TriggerLocalSuspendForfeit(source);
             return;
         }
 
-        suspendPending = true;
-        suspendCountdownRemaining = delay;
-
-        if (logDebug)
-        {
-            Debug.LogWarning(
-                "[FusionOnlineMatchAppLifecycleGuard] Suspend detected -> Source=" + source +
-                " | Delay=" + delay,
-                this);
-        }
-    }
-
-    private void HandleResumeSignal(string source)
-    {
-        if (!suspendPending)
-            return;
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[FusionOnlineMatchAppLifecycleGuard] Resume detected before terminal forfeit -> Source=" + source,
-                this);
-        }
-
-        CancelPendingSuspend();
+        ResetSuspendTracking();
     }
 
     private void TriggerLocalSuspendForfeit(string source)
@@ -132,9 +149,8 @@ public class FusionOnlineMatchAppLifecycleGuard : MonoBehaviour
         if (localTerminalForfeitTriggered)
             return;
 
-        suspendPending = false;
-        suspendCountdownRemaining = 0f;
         localTerminalForfeitTriggered = true;
+        suspendTrackingActive = false;
 
         if (matchController == null)
             return;
@@ -149,13 +165,13 @@ public class FusionOnlineMatchAppLifecycleGuard : MonoBehaviour
                 this);
         }
 
-        matchController.NotifyLocalDisconnectedFromSession();
+        matchController.NotifyLocalAppBackgroundForfeit();
     }
 
-    private void CancelPendingSuspend()
+    private void ResetSuspendTracking()
     {
-        suspendPending = false;
-        suspendCountdownRemaining = 0f;
+        suspendTrackingActive = false;
+        suspendStartedRealtime = 0d;
     }
 
     private void ResolveReferences()

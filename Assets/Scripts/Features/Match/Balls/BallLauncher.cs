@@ -339,7 +339,11 @@ public class BallLauncher : MonoBehaviour
         PlayerID localPlayer = ResolveEffectiveLocalPlayerId();
 
         bool localLostTurn = cachedController.CurrentTurnOwner != localPlayer;
-        bool matchBlocked = cachedController.MatchEnded || cachedController.MidMatchBreakActive;
+        bool matchBlocked =
+            cachedController.MatchEnded ||
+            cachedController.MidMatchBreakActive ||
+            cachedController.IsAuthorityConnectionLostOverlayVisible;
+
         bool ballMissing = ball == null;
         bool launchedAlready = CurrentPhase == LaunchPhase.Launched;
 
@@ -620,13 +624,9 @@ public class BallLauncher : MonoBehaviour
 
         Rigidbody rb = ball.GetComponent<Rigidbody>();
         if (rb != null)
-        {
             rb.position = targetWorld;
-        }
         else
-        {
             ball.transform.position = targetWorld;
-        }
 
         if (cachedController != null && cachedController.IsNetworkStateReadable)
         {
@@ -797,6 +797,13 @@ public class BallLauncher : MonoBehaviour
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession || cachedController == null || !cachedController.IsNetworkStateReadable)
             return;
 
+        if (cachedController.MatchEnded ||
+            cachedController.MidMatchBreakActive ||
+            cachedController.IsAuthorityConnectionLostOverlayVisible)
+        {
+            return;
+        }
+
         hasLaunched = true;
         CurrentPhase = LaunchPhase.Launched;
 
@@ -923,6 +930,9 @@ public class BallLauncher : MonoBehaviour
             return true;
 
         if (cachedController.MatchEnded || cachedController.MidMatchBreakActive)
+            return true;
+
+        if (cachedController.IsAuthorityConnectionLostOverlayVisible)
             return true;
 
         if (cachedController.CurrentTurnOwner != ResolveEffectiveLocalPlayerId())

@@ -1,15 +1,18 @@
+using System.Collections.Generic;
 using Fusion;
+using Fusion.Sockets;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
-public class FusionOnlineMatchConnectionWatcher : MonoBehaviour
+public class FusionOnlineMatchConnectionWatcher : MonoBehaviour, INetworkRunnerCallbacks
 {
     [Header("Dependencies")]
-    [SerializeField] private PhotonFusionRunnerManager runnerManager;
     [SerializeField] private FusionOnlineMatchController matchController;
+    [SerializeField] private NetworkRunner boundRunner;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
+
+    private NetworkRunner subscribedRunner;
 
     private void Awake()
     {
@@ -19,32 +22,29 @@ public class FusionOnlineMatchConnectionWatcher : MonoBehaviour
     private void OnEnable()
     {
         ResolveReferences();
-        Subscribe();
-        SceneManager.sceneLoaded += OnSceneLoaded;
+        TryBindRunner();
+    }
+
+    private void Update()
+    {
+        ResolveReferences();
+
+        if (subscribedRunner == null || !subscribedRunner || !subscribedRunner.IsRunning)
+            TryBindRunner();
     }
 
     private void OnDisable()
     {
-        Unsubscribe();
-        SceneManager.sceneLoaded -= OnSceneLoaded;
+        UnbindRunner();
     }
 
     private void OnDestroy()
     {
-        Unsubscribe();
-        SceneManager.sceneLoaded -= OnSceneLoaded;
-    }
-
-    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-    {
-        ResolveReferences();
+        UnbindRunner();
     }
 
     private void ResolveReferences()
     {
-        if (runnerManager == null)
-            runnerManager = PhotonFusionRunnerManager.Instance;
-
         if (matchController == null)
         {
 #if UNITY_2023_1_OR_NEWER
@@ -53,41 +53,53 @@ public class FusionOnlineMatchConnectionWatcher : MonoBehaviour
             matchController = FindObjectOfType<FusionOnlineMatchController>();
 #endif
         }
+
+        if (boundRunner == null)
+        {
+#if UNITY_2023_1_OR_NEWER
+            boundRunner = FindFirstObjectByType<NetworkRunner>();
+#else
+            boundRunner = FindObjectOfType<NetworkRunner>();
+#endif
+        }
     }
 
-    private void Subscribe()
+    private void TryBindRunner()
     {
-        if (runnerManager == null)
+        if (boundRunner == null)
+        {
+#if UNITY_2023_1_OR_NEWER
+            boundRunner = FindFirstObjectByType<NetworkRunner>();
+#else
+            boundRunner = FindObjectOfType<NetworkRunner>();
+#endif
+        }
+
+        if (boundRunner == null)
             return;
 
-        runnerManager.OnPlayerLeftEvent -= HandlePlayerLeft;
-        runnerManager.OnDisconnectedFromServerEvent -= HandleDisconnectedFromServer;
-        runnerManager.OnShutdownEvent -= HandleShutdown;
-        runnerManager.OnSceneLoadDoneEvent -= HandleSceneLoadDone;
-
-        runnerManager.OnPlayerLeftEvent += HandlePlayerLeft;
-        runnerManager.OnDisconnectedFromServerEvent += HandleDisconnectedFromServer;
-        runnerManager.OnShutdownEvent += HandleShutdown;
-        runnerManager.OnSceneLoadDoneEvent += HandleSceneLoadDone;
-    }
-
-    private void Unsubscribe()
-    {
-        if (runnerManager == null)
+        if (subscribedRunner == boundRunner)
             return;
 
-        runnerManager.OnPlayerLeftEvent -= HandlePlayerLeft;
-        runnerManager.OnDisconnectedFromServerEvent -= HandleDisconnectedFromServer;
-        runnerManager.OnShutdownEvent -= HandleShutdown;
-        runnerManager.OnSceneLoadDoneEvent -= HandleSceneLoadDone;
+        UnbindRunner();
+
+        subscribedRunner = boundRunner;
+        subscribedRunner.AddCallbacks(this);
+
+        if (logDebug)
+            Debug.Log("[FusionOnlineMatchConnectionWatcher] Bound directly to NetworkRunner callbacks.", this);
     }
 
-    private void HandleSceneLoadDone()
+    private void UnbindRunner()
     {
-        ResolveReferences();
+        if (subscribedRunner == null)
+            return;
+
+        subscribedRunner.RemoveCallbacks(this);
+        subscribedRunner = null;
     }
 
-    private void HandlePlayerLeft(PlayerRef player)
+    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
         ResolveReferences();
 
@@ -95,12 +107,12 @@ public class FusionOnlineMatchConnectionWatcher : MonoBehaviour
             return;
 
         if (logDebug)
-            Debug.Log("[FusionOnlineMatchConnectionWatcher] HandlePlayerLeft -> " + player, this);
+            Debug.LogWarning("[FusionOnlineMatchConnectionWatcher] OnPlayerLeft -> " + player, this);
 
         matchController.NotifyRunnerPlayerLeft(player);
     }
 
-    private void HandleDisconnectedFromServer()
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
     {
         ResolveReferences();
 
@@ -108,21 +120,38 @@ public class FusionOnlineMatchConnectionWatcher : MonoBehaviour
             return;
 
         if (logDebug)
-            Debug.LogWarning("[FusionOnlineMatchConnectionWatcher] HandleDisconnectedFromServer", this);
+            Debug.LogWarning("[FusionOnlineMatchConnectionWatcher] OnShutdown -> " + shutdownReason, this);
+
+        matchController.NotifyRunnerShutdown(shutdownReason);
+    }
+
+    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
+    {
+        ResolveReferences();
+
+        if (matchController == null)
+            return;
+
+        if (logDebug)
+            Debug.LogWarning("[FusionOnlineMatchConnectionWatcher] OnDisconnectedFromServer -> " + reason, this);
 
         matchController.NotifyLocalDisconnectedFromSession();
     }
 
-    private void HandleShutdown(ShutdownReason reason)
-    {
-        ResolveReferences();
-
-        if (matchController == null)
-            return;
-
-        if (logDebug)
-            Debug.LogWarning("[FusionOnlineMatchConnectionWatcher] HandleShutdown -> " + reason, this);
-
-        matchController.NotifyRunnerShutdown(reason);
-    }
+    public void OnConnectedToServer(NetworkRunner runner) { }
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
+    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
+    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
+    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
+    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
+    public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
+    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, System.ArraySegment<byte> data) { }
+    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
+    public void OnInput(NetworkRunner runner, NetworkInput input) { }
+    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
+    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
+    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
+    public void OnPlayerJoined(NetworkRunner runner, PlayerRef player) { }
+    public void OnSceneLoadDone(NetworkRunner runner) { }
+    public void OnSceneLoadStart(NetworkRunner runner) { }
 }
