@@ -163,6 +163,10 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     private bool localGameplayHardLocked;
 
+    private bool authorityRemoteDisconnectPending;
+    private PlayerID authorityRemoteDisconnectPendingPlayer = PlayerID.None;
+    private float authorityRemoteDisconnectPendingElapsed;
+
     public bool HasSpawnedNetworkState => hasSpawnedNetworkState;
 
     public bool IsNetworkStateReadable =>
@@ -179,7 +183,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
     public bool IsAuthorityConnectionLostOverlayVisible =>
         localAuthorityConnectionLostVisible ||
         localRemoteClientConnectionLostVisible ||
-        localTransportConnectionIssueVisible;
+        localTransportConnectionIssueVisible ||
+        authorityRemoteDisconnectPending;
 
     public bool IsGameplayHardLocked => localGameplayHardLocked;
 
@@ -368,6 +373,10 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         localGameplayHardLocked = false;
 
+        authorityRemoteDisconnectPending = false;
+        authorityRemoteDisconnectPendingPlayer = PlayerID.None;
+        authorityRemoteDisconnectPendingElapsed = 0f;
+
         SubmitLocalPresentationIfNeeded();
         ApplyReplicaToLocalSystems();
     }
@@ -390,6 +399,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         TickLocalAuthorityHeartbeatWatchdog();
         TickAuthorityRemoteClientHeartbeatWatchdog();
+        TickAuthorityRemoteDisconnectPending();
     }
 
     public override void FixedUpdateNetwork()
@@ -566,8 +576,11 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         PlayerID leaver = ResolvePlayerIdFromPlayerRef(player);
         if (leaver == PlayerID.None)
+            leaver = EffectiveRemotePlayerId;
+
+        if (leaver == EffectiveRemotePlayerId)
         {
-            AuthorityResolveDisconnectForPlayer(EffectiveRemotePlayerId);
+            BeginAuthorityRemoteDisconnectPending(leaver, "OnPlayerLeft");
             return;
         }
 
@@ -610,6 +623,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return;
         }
 
+        RPC_ReportClientBackgroundForfeit((byte)EffectiveLocalPlayerId);
         ForceLocalEnd(MatchEndReason.LocalDisconnected, EffectiveRemotePlayerId);
     }
 
@@ -741,9 +755,26 @@ public class FusionOnlineMatchController : NetworkBehaviour
         authorityRemoteWatchdogStarted = true;
         remoteClientHeartbeatStaleTimer = 0f;
         HideRemoteClientConnectionLostOverlay();
+        CancelAuthorityRemoteDisconnectPending(sender);
 
         if (logDebug)
             Debug.Log("[FusionOnlineMatchController] RPC_ClientHeartbeat received from remote client.", this);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_ReportClientBackgroundForfeit(byte playerRaw)
+    {
+        if (IsTerminalOutcomeLocked)
+            return;
+
+        if (!Object.HasStateAuthority)
+            return;
+
+        PlayerID player = (PlayerID)playerRaw;
+        if (player != EffectiveRemotePlayerId)
+            return;
+
+        BeginAuthorityRemoteDisconnectPending(player, "RPC_ReportClientBackgroundForfeit");
     }
 
     private void AuthorityStartRematchRequest(PlayerID requester)
@@ -821,6 +852,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (disconnectedPlayer != PlayerID.Player1 && disconnectedPlayer != PlayerID.Player2)
             return;
 
+        CancelAuthorityRemoteDisconnectPending(disconnectedPlayer);
+
         PlayerID winner = disconnectedPlayer == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
         MatchEndReason reason = disconnectedPlayer == EffectiveLocalPlayerId
             ? MatchEndReason.LocalDisconnected
@@ -830,6 +863,82 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         if (disconnectedPlayer == EffectiveLocalPlayerId)
             LockLocalGameplayAfterLoss();
+    }
+
+    private void BeginAuthorityRemoteDisconnectPending(PlayerID player, string source)
+    {
+        if (IsTerminalOutcomeLocked)
+            return;
+
+        if (!Object.HasStateAuthority)
+            return;
+
+        if (!MatchStarted || MatchEnded)
+            return;
+
+        if (player != EffectiveRemotePlayerId)
+            return;
+
+        authorityRemoteDisconnectPending = true;
+        authorityRemoteDisconnectPendingPlayer = player;
+        authorityRemoteDisconnectPendingElapsed = 0f;
+        authorityRemoteWatchdogStarted = true;
+        remoteClientHeartbeatStaleTimer = 0f;
+
+        ShowRemoteClientConnectionLostOverlay();
+
+        if (logDebug)
+        {
+            Debug.LogWarning(
+                "[FusionOnlineMatchController] BeginAuthorityRemoteDisconnectPending -> Source=" + source +
+                " | Player=" + player,
+                this);
+        }
+    }
+
+    private void CancelAuthorityRemoteDisconnectPending(PlayerID player)
+    {
+        if (!authorityRemoteDisconnectPending)
+            return;
+
+        if (authorityRemoteDisconnectPendingPlayer != player)
+            return;
+
+        authorityRemoteDisconnectPending = false;
+        authorityRemoteDisconnectPendingPlayer = PlayerID.None;
+        authorityRemoteDisconnectPendingElapsed = 0f;
+        HideRemoteClientConnectionLostOverlay();
+
+        if (logDebug)
+            Debug.Log("[FusionOnlineMatchController] CancelAuthorityRemoteDisconnectPending -> Player=" + player, this);
+    }
+
+    private void TickAuthorityRemoteDisconnectPending()
+    {
+        if (!authorityRemoteDisconnectPending)
+            return;
+
+        if (IsTerminalOutcomeLocked)
+            return;
+
+        if (Object == null || !Object.HasStateAuthority)
+            return;
+
+        if (!MatchStarted || MatchEnded)
+            return;
+
+        authorityRemoteDisconnectPendingElapsed += Time.unscaledDeltaTime;
+
+        float timeout = Mathf.Max(0.25f, gameplayDisconnectTimeoutSeconds);
+        if (authorityRemoteDisconnectPendingElapsed < timeout)
+            return;
+
+        PlayerID pendingPlayer = authorityRemoteDisconnectPendingPlayer;
+        authorityRemoteDisconnectPending = false;
+        authorityRemoteDisconnectPendingPlayer = PlayerID.None;
+        authorityRemoteDisconnectPendingElapsed = 0f;
+
+        AuthorityResolveDisconnectForPlayer(pendingPlayer);
     }
 
     private void ForceLocalEnd(MatchEndReason reason, PlayerID winner)
@@ -1014,18 +1123,19 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (!authorityRemoteWatchdogStarted)
             return;
 
+        if (authorityRemoteDisconnectPending)
+            return;
+
         remoteClientHeartbeatStaleTimer += Time.unscaledDeltaTime;
 
         float timeout = Mathf.Max(0.25f, gameplayDisconnectTimeoutSeconds);
         float overlayThreshold = Mathf.Min(timeout, Mathf.Max(0.15f, timeout * 0.35f));
 
         if (remoteClientHeartbeatStaleTimer >= overlayThreshold)
-            ShowRemoteClientConnectionLostOverlay();
+            BeginAuthorityRemoteDisconnectPending(EffectiveRemotePlayerId, "HeartbeatTimeoutOverlay");
 
         if (remoteClientHeartbeatStaleTimer < timeout)
             return;
-
-        AuthorityResolveDisconnectForPlayer(EffectiveRemotePlayerId);
     }
 
     private bool IsLocalNetworkLikelyUnavailable()
@@ -1091,6 +1201,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
         HideAuthorityConnectionLostOverlay();
         HideRemoteClientConnectionLostOverlay();
         HideLocalTransportConnectionIssueOverlay();
+        authorityRemoteDisconnectPending = false;
+        authorityRemoteDisconnectPendingPlayer = PlayerID.None;
+        authorityRemoteDisconnectPendingElapsed = 0f;
     }
 
     private void ResolveReferences()
@@ -1299,6 +1412,10 @@ public class FusionOnlineMatchController : NetworkBehaviour
         remoteClientHeartbeatStaleTimer = 0f;
         authorityRemoteWatchdogStarted = false;
         clientSentInitialHeartbeat = false;
+
+        authorityRemoteDisconnectPending = false;
+        authorityRemoteDisconnectPendingPlayer = PlayerID.None;
+        authorityRemoteDisconnectPendingElapsed = 0f;
 
         if (scoreManager != null)
             scoreManager.StartMatch();
@@ -1971,6 +2088,12 @@ public class FusionOnlineMatchController : NetworkBehaviour
             reconnectPending = true;
             reconnectMissingPlayer = PlayerID.Player1;
             reconnectElapsed = Mathf.Max(0f, authorityHeartbeatStaleTimer);
+        }
+        else if (authorityRemoteDisconnectPending)
+        {
+            reconnectPending = true;
+            reconnectMissingPlayer = authorityRemoteDisconnectPendingPlayer;
+            reconnectElapsed = Mathf.Max(0f, authorityRemoteDisconnectPendingElapsed);
         }
         else if (localRemoteClientConnectionLostVisible)
         {
