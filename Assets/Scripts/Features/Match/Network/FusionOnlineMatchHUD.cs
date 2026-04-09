@@ -43,10 +43,13 @@ public class FusionOnlineMatchHUD : MonoBehaviour
 
     [Header("Reconnect Overlay Text")]
     [SerializeField] private string authorityDisconnectedSuffix = "DISCONNECTED";
-    [SerializeField] private string authorityDisconnectedMessage = "WAITING FOR MATCH RESOLUTION...";
+    [SerializeField] private string authorityDisconnectedMessage = "WAITING FOR MATCH RESOLUTION";
     [SerializeField] private string localDisconnectedTitle = "YOU DISCONNECTED FROM SERVER";
-    [SerializeField] private string localDisconnectedMessage = "WAITING FOR MATCH RESOLUTION...";
-    [SerializeField] private bool showReconnectTimerAsCountUp = true;
+    [SerializeField] private string localDisconnectedMessage = "WAITING FOR MATCH RESOLUTION";
+    [SerializeField] private bool showReconnectTimerAsCountUp = false;
+    [SerializeField] private bool useReconnectDotsAnimation = true;
+    [SerializeField] private float reconnectDotsInterval = 0.45f;
+    [SerializeField] private int reconnectDotsMaxCount = 3;
 
     [Header("Half Time Panel UI")]
     [SerializeField] private TMP_Text halfTimeCountdownText;
@@ -73,6 +76,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     [SerializeField] private TMP_Text gameResultLoserText;
     [SerializeField] private TMP_Text drawText;
     [SerializeField] private TMP_Text opponentDisconnectedText;
+    [SerializeField] private TMP_Text localDisconnectedEndgameText;
 
     [Header("Layout")]
     [SerializeField] private BottomBarOrderSwapper bottomBarOrderSwapper;
@@ -88,6 +92,9 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     [SerializeField] private bool logDebug = false;
 
     private bool hasAppliedInitialLayout;
+    private float reconnectDotsTimer;
+    private int reconnectDotsCount;
+    private bool reconnectPanelWasVisibleLastFrame;
     private bool hasReceivedNetworkState;
     private bool previousMatchEnded;
     private bool postGameDelayActive;
@@ -112,6 +119,8 @@ public class FusionOnlineMatchHUD : MonoBehaviour
 
     private void Update()
     {
+        UpdateReconnectDotsAnimation();
+
         if (postGameDelayActive)
         {
             postGameDelayRemaining -= Time.unscaledDeltaTime;
@@ -135,6 +144,30 @@ public class FusionOnlineMatchHUD : MonoBehaviour
             return;
 
         ApplySessionPreviewIfPossible();
+    }
+
+    private void UpdateReconnectDotsAnimation()
+    {
+        if (!useReconnectDotsAnimation)
+            return;
+
+        if (reconnectPanel == null || !reconnectPanel.activeInHierarchy || reconnectCountdownText == null)
+            return;
+
+        reconnectDotsTimer += Time.unscaledDeltaTime;
+
+        float interval = Mathf.Max(0.05f, reconnectDotsInterval);
+        if (reconnectDotsTimer < interval)
+            return;
+
+        reconnectDotsTimer = 0f;
+        reconnectDotsCount += 1;
+
+        int maxDots = Mathf.Max(1, reconnectDotsMaxCount);
+        if (reconnectDotsCount > maxDots)
+            reconnectDotsCount = 0;
+
+        reconnectCountdownText.text = new string('.', reconnectDotsCount);
     }
 
     public void ApplyState(
@@ -363,7 +396,16 @@ public class FusionOnlineMatchHUD : MonoBehaviour
             reconnectPanel.SetActive(visible);
 
         if (!visible)
+        {
+            reconnectDotsTimer = 0f;
+            reconnectDotsCount = 0;
+
+            if (reconnectCountdownText != null)
+                reconnectCountdownText.text = string.Empty;
+
+            reconnectPanelWasVisibleLastFrame = false;
             return;
+        }
 
         string title;
         string message;
@@ -388,9 +430,23 @@ public class FusionOnlineMatchHUD : MonoBehaviour
 
         if (reconnectCountdownText != null)
         {
-            float displayedValue = Mathf.Max(0f, reconnectTimeRemaining);
-            reconnectCountdownText.text = displayedValue.ToString("F1") + "s";
+            if (useReconnectDotsAnimation)
+            {
+                if (!reconnectPanelWasVisibleLastFrame)
+                {
+                    reconnectDotsTimer = 0f;
+                    reconnectDotsCount = 0;
+                    reconnectCountdownText.text = string.Empty;
+                }
+            }
+            else
+            {
+                float displayedValue = Mathf.Max(0f, reconnectTimeRemaining);
+                reconnectCountdownText.text = displayedValue.ToString("F1") + "s";
+            }
         }
+
+        reconnectPanelWasVisibleLastFrame = true;
     }
 
     private string ResolveReconnectMissingPlayerName(PlayerID reconnectMissingPlayer, string player1Name, string player2Name)
@@ -508,7 +564,10 @@ public class FusionOnlineMatchHUD : MonoBehaviour
                 ? forcedShowOpponentDisconnectedText
                 : endReason == OnlineMatchEndReason.DisconnectWin;
 
+        bool showLocalDisconnected = endReason == OnlineMatchEndReason.DisconnectLoss;
+
         SetTextVisible(opponentDisconnectedText, showOpponentDisconnected);
+        SetTextVisible(localDisconnectedEndgameText, showLocalDisconnected);
 
         if (showOpponentDisconnected && opponentDisconnectedText != null)
         {
@@ -517,6 +576,9 @@ public class FusionOnlineMatchHUD : MonoBehaviour
             else
                 opponentDisconnectedText.text = "OPPONENT DISCONNECTED";
         }
+
+        if (showLocalDisconnected && localDisconnectedEndgameText != null)
+            localDisconnectedEndgameText.text = "YOU DISCONNECTED";
     }
 
     private void SetTextVisible(TMP_Text textComponent, bool visible)
@@ -627,6 +689,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         SetTextVisible(gameResultLoserText, false);
         SetTextVisible(drawText, false);
         SetTextVisible(opponentDisconnectedText, false);
+        SetTextVisible(localDisconnectedEndgameText, false);
 
         if (reconnectPanel != null)
             reconnectPanel.SetActive(false);
@@ -643,6 +706,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         forcedPostGameRequested = false;
         forcedShowOpponentDisconnectedText = false;
         forcedDisconnectedPlayerName = string.Empty;
+        reconnectPanelWasVisibleLastFrame = false;
     }
 
     private void ResolveDependencies()

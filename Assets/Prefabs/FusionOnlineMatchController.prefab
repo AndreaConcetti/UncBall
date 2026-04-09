@@ -79,7 +79,10 @@ MonoBehaviour:
   stuckTimeout: 3
   stuckVelocityThreshold: 0.05
   authorityHeartbeatSendInterval: 0.25
-  authorityHeartbeatTimeoutSeconds: 6
+  gameplayDisconnectTimeoutSeconds: 7
+  clientHeartbeatSendInterval: 0.25
+  remoteRecoveryGraceSeconds: 7
+  localRecoveryGraceSeconds: 7
   fallbackMatchMode: 1
   fallbackPointsToWin: 16
   fallbackMatchDurationSeconds: 180

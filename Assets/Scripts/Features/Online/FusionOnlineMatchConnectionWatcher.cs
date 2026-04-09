@@ -135,10 +135,24 @@ public class FusionOnlineMatchConnectionWatcher : MonoBehaviour, INetworkRunnerC
         if (logDebug)
             Debug.LogWarning("[FusionOnlineMatchConnectionWatcher] OnDisconnectedFromServer -> " + reason, this);
 
-        matchController.NotifyLocalDisconnectedFromSession();
+        bool localNetworkUnavailable = Application.internetReachability == NetworkReachability.NotReachable;
+
+        if (localNetworkUnavailable)
+            matchController.NotifyLocalDisconnectedFromSession();
+        else
+            matchController.NotifyRemoteAuthorityLostAsClient();
     }
 
-    public void OnConnectedToServer(NetworkRunner runner) { }
+    public void OnConnectedToServer(NetworkRunner runner)
+    {
+        ResolveReferences();
+
+        if (matchController == null)
+            return;
+
+        matchController.NotifyLocalReconnectedToSession();
+    }
+
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }

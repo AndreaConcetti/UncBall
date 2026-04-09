@@ -3,6 +3,19 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 
+[System.Serializable]
+public struct OnlineMatchRewardResult
+{
+    public bool CountAsMatchPlayed;
+    public bool CountAsWin;
+    public bool CountAsLoss;
+    public int XpReward;
+    public int SoftCurrencyReward;
+    public int PremiumCurrencyReward;
+    public bool GrantChest;
+    public ChestType ChestType;
+}
+
 public class OnlineMatchEndFlow : MonoBehaviour
 {
     [Header("Dependencies")]
@@ -102,7 +115,6 @@ public class OnlineMatchEndFlow : MonoBehaviour
             return;
         }
 
-        bool canReadMatch = matchController != null && matchController.IsNetworkStateReadable;
         bool matchEnded = (matchController != null) && matchController.MatchEnded;
 
         if (matchEnded)
@@ -387,11 +399,19 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
         PlayerID localPlayerId = matchController.EffectiveLocalPlayerId;
         PlayerID winner = matchController.Winner;
+        OnlineMatchEndReason endReason = GetMatchEndReason();
 
         bool localWon = winner == localPlayerId;
         bool draw = winner == PlayerID.None;
         bool ranked = IsRankedMatch();
         MatchMode matchMode = ResolveMatchMode();
+
+        OnlineMatchRewardResult rewardResult = EvaluateRewardResult(
+            endReason,
+            localWon,
+            draw,
+            ranked,
+            matchMode);
 
         lastGrantedXp = 0;
         lastGrantedSoftCurrency = 0;
@@ -399,72 +419,54 @@ public class OnlineMatchEndFlow : MonoBehaviour
         lastGrantedChest = false;
         lastGrantedChestType = ChestType.Random;
 
-        if (allowStatsProgression)
+        if (allowStatsProgression && rewardResult.CountAsMatchPlayed)
         {
             profileManager.RegisterMatchResult(
                 PlayerMatchCategory.OnlineMultiplayer,
                 matchMode,
-                localWon,
+                rewardResult.CountAsWin,
                 ranked
             );
         }
 
         if (allowXpRewards)
         {
-            lastGrantedXp = ranked
-                ? (draw ? rankedDrawXp : (localWon ? rankedWinXp : rankedLoseXp))
-                : (draw ? normalDrawXp : (localWon ? normalWinXp : normalLoseXp));
+            lastGrantedXp = Mathf.Max(0, rewardResult.XpReward);
 
             if (lastGrantedXp > 0)
                 profileManager.AddXp(lastGrantedXp);
         }
 
-        lastGrantedSoftCurrency = ranked
-            ? (draw ? rankedDrawSoftCurrency : (localWon ? rankedWinSoftCurrency : rankedLoseSoftCurrency))
-            : (draw ? normalDrawSoftCurrency : (localWon ? normalWinSoftCurrency : normalLoseSoftCurrency));
-
+        lastGrantedSoftCurrency = Mathf.Max(0, rewardResult.SoftCurrencyReward);
         if (lastGrantedSoftCurrency > 0)
             profileManager.AddSoftCurrency(lastGrantedSoftCurrency);
 
-        if (ranked)
+        lastGrantedPremiumCurrency = Mathf.Max(0, rewardResult.PremiumCurrencyReward);
+        if (lastGrantedPremiumCurrency > 0)
+            profileManager.AddPremiumCurrency(lastGrantedPremiumCurrency);
+
+        if (allowChestRewards && rewardResult.GrantChest)
         {
-            lastGrantedPremiumCurrency = draw
-                ? rankedDrawPremiumCurrency
-                : (localWon ? rankedWinPremiumCurrency : rankedLosePremiumCurrency);
-
-            if (lastGrantedPremiumCurrency > 0)
-                profileManager.AddPremiumCurrency(lastGrantedPremiumCurrency);
-        }
-
-        if (allowChestRewards)
-        {
-            bool canGrantChest = !grantChestOnlyIfLocalPlayerWins || localWon;
-
-            if (canGrantChest)
+            if (rewardManager != null)
             {
-                ChestType chestTypeToGrant = ranked ? rankedWinChestType : normalWinChestType;
+                lastGrantedChest = rewardManager.GrantChestReward(
+                    rewardResult.ChestType,
+                    ranked ? "online_ranked_match_reward" : "online_normal_match_reward",
+                    endReason.ToString(),
+                    winner
+                );
+            }
 
-                if (rewardManager != null)
-                {
-                    lastGrantedChest = rewardManager.GrantChestReward(
-                        chestTypeToGrant,
-                        ranked ? "online_ranked_match_win" : "online_normal_match_win",
-                        localWon ? "local_player_win" : "configured_non_winner_reward",
-                        winner
-                    );
-                }
-
-                if (lastGrantedChest)
-                {
-                    lastGrantedChestType = chestTypeToGrant;
-                }
+            if (lastGrantedChest)
+            {
+                lastGrantedChestType = rewardResult.ChestType;
+            }
+            else
+            {
+                if (ranked)
+                    onRankedChestRewardRequested?.Invoke();
                 else
-                {
-                    if (ranked)
-                        onRankedChestRewardRequested?.Invoke();
-                    else
-                        onNormalChestRewardRequested?.Invoke();
-                }
+                    onNormalChestRewardRequested?.Invoke();
             }
         }
 
@@ -479,10 +481,14 @@ public class OnlineMatchEndFlow : MonoBehaviour
         {
             Debug.Log(
                 "[OnlineMatchEndFlow] Rewards applied -> " +
-                "LocalWon=" + localWon +
+                "EndReason=" + endReason +
+                " | LocalWon=" + localWon +
                 " | Draw=" + draw +
                 " | Ranked=" + ranked +
                 " | Mode=" + matchMode +
+                " | CountAsMatchPlayed=" + rewardResult.CountAsMatchPlayed +
+                " | CountAsWin=" + rewardResult.CountAsWin +
+                " | CountAsLoss=" + rewardResult.CountAsLoss +
                 " | Xp=" + lastGrantedXp +
                 " | Soft=" + lastGrantedSoftCurrency +
                 " | Premium=" + lastGrantedPremiumCurrency +
@@ -490,6 +496,77 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 " | ChestType=" + lastGrantedChestType,
                 this
             );
+        }
+    }
+
+    private OnlineMatchRewardResult EvaluateRewardResult(
+        OnlineMatchEndReason endReason,
+        bool localWon,
+        bool draw,
+        bool ranked,
+        MatchMode matchMode)
+    {
+        OnlineMatchRewardResult result = new OnlineMatchRewardResult
+        {
+            CountAsMatchPlayed = true,
+            CountAsWin = false,
+            CountAsLoss = false,
+            XpReward = 0,
+            SoftCurrencyReward = 0,
+            PremiumCurrencyReward = 0,
+            GrantChest = false,
+            ChestType = ranked ? rankedWinChestType : normalWinChestType
+        };
+
+        if (draw)
+        {
+            result.XpReward = ranked ? rankedDrawXp : normalDrawXp;
+            result.SoftCurrencyReward = ranked ? rankedDrawSoftCurrency : normalDrawSoftCurrency;
+            result.PremiumCurrencyReward = ranked ? rankedDrawPremiumCurrency : 0;
+            return result;
+        }
+
+        switch (endReason)
+        {
+            case OnlineMatchEndReason.DisconnectWin:
+            case OnlineMatchEndReason.SurrenderWin:
+            case OnlineMatchEndReason.NormalCompletion:
+                if (localWon)
+                {
+                    result.CountAsWin = true;
+                    result.XpReward = ranked ? rankedWinXp : normalWinXp;
+                    result.SoftCurrencyReward = ranked ? rankedWinSoftCurrency : normalWinSoftCurrency;
+                    result.PremiumCurrencyReward = ranked ? rankedWinPremiumCurrency : 0;
+                    result.GrantChest = !grantChestOnlyIfLocalPlayerWins || localWon;
+                    return result;
+                }
+
+                result.CountAsLoss = true;
+                result.XpReward = ranked ? rankedLoseXp : normalLoseXp;
+                result.SoftCurrencyReward = ranked ? rankedLoseSoftCurrency : normalLoseSoftCurrency;
+                result.PremiumCurrencyReward = ranked ? rankedLosePremiumCurrency : 0;
+                return result;
+
+            case OnlineMatchEndReason.DisconnectLoss:
+            case OnlineMatchEndReason.SurrenderLoss:
+            case OnlineMatchEndReason.ReconnectTimeout:
+                result.CountAsLoss = true;
+                result.XpReward = ranked ? rankedLoseXp : normalLoseXp;
+                result.SoftCurrencyReward = ranked ? rankedLoseSoftCurrency : normalLoseSoftCurrency;
+                result.PremiumCurrencyReward = ranked ? rankedLosePremiumCurrency : 0;
+                return result;
+
+            case OnlineMatchEndReason.MatchCancelled:
+            case OnlineMatchEndReason.None:
+            default:
+                result.CountAsMatchPlayed = false;
+                result.CountAsWin = false;
+                result.CountAsLoss = false;
+                result.XpReward = 0;
+                result.SoftCurrencyReward = 0;
+                result.PremiumCurrencyReward = 0;
+                result.GrantChest = false;
+                return result;
         }
     }
 
