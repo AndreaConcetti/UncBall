@@ -34732,6 +34732,10 @@ MonoBehaviour:
       player2SkinUniqueId: 
     statusMessage: Idle
     lastError: 
+    hasGameplayValidation: 0
+    hasPrematchHostForfeitWin: 0
+    hasAppliedPrematchHostForfeitWin: 0
+    prematchResolutionMessage: 
 --- !u!114 &1801468268
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -38314,8 +38318,15 @@ MonoBehaviour:
   enableQueueTimeout: 1
   queueTimeoutSeconds: 60
   queueTimeoutPanel: {fileID: 66589657}
+  queueTimeoutTitleText: {fileID: 33312469}
   queueTimeoutMessageText: {fileID: 1956114233}
+  queueTimeoutDetailText: {fileID: 947373687}
+  queueTimeoutTitle: MATCHMAKING CANCELED
   queueTimeoutMessage: NO OPPONENT FOUND...
+  queueTimeoutDetail: PLEASE TRY AGAIN LATER
+  prematchHostLeftTitle: MATCH CANCELED
+  prematchHostLeftMessage: OPPONENT LEFT THE MATCH
+  prematchHostLeftDetail: NO LP CHANGE YET
   globalStatusText: {fileID: 1083214629}
   primaryPlayerNameText: {fileID: 455583244}
   secondaryPlayerNameText: {fileID: 2120179223}

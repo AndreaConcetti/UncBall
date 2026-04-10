@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Fusion;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -30,6 +31,8 @@ public class OnlineFlowController : MonoBehaviour
 
     private CancellationTokenSource currentFlowCts;
     private bool initialized;
+    private bool runnerEventsSubscribed;
+    private bool localShutdownRequested;
 
     public OnlineRuntimeContext RuntimeContext => runtimeContext;
     public OnlineFlowState CurrentState => runtimeContext != null ? runtimeContext.state : OnlineFlowState.Offline;
@@ -63,6 +66,7 @@ public class OnlineFlowController : MonoBehaviour
         ResolveDependencies();
         InitializeServices();
         EnsureRuntime();
+        SubscribeRunnerEvents();
 
         runtimeContext.ResetToIdle();
         NotifyStateChanged();
@@ -83,13 +87,10 @@ public class OnlineFlowController : MonoBehaviour
             return;
 
         if (queueRulesConfig == null)
-        {
             Debug.LogError("[OnlineFlowController] OnlineQueueRulesConfig missing.", this);
-        }
 
         matchmakingService = new PhotonFusionMatchmakingService(runnerManager, queueRulesConfig, logDebug);
         matchSessionService = new FusionMatchSessionService(runnerManager);
-
         initialized = true;
     }
 
@@ -99,6 +100,41 @@ public class OnlineFlowController : MonoBehaviour
             runtimeContext = new OnlineRuntimeContext();
     }
 
+    private void SubscribeRunnerEvents()
+    {
+        if (runnerEventsSubscribed)
+            return;
+
+        ResolveDependencies();
+        if (runnerManager == null)
+            return;
+
+        runnerManager.OnShutdownEvent -= HandleRunnerShutdown;
+        runnerManager.OnDisconnectedFromServerEvent -= HandleDisconnectedFromServer;
+        runnerManager.OnConnectedToServerEvent -= HandleConnectedToServer;
+
+        runnerManager.OnShutdownEvent += HandleRunnerShutdown;
+        runnerManager.OnDisconnectedFromServerEvent += HandleDisconnectedFromServer;
+        runnerManager.OnConnectedToServerEvent += HandleConnectedToServer;
+
+        runnerEventsSubscribed = true;
+    }
+
+    private void UnsubscribeRunnerEvents()
+    {
+        if (!runnerEventsSubscribed)
+            return;
+
+        if (runnerManager != null)
+        {
+            runnerManager.OnShutdownEvent -= HandleRunnerShutdown;
+            runnerManager.OnDisconnectedFromServerEvent -= HandleDisconnectedFromServer;
+            runnerManager.OnConnectedToServerEvent -= HandleConnectedToServer;
+        }
+
+        runnerEventsSubscribed = false;
+    }
+
     public async void EnterQueue(QueueType queueType)
     {
         if (IsBusy)
@@ -106,6 +142,7 @@ public class OnlineFlowController : MonoBehaviour
 
         EnsureRuntime();
         ResolveDependencies();
+        SubscribeRunnerEvents();
 
         if (profileManager == null)
         {
@@ -123,6 +160,7 @@ public class OnlineFlowController : MonoBehaviour
 
         CancelCurrentFlowSilently();
         currentFlowCts = new CancellationTokenSource();
+        localShutdownRequested = false;
 
         OnlinePlayerIdentity localPlayer = new OnlinePlayerIdentity(
             profileManager.ActiveProfileId,
@@ -130,6 +168,7 @@ public class OnlineFlowController : MonoBehaviour
             profileManager.ActiveDisplayName
         );
 
+        runtimeContext.ResetPrematchIntegrity();
         runtimeContext.queueType = queueType;
         runtimeContext.currentAssignment = null;
         runtimeContext.currentSession = null;
@@ -202,7 +241,7 @@ public class OnlineFlowController : MonoBehaviour
             }
 
             runtimeContext.state = OnlineFlowState.InMatch;
-            runtimeContext.statusMessage = "In match.";
+            runtimeContext.statusMessage = "Gameplay scene loaded.";
             NotifyStateChanged();
 
             if (logDebug)
@@ -241,6 +280,7 @@ public class OnlineFlowController : MonoBehaviour
 
         try
         {
+            localShutdownRequested = true;
             CancelCurrentFlowSilently();
 
             if (matchmakingService != null)
@@ -266,6 +306,7 @@ public class OnlineFlowController : MonoBehaviour
         if (CurrentState == OnlineFlowState.ReturningToMenu)
             return;
 
+        localShutdownRequested = true;
         runtimeContext.state = OnlineFlowState.ReturningToMenu;
         runtimeContext.statusMessage = "Returning to menu...";
         NotifyStateChanged();
@@ -297,6 +338,7 @@ public class OnlineFlowController : MonoBehaviour
 
     public void NotifyMatchStarted()
     {
+        runtimeContext.MarkGameplayValidated();
         runtimeContext.state = OnlineFlowState.InMatch;
         runtimeContext.statusMessage = "In match.";
         NotifyStateChanged();
@@ -373,6 +415,119 @@ public class OnlineFlowController : MonoBehaviour
         return "Player";
     }
 
+    private void HandleRunnerShutdown(ShutdownReason reason)
+    {
+        if (!ShouldResolvePrematchHostForfeitWin())
+            return;
+
+        ResolvePrematchHostForfeitWin("Host left before gameplay start.");
+
+        if (logDebug)
+            Debug.LogWarning("[OnlineFlowController] Prematch host forfeit win resolved from OnShutdown -> " + reason, this);
+    }
+
+    private void HandleDisconnectedFromServer()
+    {
+        if (!ShouldResolvePrematchHostForfeitWin())
+            return;
+
+        if (Application.internetReachability == NetworkReachability.NotReachable)
+        {
+            if (logDebug)
+                Debug.LogWarning("[OnlineFlowController] Local internet unreachable. Prematch host forfeit win not awarded.", this);
+            return;
+        }
+
+        ResolvePrematchHostForfeitWin("Host disconnected before gameplay start.");
+
+        if (logDebug)
+            Debug.LogWarning("[OnlineFlowController] Prematch host forfeit win resolved from OnDisconnectedFromServer.", this);
+    }
+
+    private void HandleConnectedToServer()
+    {
+        localShutdownRequested = false;
+    }
+
+    private bool ShouldResolvePrematchHostForfeitWin()
+    {
+        if (runtimeContext == null)
+            return false;
+
+        if (localShutdownRequested)
+            return false;
+
+        if (runtimeContext.currentAssignment == null)
+            return false;
+
+        if (runtimeContext.currentAssignment.localIsHost)
+            return false;
+
+        if (!runtimeContext.IsWaitingForGameplayValidation())
+            return false;
+
+        if (runtimeContext.hasPrematchHostForfeitWin)
+            return false;
+
+        return true;
+    }
+
+    private void ResolvePrematchHostForfeitWin(string message)
+    {
+        if (!runtimeContext.TryMarkPrematchHostForfeitWin(message))
+            return;
+
+        ApplyPrematchHostForfeitWinProgressionIfNeeded();
+
+        runtimeContext.state = OnlineFlowState.EndingMatch;
+        runtimeContext.statusMessage = runtimeContext.prematchResolutionMessage;
+        NotifyStateChanged();
+
+        if (SceneManager.GetActiveScene().name != mainMenuSceneName)
+        {
+            Time.timeScale = 1f;
+            SceneManager.LoadScene(mainMenuSceneName);
+        }
+    }
+
+    private void ApplyPrematchHostForfeitWinProgressionIfNeeded()
+    {
+        if (runtimeContext == null || runtimeContext.hasAppliedPrematchHostForfeitWin)
+            return;
+
+        MatchSessionContext session = runtimeContext.currentSession;
+        MatchAssignment assignment = runtimeContext.currentAssignment;
+
+        bool allowStats = false;
+        bool ranked = false;
+        MatchMode matchMode = MatchMode.ScoreTarget;
+
+        if (session != null)
+        {
+            allowStats = session.allowStatsProgression;
+            ranked = session.isRanked;
+            matchMode = session.matchMode;
+        }
+        else if (assignment != null)
+        {
+            allowStats = assignment.allowStatsProgression;
+            ranked = assignment.isRanked;
+            matchMode = assignment.matchMode;
+        }
+
+        if (allowStats && profileManager != null)
+        {
+            profileManager.RegisterMatchResult(
+                PlayerMatchCategory.OnlineMultiplayer,
+                matchMode,
+                true,
+                ranked
+            );
+        }
+
+        runtimeContext.hasAppliedPrematchHostForfeitWin = true;
+    }
+
     private void CancelCurrentFlowSilently()
     {
         if (currentFlowCts == null)
@@ -415,6 +570,7 @@ public class OnlineFlowController : MonoBehaviour
         if (Instance == this)
             Instance = null;
 
+        UnsubscribeRunnerEvents();
         CancelCurrentFlowSilently();
     }
 }

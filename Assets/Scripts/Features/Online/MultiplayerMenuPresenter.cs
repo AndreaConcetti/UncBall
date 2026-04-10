@@ -24,12 +24,23 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     [SerializeField] private GameObject privateLobbyPanel;
     [SerializeField] private GameObject insertOnlinePlayerNamePanel;
 
-    [Header("Optional Queue Timeout")]
+    [Header("Shared Cancel / Result Panel")]
     [SerializeField] private bool enableQueueTimeout = false;
     [SerializeField] private float queueTimeoutSeconds = 0f;
     [SerializeField] private GameObject queueTimeoutPanel;
+    [SerializeField] private TMP_Text queueTimeoutTitleText;
     [SerializeField] private TMP_Text queueTimeoutMessageText;
-    [SerializeField][TextArea] private string queueTimeoutMessage = "NO OPPONENT FOUND.";
+    [SerializeField] private TMP_Text queueTimeoutDetailText;
+
+    [Header("Queue Timeout Copy")]
+    [SerializeField][TextArea] private string queueTimeoutTitle = "MATCHMAKING CANCELED";
+    [SerializeField][TextArea] private string queueTimeoutMessage = "NO OPPONENT FOUND...";
+    [SerializeField][TextArea] private string queueTimeoutDetail = "PLEASE TRY AGAIN LATER";
+
+    [Header("Prematch Host Left Copy")]
+    [SerializeField][TextArea] private string prematchHostLeftTitle = "MATCH CANCELED";
+    [SerializeField][TextArea] private string prematchHostLeftMessage = "OPPONENT LEFT THE MATCH";
+    [SerializeField][TextArea] private string prematchHostLeftDetail = "NO LP CHANGE YET";
 
     [Header("Texts - Status")]
     [SerializeField] private TMP_Text globalStatusText;
@@ -252,8 +263,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
             Debug.Log(
                 "[MultiplayerMenuPresenter] Scene loaded -> " + scene.name +
                 " | Refreshing menu presenter bindings.",
-                this
-            );
+                this);
         }
 
         ForceRefreshAll();
@@ -268,8 +278,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
             Debug.Log(
                 "[MultiplayerMenuPresenter] StateChanged -> State=" + context.state +
                 " | Status=" + context.statusMessage,
-                this
-            );
+                this);
         }
     }
 
@@ -348,6 +357,8 @@ public class MultiplayerMenuPresenter : MonoBehaviour
         RefreshPlayerNameImmediate();
         ForceLegacyUnusedObjectsOff();
 
+        bool showPrematchHostLeftPanel = ShouldShowPrematchHostLeftPanel(context);
+
         bool isIdle =
             state == OnlineFlowState.Idle ||
             state == OnlineFlowState.Offline ||
@@ -367,6 +378,27 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
         if (idlePanelRoot != null)
             idlePanelRoot.SetActive(isIdle);
+
+        if (showPrematchHostLeftPanel)
+        {
+            ShowSharedResultPanel(
+                prematchHostLeftTitle,
+                prematchHostLeftMessage,
+                prematchHostLeftDetail);
+
+            if (onlineButtonsRoot != null)
+                onlineButtonsRoot.SetActive(false);
+
+            if (matchmakingLoadingPanel != null)
+                matchmakingLoadingPanel.SetActive(false);
+
+            if (matchFoundPanel != null)
+                matchFoundPanel.SetActive(false);
+
+            StopQueueTimer();
+            StopMatchFoundCountdown();
+            return;
+        }
 
         if (queueTimeoutPanelVisible)
         {
@@ -409,6 +441,18 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
         if (!isSearching && matchmakingProgressText != null)
             matchmakingProgressText.text = string.Empty;
+    }
+
+    private bool ShouldShowPrematchHostLeftPanel(OnlineRuntimeContext context)
+    {
+        if (context == null)
+            return false;
+
+        if (context.state != OnlineFlowState.EndingMatch)
+            return false;
+
+        string status = context.statusMessage ?? string.Empty;
+        return status.IndexOf("Host disconnected before gameplay start.", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private void ForceLegacyUnusedObjectsOff()
@@ -469,8 +513,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
             Debug.Log(
                 "[MultiplayerMenuPresenter] Queue timeout reached -> " +
                 queueElapsedTime.ToString("F1") + "s",
-                this
-            );
+                this);
         }
 
         if (onlineFlowController != null)
@@ -604,14 +647,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     private void ShowQueueTimeoutPanel()
     {
         queueTimeoutPanelVisible = true;
-
-        if (queueTimeoutPanel != null)
-            queueTimeoutPanel.SetActive(true);
-
-        if (queueTimeoutMessageText != null)
-            queueTimeoutMessageText.text = string.IsNullOrWhiteSpace(queueTimeoutMessage)
-                ? "NO OPPONENT FOUND."
-                : queueTimeoutMessage;
+        ShowSharedResultPanel(queueTimeoutTitle, queueTimeoutMessage, queueTimeoutDetail);
 
         if (onlineButtonsRoot != null)
             onlineButtonsRoot.SetActive(false);
@@ -623,11 +659,32 @@ public class MultiplayerMenuPresenter : MonoBehaviour
             matchFoundPanel.SetActive(false);
     }
 
+    private void ShowSharedResultPanel(string title, string message, string detail)
+    {
+        if (queueTimeoutPanel != null)
+            queueTimeoutPanel.SetActive(true);
+
+        if (queueTimeoutTitleText != null)
+            queueTimeoutTitleText.text = SafeUpper(title, "MATCHMAKING CANCELED");
+
+        if (queueTimeoutMessageText != null)
+            queueTimeoutMessageText.text = SafeUpper(message, "NO OPPONENT FOUND...");
+
+        if (queueTimeoutDetailText != null)
+            queueTimeoutDetailText.text = SafeUpper(detail, "PLEASE TRY AGAIN LATER");
+    }
+
     private void HideQueueTimeoutPanel()
     {
         queueTimeoutPanelVisible = false;
 
         if (queueTimeoutPanel != null)
             queueTimeoutPanel.SetActive(false);
+    }
+
+    private string SafeUpper(string value, string fallback)
+    {
+        string resolved = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        return resolved.ToUpperInvariant();
     }
 }
