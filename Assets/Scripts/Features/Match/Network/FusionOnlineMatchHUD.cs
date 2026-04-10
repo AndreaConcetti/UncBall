@@ -565,9 +565,10 @@ public class FusionOnlineMatchHUD : MonoBehaviour
                 : endReason == OnlineMatchEndReason.DisconnectWin;
 
         bool showLocalDisconnected = endReason == OnlineMatchEndReason.DisconnectLoss;
+        bool canUseDedicatedLocalDisconnectText = localDisconnectedEndgameText != null;
 
-        SetTextVisible(opponentDisconnectedText, showOpponentDisconnected);
-        SetTextVisible(localDisconnectedEndgameText, showLocalDisconnected);
+        SetTextVisible(opponentDisconnectedText, showOpponentDisconnected || (showLocalDisconnected && !canUseDedicatedLocalDisconnectText));
+        SetTextVisible(localDisconnectedEndgameText, showLocalDisconnected && canUseDedicatedLocalDisconnectText);
 
         if (showOpponentDisconnected && opponentDisconnectedText != null)
         {
@@ -577,8 +578,17 @@ public class FusionOnlineMatchHUD : MonoBehaviour
                 opponentDisconnectedText.text = "OPPONENT DISCONNECTED";
         }
 
-        if (showLocalDisconnected && localDisconnectedEndgameText != null)
-            localDisconnectedEndgameText.text = "YOU DISCONNECTED";
+        if (showLocalDisconnected)
+        {
+            if (canUseDedicatedLocalDisconnectText)
+            {
+                localDisconnectedEndgameText.text = "YOU DISCONNECTED FROM THE MATCH";
+            }
+            else if (opponentDisconnectedText != null)
+            {
+                opponentDisconnectedText.text = "YOU DISCONNECTED FROM THE MATCH";
+            }
+        }
     }
 
     private void SetTextVisible(TMP_Text textComponent, bool visible)
@@ -689,6 +699,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         SetTextVisible(gameResultLoserText, false);
         SetTextVisible(drawText, false);
         SetTextVisible(opponentDisconnectedText, false);
+        SetTextVisible(localDisconnectedEndgameText, false);
         SetTextVisible(localDisconnectedEndgameText, false);
 
         if (reconnectPanel != null)

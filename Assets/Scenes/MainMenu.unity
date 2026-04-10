@@ -34759,9 +34759,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FusionOnlineMatchAppLifecycleGuard
   matchController: {fileID: 0}
-  monitorApplicationPause: 1
-  monitorApplicationFocusLoss: 1
-  backgroundForfeitDelaySeconds: 6
+  suspendForfeitDelaySeconds: 7
+  useFocusEventsOnMobile: 1
+  ignoreEditorFocusEvents: 1
+  ignoreDesktopFocusEvents: 1
   logDebug: 1
 --- !u!1 &1805039842
 GameObject:

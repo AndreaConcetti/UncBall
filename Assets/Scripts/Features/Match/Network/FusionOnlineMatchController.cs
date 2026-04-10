@@ -197,6 +197,14 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
     public bool IsGameplayHardLocked => localGameplayHardLocked;
 
+    public bool IsReconnectGameplayFreezeActive =>
+        authorityRemoteDisconnectPending ||
+        authorityRemoteExplicitBackgroundPending ||
+        localAuthorityConnectionLostVisible ||
+        localRemoteClientConnectionLostVisible ||
+        localTransportConnectionIssueVisible;
+
+
     public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : cachedMatchMode;
     public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : cachedPointsToWin;
     public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : cachedConfiguredMatchDuration;
@@ -524,7 +532,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (!IsNetworkStateReadable || IsTerminalOutcomeLocked)
             return;
 
-        if (localGameplayHardLocked || IsAuthorityConnectionLostOverlayVisible)
+        if (localGameplayHardLocked || IsReconnectGameplayFreezeActive || IsAuthorityConnectionLostOverlayVisible)
             return;
 
         if (!MatchStarted || MatchEnded || MidMatchBreakActive || NetShotInFlight || NetPostShotDelayRemaining > 0f)
@@ -555,7 +563,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (!IsNetworkStateReadable || IsTerminalOutcomeLocked)
             return;
 
-        if (localGameplayHardLocked || IsAuthorityConnectionLostOverlayVisible)
+        if (localGameplayHardLocked || IsReconnectGameplayFreezeActive || IsAuthorityConnectionLostOverlayVisible)
             return;
 
         if (!NetMatchStarted || NetMatchEnded || NetBreakActive || NetPostShotDelayRemaining > 0f)
@@ -807,11 +815,19 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return;
 
         authorityRemoteWatchdogStarted = true;
-        authorityRemoteExplicitBackgroundPending = false;
         remoteClientHeartbeatStaleTimer = 0f;
-        HideRemoteClientConnectionLostOverlay();
-        CancelAuthorityRemoteDisconnectPending(sender);
-        ResetReconnectStateAfterRecovery(sender);
+
+        if (!authorityRemoteExplicitBackgroundPending)
+        {
+            HideRemoteClientConnectionLostOverlay();
+            CancelAuthorityRemoteDisconnectPending(sender);
+            ResetReconnectStateAfterRecovery(sender);
+        }
+
+        if (logDebug && authorityRemoteExplicitBackgroundPending)
+        {
+            Debug.Log("[FusionOnlineMatchController] RPC_ClientHeartbeat received while explicit background pending is active.", this);
+        }
 
         if (logDebug)
             Debug.Log("[FusionOnlineMatchController] RPC_ClientHeartbeat received from remote client.", this);
@@ -1736,6 +1752,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return;
 
         if (!NetMatchStarted || NetMatchEnded)
+            return;
+
+        if (authorityRemoteDisconnectPending || authorityRemoteExplicitBackgroundPending)
             return;
 
         if (NetPostShotDelayRemaining > 0f)
