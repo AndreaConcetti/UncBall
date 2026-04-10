@@ -54,6 +54,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
     [SerializeField] private float gameplayDisconnectOverlayDelaySeconds = 0.35f;
     [SerializeField] private float reconnectRecoveryGraceSeconds = 1.0f;
     [SerializeField] private float clientHeartbeatSendInterval = 0.25f;
+    [SerializeField] private bool useRealtimeClientHeartbeatSender = true;
 
     [Header("Fallback Match Config")]
     [SerializeField] private MatchMode fallbackMatchMode = MatchMode.TimeLimit;
@@ -168,6 +169,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
     private bool authorityRemoteDisconnectPending;
     private PlayerID authorityRemoteDisconnectPendingPlayer = PlayerID.None;
     private float authorityRemoteDisconnectPendingElapsed;
+    private bool authorityRemoteExplicitBackgroundPending;
     private float authorityHeartbeatRecoveryGraceRemaining;
     private float remoteClientHeartbeatRecoveryGraceRemaining;
 
@@ -390,6 +392,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         authorityRemoteDisconnectPending = false;
         authorityRemoteDisconnectPendingPlayer = PlayerID.None;
         authorityRemoteDisconnectPendingElapsed = 0f;
+        authorityRemoteExplicitBackgroundPending = false;
         authorityHeartbeatRecoveryGraceRemaining = 0f;
         remoteClientHeartbeatRecoveryGraceRemaining = 0f;
 
@@ -413,6 +416,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return;
         }
 
+        TickRealtimeClientHeartbeatSenderIfNeeded();
         TickLocalAuthorityHeartbeatWatchdog();
         TickAuthorityRemoteClientHeartbeatWatchdog();
         TickAuthorityRemoteDisconnectPending();
@@ -437,7 +441,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
         else
         {
-            TickClientHeartbeatSender();
+            if (!useRealtimeClientHeartbeatSender)
+                TickClientHeartbeatSender();
         }
 
         SubmitLocalPresentationIfNeeded();
@@ -802,6 +807,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return;
 
         authorityRemoteWatchdogStarted = true;
+        authorityRemoteExplicitBackgroundPending = false;
         remoteClientHeartbeatStaleTimer = 0f;
         HideRemoteClientConnectionLostOverlay();
         CancelAuthorityRemoteDisconnectPending(sender);
@@ -840,6 +846,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (player != EffectiveRemotePlayerId)
             return;
 
+        authorityRemoteExplicitBackgroundPending = true;
         BeginAuthorityRemoteDisconnectPending(player, "RPC_ReportClientBackgroundEntered");
     }
 
@@ -857,6 +864,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return;
 
         authorityRemoteWatchdogStarted = true;
+        authorityRemoteExplicitBackgroundPending = false;
         remoteClientHeartbeatStaleTimer = 0f;
         CancelAuthorityRemoteDisconnectPending(player);
         HideRemoteClientConnectionLostOverlay();
@@ -996,6 +1004,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         authorityRemoteDisconnectPending = false;
         authorityRemoteDisconnectPendingPlayer = PlayerID.None;
         authorityRemoteDisconnectPendingElapsed = 0f;
+        authorityRemoteExplicitBackgroundPending = false;
         authorityHeartbeatRecoveryGraceRemaining = 0f;
         remoteClientHeartbeatRecoveryGraceRemaining = 0f;
         HideRemoteClientConnectionLostOverlay();
@@ -1028,6 +1037,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         authorityRemoteDisconnectPending = false;
         authorityRemoteDisconnectPendingPlayer = PlayerID.None;
         authorityRemoteDisconnectPendingElapsed = 0f;
+        authorityRemoteExplicitBackgroundPending = false;
         authorityHeartbeatRecoveryGraceRemaining = 0f;
         remoteClientHeartbeatRecoveryGraceRemaining = 0f;
 
@@ -1052,6 +1062,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         string disconnectedPlayerName = ResolveDisconnectedPlayerNameForReason(reason, winner);
 
+        OnlineMatchEndReason localEndReason = ConvertToOnlineMatchEndReason(reason, winner);
+
         if (hud != null)
         {
             hud.ForceShowPostGame(
@@ -1062,8 +1074,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
                 cachedScoreP1,
                 cachedScoreP2,
                 winner,
-                ConvertToOnlineMatchEndReason(reason, (PlayerID)NetWinnerRaw),
-                reason == MatchEndReason.OpponentDisconnected,
+                localEndReason,
+                localEndReason == OnlineMatchEndReason.DisconnectWin,
                 disconnectedPlayerName
             );
         }
@@ -1133,6 +1145,44 @@ public class FusionOnlineMatchController : NetworkBehaviour
             Debug.Log("[FusionOnlineMatchController] Periodic client heartbeat sent.", this);
     }
 
+
+    private void TickRealtimeClientHeartbeatSenderIfNeeded()
+    {
+        if (!useRealtimeClientHeartbeatSender)
+            return;
+
+        if (IsTerminalOutcomeLocked)
+            return;
+
+        if (!IsNetworkStateReadable)
+            return;
+
+        if (Object == null || Object.HasStateAuthority)
+            return;
+
+        if (!NetMatchStarted || NetMatchEnded)
+            return;
+
+        if (!clientSentInitialHeartbeat)
+        {
+            clientSentInitialHeartbeat = true;
+            RPC_ClientHeartbeat();
+
+            if (logDebug)
+                Debug.Log("[FusionOnlineMatchController] Initial realtime client heartbeat sent.", this);
+        }
+
+        clientHeartbeatSendTimer += Time.unscaledDeltaTime;
+        if (clientHeartbeatSendTimer < Mathf.Max(0.01f, clientHeartbeatSendInterval))
+            return;
+
+        clientHeartbeatSendTimer = 0f;
+        RPC_ClientHeartbeat();
+
+        if (logDebug)
+            Debug.Log("[FusionOnlineMatchController] Periodic realtime client heartbeat sent.", this);
+    }
+
     private void TickLocalAuthorityHeartbeatWatchdog()
     {
         if (IsTerminalOutcomeLocked)
@@ -1181,7 +1231,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         authorityHeartbeatStaleTimer += Time.unscaledDeltaTime;
 
         float timeout = Mathf.Max(0.25f, gameplayDisconnectTimeoutSeconds);
-        float overlayThreshold = Mathf.Min(timeout, Mathf.Max(0.10f, gameplayDisconnectOverlayDelaySeconds));
+        float overlayThreshold = Mathf.Min(timeout, Mathf.Max(0.20f, gameplayDisconnectOverlayDelaySeconds, authorityHeartbeatSendInterval * 2.5f));
         bool localNetworkUnavailable = IsLocalNetworkLikelyUnavailable();
 
         if (authorityHeartbeatStaleTimer >= overlayThreshold)
@@ -1230,6 +1280,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (authorityRemoteDisconnectPending)
             return;
 
+        if (authorityRemoteExplicitBackgroundPending)
+            return;
+
         if (remoteClientHeartbeatRecoveryGraceRemaining > 0f)
         {
             remoteClientHeartbeatRecoveryGraceRemaining -= Time.unscaledDeltaTime;
@@ -1243,7 +1296,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         remoteClientHeartbeatStaleTimer += Time.unscaledDeltaTime;
 
         float timeout = Mathf.Max(0.25f, gameplayDisconnectTimeoutSeconds);
-        float overlayThreshold = Mathf.Min(timeout, Mathf.Max(0.10f, gameplayDisconnectOverlayDelaySeconds));
+        float overlayThreshold = Mathf.Min(timeout, Mathf.Max(0.20f, gameplayDisconnectOverlayDelaySeconds, clientHeartbeatSendInterval * 2.5f));
 
         if (remoteClientHeartbeatStaleTimer >= overlayThreshold)
             BeginAuthorityRemoteDisconnectPending(EffectiveRemotePlayerId, "HeartbeatTimeoutOverlay");
@@ -1318,6 +1371,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         authorityRemoteDisconnectPending = false;
         authorityRemoteDisconnectPendingPlayer = PlayerID.None;
         authorityRemoteDisconnectPendingElapsed = 0f;
+        authorityRemoteExplicitBackgroundPending = false;
         authorityHeartbeatRecoveryGraceRemaining = 0f;
         remoteClientHeartbeatRecoveryGraceRemaining = 0f;
     }
@@ -1607,6 +1661,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         authorityRemoteDisconnectPending = false;
         authorityRemoteDisconnectPendingPlayer = PlayerID.None;
         authorityRemoteDisconnectPendingElapsed = 0f;
+        authorityRemoteExplicitBackgroundPending = false;
         authorityHeartbeatRecoveryGraceRemaining = 0f;
         remoteClientHeartbeatRecoveryGraceRemaining = 0f;
 
@@ -2463,6 +2518,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         string disconnectedPlayerName = ResolveDisconnectedPlayerNameForReason(reason, (PlayerID)NetWinnerRaw);
 
+        OnlineMatchEndReason localEndReason = ConvertToOnlineMatchEndReason(reason, (PlayerID)NetWinnerRaw);
+
         if (hud != null)
         {
             hud.ForceShowPostGame(
@@ -2473,8 +2530,8 @@ public class FusionOnlineMatchController : NetworkBehaviour
                 NetScoreP1,
                 NetScoreP2,
                 (PlayerID)NetWinnerRaw,
-                ConvertToOnlineMatchEndReason(reason, (PlayerID)NetWinnerRaw),
-                reason == MatchEndReason.OpponentDisconnected,
+                localEndReason,
+                localEndReason == OnlineMatchEndReason.DisconnectWin,
                 disconnectedPlayerName
             );
         }
