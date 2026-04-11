@@ -1,0 +1,419 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 166ed2bf0615adc4393c67b1d2b59c94, type: 3}
+  m_Name: LevelUpRewardsConfig
+  m_EditorClassIdentifier: Assembly-CSharp::LevelUpRewardsConfig
+  rewardsByLevel:
+  - targetLevel: 2
+    softCurrencyReward: 25
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 3
+    softCurrencyReward: 25
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 4
+    softCurrencyReward: 25
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 5
+    softCurrencyReward: 25
+    chestCount: 1
+    chestType: 3
+  - targetLevel: 6
+    softCurrencyReward: 35
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 7
+    softCurrencyReward: 35
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 8
+    softCurrencyReward: 35
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 9
+    softCurrencyReward: 35
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 10
+    softCurrencyReward: 35
+    chestCount: 1
+    chestType: 4
+  - targetLevel: 11
+    softCurrencyReward: 45
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 12
+    softCurrencyReward: 45
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 13
+    softCurrencyReward: 45
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 14
+    softCurrencyReward: 45
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 15
+    softCurrencyReward: 45
+    chestCount: 1
+    chestType: 3
+  - targetLevel: 16
+    softCurrencyReward: 55
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 17
+    softCurrencyReward: 55
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 18
+    softCurrencyReward: 55
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 19
+    softCurrencyReward: 55
+    chestCount: 1
+    chestType: 1
+  - targetLevel: 20
+    softCurrencyReward: 55
+    chestCount: 2
+    chestType: 4
+  - targetLevel: 21
+    softCurrencyReward: 65
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 22
+    softCurrencyReward: 65
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 23
+    softCurrencyReward: 65
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 24
+    softCurrencyReward: 65
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 25
+    softCurrencyReward: 65
+    chestCount: 2
+    chestType: 3
+  - targetLevel: 26
+    softCurrencyReward: 75
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 27
+    softCurrencyReward: 75
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 28
+    softCurrencyReward: 75
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 29
+    softCurrencyReward: 75
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 30
+    softCurrencyReward: 75
+    chestCount: 2
+    chestType: 4
+  - targetLevel: 31
+    softCurrencyReward: 85
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 32
+    softCurrencyReward: 85
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 33
+    softCurrencyReward: 85
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 34
+    softCurrencyReward: 85
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 35
+    softCurrencyReward: 85
+    chestCount: 2
+    chestType: 3
+  - targetLevel: 36
+    softCurrencyReward: 95
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 37
+    softCurrencyReward: 95
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 38
+    softCurrencyReward: 95
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 39
+    softCurrencyReward: 95
+    chestCount: 2
+    chestType: 1
+  - targetLevel: 40
+    softCurrencyReward: 95
+    chestCount: 3
+    chestType: 4
+  - targetLevel: 41
+    softCurrencyReward: 105
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 42
+    softCurrencyReward: 105
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 43
+    softCurrencyReward: 105
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 44
+    softCurrencyReward: 105
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 45
+    softCurrencyReward: 105
+    chestCount: 3
+    chestType: 3
+  - targetLevel: 46
+    softCurrencyReward: 115
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 47
+    softCurrencyReward: 115
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 48
+    softCurrencyReward: 115
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 49
+    softCurrencyReward: 115
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 50
+    softCurrencyReward: 115
+    chestCount: 3
+    chestType: 4
+  - targetLevel: 51
+    softCurrencyReward: 125
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 52
+    softCurrencyReward: 125
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 53
+    softCurrencyReward: 125
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 54
+    softCurrencyReward: 125
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 55
+    softCurrencyReward: 125
+    chestCount: 3
+    chestType: 3
+  - targetLevel: 56
+    softCurrencyReward: 135
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 57
+    softCurrencyReward: 135
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 58
+    softCurrencyReward: 135
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 59
+    softCurrencyReward: 135
+    chestCount: 3
+    chestType: 1
+  - targetLevel: 60
+    softCurrencyReward: 135
+    chestCount: 4
+    chestType: 4
+  - targetLevel: 61
+    softCurrencyReward: 145
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 62
+    softCurrencyReward: 145
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 63
+    softCurrencyReward: 145
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 64
+    softCurrencyReward: 145
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 65
+    softCurrencyReward: 145
+    chestCount: 4
+    chestType: 3
+  - targetLevel: 66
+    softCurrencyReward: 155
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 67
+    softCurrencyReward: 155
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 68
+    softCurrencyReward: 155
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 69
+    softCurrencyReward: 155
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 70
+    softCurrencyReward: 155
+    chestCount: 4
+    chestType: 4
+  - targetLevel: 71
+    softCurrencyReward: 165
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 72
+    softCurrencyReward: 165
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 73
+    softCurrencyReward: 165
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 74
+    softCurrencyReward: 165
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 75
+    softCurrencyReward: 165
+    chestCount: 4
+    chestType: 3
+  - targetLevel: 76
+    softCurrencyReward: 175
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 77
+    softCurrencyReward: 175
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 78
+    softCurrencyReward: 175
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 79
+    softCurrencyReward: 175
+    chestCount: 4
+    chestType: 1
+  - targetLevel: 80
+    softCurrencyReward: 175
+    chestCount: 5
+    chestType: 4
+  - targetLevel: 81
+    softCurrencyReward: 185
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 82
+    softCurrencyReward: 185
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 83
+    softCurrencyReward: 185
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 84
+    softCurrencyReward: 185
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 85
+    softCurrencyReward: 185
+    chestCount: 5
+    chestType: 3
+  - targetLevel: 86
+    softCurrencyReward: 195
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 87
+    softCurrencyReward: 195
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 88
+    softCurrencyReward: 195
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 89
+    softCurrencyReward: 195
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 90
+    softCurrencyReward: 195
+    chestCount: 5
+    chestType: 4
+  - targetLevel: 91
+    softCurrencyReward: 205
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 92
+    softCurrencyReward: 205
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 93
+    softCurrencyReward: 205
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 94
+    softCurrencyReward: 205
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 95
+    softCurrencyReward: 205
+    chestCount: 5
+    chestType: 3
+  - targetLevel: 96
+    softCurrencyReward: 215
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 97
+    softCurrencyReward: 215
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 98
+    softCurrencyReward: 215
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 99
+    softCurrencyReward: 215
+    chestCount: 5
+    chestType: 1
+  - targetLevel: 100
+    softCurrencyReward: 215
+    chestCount: 6
+    chestType: 4
+  autoGenerateMaxLevel: 100
+  baseSoftCurrencyReward: 25
+  softCurrencyIncreasePer5Levels: 10
+  baseChestCount: 1
+  extraChestEveryNLevels: 20
+  defaultChestType: 1
+  every5LevelsChestType: 3
+  every10LevelsChestType: 4

@@ -1,5 +1,4 @@
-
-using TMPro;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -28,23 +27,12 @@ public class OnlineMatchEndFlow : MonoBehaviour
     [SerializeField] private OnlineMatchRewardsConfig rewardsConfig;
     [SerializeField] private PlayerProgressionRules progressionRules;
     [SerializeField] private OnlineMatchPresentationResultStore presentationResultStore;
+    [SerializeField] private LevelUpRewardsConfig levelUpRewardsConfig;
 
     [Header("Progression Policy")]
     [SerializeField] private bool allowChestRewards = false;
     [SerializeField] private bool allowXpRewards = false;
     [SerializeField] private bool allowStatsProgression = false;
-
-    [Header("Level Up Bonus")]
-    [SerializeField] private int levelUpBonusSoftCurrencyPerLevel = 120;
-    [SerializeField] private bool grantBonusChestOnLevelUp = true;
-    [SerializeField] private int levelUpBonusChestCountPerLevel = 1;
-    [SerializeField] private ChestType levelUpBonusChestType = ChestType.Random;
-
-    [Header("Optional Reward UI")]
-    [SerializeField] private TMP_Text rewardXpText;
-    [SerializeField] private TMP_Text rewardSoftCurrencyText;
-    [SerializeField] private TMP_Text rewardChestText;
-    [SerializeField] private TMP_Text rewardRankedLpText;
 
     [Header("Main Endgame Buttons")]
     [SerializeField] private Button requestRematchButton;
@@ -52,14 +40,14 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
     [Header("Rematch Request Sent Panel")]
     [SerializeField] private GameObject rematchRequestSentPanel;
-    [SerializeField] private TMP_Text rematchRequestSentOpponentNameText;
-    [SerializeField] private TMP_Text rematchRequestSentStatusText;
+    [SerializeField] private TMPro.TMP_Text rematchRequestSentOpponentNameText;
+    [SerializeField] private TMPro.TMP_Text rematchRequestSentStatusText;
     [SerializeField] private Button cancelRequestButton;
 
     [Header("Rematch Request Arrived Panel")]
     [SerializeField] private GameObject rematchRequestArrivedPanel;
-    [SerializeField] private TMP_Text rematchRequestArrivedOpponentNameText;
-    [SerializeField] private TMP_Text rematchRequestArrivedStatusText;
+    [SerializeField] private TMPro.TMP_Text rematchRequestArrivedOpponentNameText;
+    [SerializeField] private TMPro.TMP_Text rematchRequestArrivedStatusText;
     [SerializeField] private Button acceptRequestButton;
     [SerializeField] private Button declineRequestButton;
 
@@ -69,6 +57,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
+
+    private readonly List<LevelRewardEntry> cachedLevelRewards = new List<LevelRewardEntry>();
 
     private bool rewardsApplied;
     private int lastConsumedRematchNonce = -1;
@@ -84,24 +74,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
         ResolveDependencies();
         ApplyRuntimeRewardFlagsIfAvailable();
         HideAllRematchPanels();
-        ClearRewardTexts();
         RefreshAllVisualState();
         RefreshButtonInteractableState();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineMatchEndFlow] Awake -> " +
-                "MatchController=" + SafeName(matchController) +
-                " | OnlineFlowController=" + SafeName(onlineFlowController) +
-                " | ProfileManager=" + SafeName(profileManager) +
-                " | RewardManager=" + SafeName(rewardManager) +
-                " | RewardsConfig=" + SafeName(rewardsConfig) +
-                " | ProgressionRules=" + SafeName(progressionRules) +
-                " | PresentationStore=" + SafeName(presentationResultStore),
-                this
-            );
-        }
     }
 
     private void Update()
@@ -366,16 +340,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
         ApplyRuntimeRewardFlagsIfAvailable();
 
         if (profileManager == null || matchController == null || rewardsConfig == null)
-        {
-            Debug.LogWarning(
-                "[OnlineMatchEndFlow] ApplyEndMatchRewardsIfNeeded aborted -> " +
-                "ProfileManager=" + (profileManager != null) +
-                " | MatchController=" + (matchController != null) +
-                " | RewardsConfig=" + (rewardsConfig != null),
-                this
-            );
             return;
-        }
 
         QueueType queueType = ResolveQueueType();
         MatchMode matchMode = ResolveMatchMode();
@@ -385,32 +350,6 @@ public class OnlineMatchEndFlow : MonoBehaviour
         int startLevel = profileManager.ActiveProfile != null ? Mathf.Max(1, profileManager.ActiveProfile.level) : 1;
         int startTotalXp = profileManager.ActiveProfile != null ? Mathf.Max(0, profileManager.ActiveProfile.xp) : 0;
         int startRankedLp = profileManager.ActiveRankedLp;
-
-        bool localWon = category == OnlineRewardCategory.NormalCompletionWin ||
-                        category == OnlineRewardCategory.DisconnectWin ||
-                        category == OnlineRewardCategory.SurrenderWin;
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineMatchEndFlow] Preparing rewards -> " +
-                "Category=" + category +
-                " | QueueType=" + queueType +
-                " | MatchMode=" + matchMode +
-                " | StartLevel=" + startLevel +
-                " | StartXp=" + startTotalXp +
-                " | StartRankedLp=" + startRankedLp +
-                " | LocalWon=" + localWon +
-                " | Rule.MatchPlayed=" + rule.countAsMatchPlayed +
-                " | Rule.Win=" + rule.countAsWin +
-                " | Rule.Loss=" + rule.countAsLoss +
-                " | Rule.Xp=" + rule.xpReward +
-                " | Rule.Soft=" + rule.softCurrencyReward +
-                " | Rule.GrantChest=" + rule.grantChest +
-                " | Rule.RankedLpDelta=" + rule.rankedLpDelta,
-                this
-            );
-        }
 
         OnlineMatchRewardResult rewardResult = new OnlineMatchRewardResult
         {
@@ -431,44 +370,11 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
         if (allowStatsProgression && rewardResult.CountAsMatchPlayed)
         {
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlineMatchEndFlow] RegisterMatchResult -> " +
-                    "CountAsWin=" + rewardResult.CountAsWin +
-                    " | Ranked=" + (queueType == QueueType.Ranked),
-                    this
-                );
-            }
-
             profileManager.RegisterMatchResult(
                 PlayerMatchCategory.OnlineMultiplayer,
                 matchMode,
                 rewardResult.CountAsWin,
                 queueType == QueueType.Ranked
-            );
-
-            if (logDebug && profileManager.ActiveProfile != null)
-            {
-                Debug.Log(
-                    "[OnlineMatchEndFlow] Profile after RegisterMatchResult -> " +
-                    "TotalMatches=" + profileManager.ActiveProfile.totalMatchesPlayed +
-                    " | TotalWins=" + profileManager.ActiveProfile.totalWins +
-                    " | MultiplayerMatches=" + profileManager.ActiveProfile.multiplayerMatchesPlayed +
-                    " | MultiplayerWins=" + profileManager.ActiveProfile.multiplayerWins +
-                    " | RankedMatches=" + profileManager.ActiveProfile.rankedMatchesPlayed +
-                    " | RankedWins=" + profileManager.ActiveProfile.rankedWins,
-                    this
-                );
-            }
-        }
-        else if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineMatchEndFlow] RegisterMatchResult skipped -> " +
-                "AllowStatsProgression=" + allowStatsProgression +
-                " | CountAsMatchPlayed=" + rewardResult.CountAsMatchPlayed,
-                this
             );
         }
 
@@ -476,115 +382,20 @@ public class OnlineMatchEndFlow : MonoBehaviour
         {
             profileManager.AddRankedLp(rewardResult.RankedLpDelta);
             lastGrantedRankedLp = rewardResult.RankedLpDelta;
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlineMatchEndFlow] Ranked LP applied -> " +
-                    "Delta=" + rewardResult.RankedLpDelta +
-                    " | NewRankedLp=" + profileManager.ActiveRankedLp,
-                    this
-                );
-            }
-        }
-        else if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineMatchEndFlow] Ranked LP skipped -> " +
-                "QueueType=" + queueType +
-                " | LpDelta=" + rewardResult.RankedLpDelta,
-                this
-            );
         }
 
         if (allowXpRewards && rewardResult.XpReward > 0)
         {
             lastGrantedXp = Mathf.Max(0, rewardResult.XpReward);
             profileManager.AddXp(lastGrantedXp);
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlineMatchEndFlow] XP applied -> " +
-                    "Granted=" + lastGrantedXp +
-                    " | NewXp=" + (profileManager.ActiveProfile != null ? profileManager.ActiveProfile.xp : -1) +
-                    " | NewLevel=" + (profileManager.ActiveProfile != null ? profileManager.ActiveProfile.level : -1),
-                    this
-                );
-            }
-        }
-        else if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineMatchEndFlow] XP skipped -> " +
-                "AllowXpRewards=" + allowXpRewards +
-                " | RuleXp=" + rewardResult.XpReward,
-                this
-            );
         }
 
         lastGrantedSoftCurrency = Mathf.Max(0, rewardResult.SoftCurrencyReward);
         if (lastGrantedSoftCurrency > 0)
-        {
             profileManager.AddSoftCurrency(lastGrantedSoftCurrency);
 
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlineMatchEndFlow] Soft currency applied -> " +
-                    "Granted=" + lastGrantedSoftCurrency,
-                    this
-                );
-            }
-        }
-
         if (allowChestRewards && rewardResult.GrantChest)
-        {
-            bool granted = false;
-
-            if (rewardManager != null)
-            {
-                granted = rewardManager.GrantChestReward(
-                    rewardResult.ChestType,
-                    queueType == QueueType.Ranked ? "online_ranked_match_reward" : "online_normal_match_reward",
-                    category.ToString(),
-                    matchController.Winner
-                );
-            }
-
-            if (granted)
-            {
-                lastGrantedChestCount += 1;
-            }
-            else
-            {
-                if (queueType == QueueType.Ranked)
-                    onRankedChestRewardRequested?.Invoke();
-                else
-                    onNormalChestRewardRequested?.Invoke();
-            }
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlineMatchEndFlow] Chest reward processed -> " +
-                    "Requested=" + rewardResult.GrantChest +
-                    " | Granted=" + granted +
-                    " | ChestType=" + rewardResult.ChestType +
-                    " | TotalChestCount=" + lastGrantedChestCount,
-                    this
-                );
-            }
-        }
-        else if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineMatchEndFlow] Chest reward skipped -> " +
-                "AllowChestRewards=" + allowChestRewards +
-                " | RuleGrantChest=" + rewardResult.GrantChest,
-                this
-            );
-        }
+            lastGrantedChestCount += TryGrantChest(rewardResult.ChestType, queueType, category.ToString(), queueType == QueueType.Ranked);
 
         int endLevelAfterBase = profileManager.ActiveProfile != null ? Mathf.Max(1, profileManager.ActiveProfile.level) : startLevel;
         int endTotalXpAfterBase = profileManager.ActiveProfile != null ? Mathf.Max(0, profileManager.ActiveProfile.xp) : startTotalXp;
@@ -593,77 +404,37 @@ public class OnlineMatchEndFlow : MonoBehaviour
         int levelUpBonusSoft = 0;
         int levelUpBonusChestCount = 0;
 
-        if (levelUpCount > 0)
+        if (levelUpCount > 0 && levelUpRewardsConfig != null)
         {
-            levelUpBonusSoft = Mathf.Max(0, levelUpBonusSoftCurrencyPerLevel) * levelUpCount;
+            levelUpRewardsConfig.GetRewardsBetweenLevels(startLevel, endLevelAfterBase, cachedLevelRewards);
 
-            if (levelUpBonusSoft > 0)
+            for (int i = 0; i < cachedLevelRewards.Count; i++)
             {
-                profileManager.AddSoftCurrency(levelUpBonusSoft);
-                lastGrantedSoftCurrency += levelUpBonusSoft;
-            }
+                LevelRewardEntry entry = cachedLevelRewards[i];
 
-            if (grantBonusChestOnLevelUp)
-            {
-                int requestedCount = Mathf.Max(0, levelUpBonusChestCountPerLevel) * levelUpCount;
-
-                for (int i = 0; i < requestedCount; i++)
+                if (entry.softCurrencyReward > 0)
                 {
-                    bool granted = rewardManager != null && rewardManager.GrantChestReward(
-                        levelUpBonusChestType,
-                        "level_up_bonus",
-                        "match_rewards_level_up_bonus",
-                        matchController.Winner
-                    );
+                    profileManager.AddSoftCurrency(entry.softCurrencyReward);
+                    levelUpBonusSoft += entry.softCurrencyReward;
+                    lastGrantedSoftCurrency += entry.softCurrencyReward;
+                }
 
-                    if (granted)
-                    {
-                        levelUpBonusChestCount += 1;
-                        lastGrantedChestCount += 1;
-                    }
+                for (int chestIndex = 0; chestIndex < Mathf.Max(0, entry.chestCount); chestIndex++)
+                {
+                    int granted = TryGrantChest(entry.chestType, queueType, "level_up_reward_level_" + entry.targetLevel, false);
+                    levelUpBonusChestCount += granted;
+                    lastGrantedChestCount += granted;
                 }
             }
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlineMatchEndFlow] Level up bonus applied -> " +
-                    "LevelUpCount=" + levelUpCount +
-                    " | BonusSoft=" + levelUpBonusSoft +
-                    " | BonusChestCount=" + levelUpBonusChestCount,
-                    this
-                );
-            }
-        }
-        else if (logDebug)
-        {
-            Debug.Log("[OnlineMatchEndFlow] No level up detected.", this);
         }
 
         int endLevel = profileManager.ActiveProfile != null ? Mathf.Max(1, profileManager.ActiveProfile.level) : endLevelAfterBase;
         int endTotalXp = profileManager.ActiveProfile != null ? Mathf.Max(0, profileManager.ActiveProfile.xp) : endTotalXpAfterBase;
         int endRankedLp = profileManager.ActiveRankedLp;
 
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineMatchEndFlow] Final profile snapshot -> " +
-                "EndLevel=" + endLevel +
-                " | EndXp=" + endTotalXp +
-                " | EndRankedLp=" + endRankedLp +
-                " | LastGrantedXp=" + lastGrantedXp +
-                " | LastGrantedSoft=" + lastGrantedSoftCurrency +
-                " | LastGrantedChestCount=" + lastGrantedChestCount +
-                " | LastGrantedLp=" + lastGrantedRankedLp,
-                this
-            );
-        }
-
-        RefreshRewardTexts();
-
         if (presentationResultStore != null)
         {
-            OnlineMatchPresentationResult result = BuildPresentationResult(
+            presentationResultStore.SetLatest(BuildPresentationResult(
                 category,
                 startLevel,
                 endLevel,
@@ -674,40 +445,49 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 levelUpCount,
                 levelUpBonusSoft,
                 levelUpBonusChestCount
-            );
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OnlineMatchEndFlow] Saving presentation result -> " +
-                    "HasData=" + result.hasData +
-                    " | Title=" + result.titleText +
-                    " | PlayerName=" + result.playerName +
-                    " | StartLevel=" + result.startLevel +
-                    " | EndLevel=" + result.endLevel +
-                    " | RankedLpDelta=" + result.rankedLpDelta +
-                    " | NewRankedLpTotal=" + result.newRankedLpTotal +
-                    " | TotalSoft=" + result.totalSoftCurrencyGained +
-                    " | TotalChestCount=" + result.totalChestCount +
-                    " | LeveledUp=" + result.leveledUp,
-                    this
-                );
-            }
-
-            presentationResultStore.SetLatest(result);
-
-            if (logDebug)
-                Debug.Log("[OnlineMatchEndFlow] Presentation result saved.", this);
-        }
-        else
-        {
-            Debug.LogWarning("[OnlineMatchEndFlow] presentationResultStore is NULL, result not saved.", this);
+            ));
         }
 
         rewardsApplied = true;
 
         if (onlineFlowController != null)
             onlineFlowController.NotifyMatchEnded();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineMatchEndFlow] Rewards applied -> " +
+                "Category=" + category +
+                " | XP=" + lastGrantedXp +
+                " | Soft=" + lastGrantedSoftCurrency +
+                " | ChestCount=" + lastGrantedChestCount +
+                " | LP=" + lastGrantedRankedLp +
+                " | LevelUpCount=" + levelUpCount,
+                this);
+        }
+    }
+
+    private int TryGrantChest(ChestType chestType, QueueType queueType, string reason, bool invokeLegacyHookIfFailed)
+    {
+        bool granted = rewardManager != null && rewardManager.GrantChestReward(
+            chestType,
+            queueType == QueueType.Ranked ? "online_ranked_match_reward" : "online_normal_match_reward",
+            reason,
+            matchController != null ? matchController.Winner : PlayerID.None
+        );
+
+        if (granted)
+            return 1;
+
+        if (invokeLegacyHookIfFailed)
+        {
+            if (queueType == QueueType.Ranked)
+                onRankedChestRewardRequested?.Invoke();
+            else
+                onNormalChestRewardRequested?.Invoke();
+        }
+
+        return 0;
     }
 
     private OnlineMatchPresentationResult BuildPresentationResult(
@@ -722,41 +502,41 @@ public class OnlineMatchEndFlow : MonoBehaviour
         int levelUpBonusSoft,
         int levelUpBonusChestCount)
     {
-        OnlineMatchPresentationResult result = new OnlineMatchPresentationResult();
-        result.hasData = true;
-        result.isDraw = category == OnlineRewardCategory.Draw;
-        result.isVictory =
-            category == OnlineRewardCategory.NormalCompletionWin ||
-            category == OnlineRewardCategory.DisconnectWin ||
-            category == OnlineRewardCategory.SurrenderWin;
-
-        result.isDefeat =
-            category == OnlineRewardCategory.NormalCompletionLoss ||
-            category == OnlineRewardCategory.DisconnectLoss ||
-            category == OnlineRewardCategory.SurrenderLoss ||
-            category == OnlineRewardCategory.ReconnectTimeoutLoss;
+        OnlineMatchPresentationResult result = new OnlineMatchPresentationResult
+        {
+            hasData = true,
+            isDraw = category == OnlineRewardCategory.Draw,
+            isVictory =
+                category == OnlineRewardCategory.NormalCompletionWin ||
+                category == OnlineRewardCategory.DisconnectWin ||
+                category == OnlineRewardCategory.SurrenderWin,
+            isDefeat =
+                category == OnlineRewardCategory.NormalCompletionLoss ||
+                category == OnlineRewardCategory.DisconnectLoss ||
+                category == OnlineRewardCategory.SurrenderLoss ||
+                category == OnlineRewardCategory.ReconnectTimeoutLoss,
+            playerName = profileManager != null ? profileManager.ActiveDisplayName : "PLAYER",
+            startLevel = Mathf.Max(1, startLevel),
+            endLevel = Mathf.Max(1, endLevel),
+            levelText = "LV " + Mathf.Max(1, endLevel),
+            startTotalXp = Mathf.Max(0, startTotalXp),
+            endTotalXp = Mathf.Max(0, endTotalXp),
+            grantedXp = Mathf.Max(0, lastGrantedXp),
+            startLevelProgress01 = CalculateLevelProgress01(startTotalXp),
+            endLevelProgress01 = CalculateLevelProgress01(endTotalXp),
+            rankedLpDelta = lastGrantedRankedLp,
+            newRankedLpTotal = Mathf.Max(0, endRankedLp),
+            totalSoftCurrencyGained = Mathf.Max(0, lastGrantedSoftCurrency),
+            totalChestCount = Mathf.Max(0, lastGrantedChestCount),
+            leveledUp = levelUpCount > 0,
+            levelUpCount = Mathf.Max(0, levelUpCount),
+            levelUpBonusSoftCurrency = Mathf.Max(0, levelUpBonusSoft),
+            levelUpBonusChestCount = Mathf.Max(0, levelUpBonusChestCount),
+            overlayTitleText = "LEVEL UP!"
+        };
 
         result.titleText = result.isDraw ? "DRAW" : (result.isVictory ? "VICTORY" : "DEFEAT");
-        result.playerName = profileManager != null ? profileManager.ActiveDisplayName : "PLAYER";
-        result.startLevel = Mathf.Max(1, startLevel);
-        result.endLevel = Mathf.Max(1, endLevel);
-        result.levelText = "LV " + result.endLevel;
-        result.startTotalXp = Mathf.Max(0, startTotalXp);
-        result.endTotalXp = Mathf.Max(0, endTotalXp);
-        result.grantedXp = Mathf.Max(0, lastGrantedXp);
-        result.startLevelProgress01 = CalculateLevelProgress01(startTotalXp);
-        result.endLevelProgress01 = CalculateLevelProgress01(endTotalXp);
-        result.rankedLpDelta = lastGrantedRankedLp;
-        result.newRankedLpTotal = Mathf.Max(0, endRankedLp);
-        result.totalSoftCurrencyGained = Mathf.Max(0, lastGrantedSoftCurrency);
-        result.totalChestCount = Mathf.Max(0, lastGrantedChestCount);
-        result.leveledUp = levelUpCount > 0;
-        result.levelUpCount = Mathf.Max(0, levelUpCount);
-        result.levelUpBonusSoftCurrency = Mathf.Max(0, levelUpBonusSoft);
-        result.levelUpBonusChestCount = Mathf.Max(0, levelUpBonusChestCount);
-        result.overlayTitleText = "LEVEL UP!";
         result.rewardSummaryText = BuildSummaryText(result, startRankedLp);
-
         return result;
     }
 
@@ -815,21 +595,15 @@ public class OnlineMatchEndFlow : MonoBehaviour
             case FusionOnlineMatchController.MatchEndReason.NormalCompletion:
                 if (draw)
                     return OnlineRewardCategory.Draw;
-                return localWon
-                    ? OnlineRewardCategory.NormalCompletionWin
-                    : OnlineRewardCategory.NormalCompletionLoss;
+                return localWon ? OnlineRewardCategory.NormalCompletionWin : OnlineRewardCategory.NormalCompletionLoss;
 
             case FusionOnlineMatchController.MatchEndReason.OpponentDisconnected:
             case FusionOnlineMatchController.MatchEndReason.LocalDisconnected:
-                return localWon
-                    ? OnlineRewardCategory.DisconnectWin
-                    : OnlineRewardCategory.DisconnectLoss;
+                return localWon ? OnlineRewardCategory.DisconnectWin : OnlineRewardCategory.DisconnectLoss;
 
             case FusionOnlineMatchController.MatchEndReason.OpponentSurrendered:
             case FusionOnlineMatchController.MatchEndReason.LocalSurrendered:
-                return localWon
-                    ? OnlineRewardCategory.SurrenderWin
-                    : OnlineRewardCategory.SurrenderLoss;
+                return localWon ? OnlineRewardCategory.SurrenderWin : OnlineRewardCategory.SurrenderLoss;
 
             case FusionOnlineMatchController.MatchEndReason.ReconnectTimeout:
                 return OnlineRewardCategory.ReconnectTimeoutLoss;
@@ -837,40 +611,9 @@ public class OnlineMatchEndFlow : MonoBehaviour
             case FusionOnlineMatchController.MatchEndReason.MatchCancelled:
                 return OnlineRewardCategory.MatchCancelled;
 
-            case FusionOnlineMatchController.MatchEndReason.None:
             default:
                 return OnlineRewardCategory.None;
         }
-    }
-
-    private void RefreshRewardTexts()
-    {
-        if (rewardXpText != null)
-            rewardXpText.text = "+" + lastGrantedXp + " XP";
-
-        if (rewardSoftCurrencyText != null)
-            rewardSoftCurrencyText.text = "+" + lastGrantedSoftCurrency;
-
-        if (rewardChestText != null)
-            rewardChestText.text = lastGrantedChestCount > 0 ? "X" + lastGrantedChestCount : string.Empty;
-
-        if (rewardRankedLpText != null)
-            rewardRankedLpText.text = (lastGrantedRankedLp >= 0 ? "+" : string.Empty) + lastGrantedRankedLp + " LP";
-    }
-
-    private void ClearRewardTexts()
-    {
-        if (rewardXpText != null)
-            rewardXpText.text = string.Empty;
-
-        if (rewardSoftCurrencyText != null)
-            rewardSoftCurrencyText.text = string.Empty;
-
-        if (rewardChestText != null)
-            rewardChestText.text = string.Empty;
-
-        if (rewardRankedLpText != null)
-            rewardRankedLpText.text = string.Empty;
     }
 
     private void ResolveDependencies()
@@ -924,17 +667,6 @@ public class OnlineMatchEndFlow : MonoBehaviour
         allowChestRewards = session.allowChestRewards;
         allowXpRewards = session.allowXpRewards;
         allowStatsProgression = session.allowStatsProgression;
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineMatchEndFlow] Runtime reward flags -> " +
-                "AllowChestRewards=" + allowChestRewards +
-                " | AllowXpRewards=" + allowXpRewards +
-                " | AllowStatsProgression=" + allowStatsProgression,
-                this
-            );
-        }
     }
 
     private QueueType ResolveQueueType()
@@ -955,10 +687,5 @@ public class OnlineMatchEndFlow : MonoBehaviour
         }
 
         return MatchMode.ScoreTarget;
-    }
-
-    private string SafeName(Object obj)
-    {
-        return obj == null ? "<null>" : obj.name;
     }
 }

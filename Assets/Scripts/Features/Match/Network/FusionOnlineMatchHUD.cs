@@ -32,6 +32,10 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     [SerializeField] private GameObject postGamePanel;
     [SerializeField] private GameObject pausePanel;
 
+    [Header("End Match Panel Policy")]
+    [SerializeField] private bool hideGameplayUiWhenMatchEnds = true;
+    [SerializeField] private bool showPostGamePanelWhenMatchEnds = true;
+
     [Header("Post Game Delay")]
     [SerializeField] private float postGamePanelShowDelaySeconds = 0f;
 
@@ -129,7 +133,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
                 postGameDelayRemaining = 0f;
                 postGameDelayActive = false;
 
-                if (postGamePanel != null)
+                if (showPostGamePanelWhenMatchEnds && postGamePanel != null)
                     postGamePanel.SetActive(true);
 
                 if (logDebug)
@@ -229,7 +233,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         bool showGameplayHud = matchStarted && !matchEnded && !midBreakActive && !showReconnectOverlay && !forcedPostGameRequested;
 
         if (gameUIPanel != null)
-            gameUIPanel.SetActive(showGameplayHud);
+            gameUIPanel.SetActive(hideGameplayUiWhenMatchEnds ? showGameplayHud : (matchStarted && !midBreakActive && !showReconnectOverlay && !forcedPostGameRequested));
 
         if (halfTimePanel != null)
             halfTimePanel.SetActive(isTimeHalftime && !matchEnded && !showReconnectOverlay && !forcedPostGameRequested);
@@ -315,22 +319,6 @@ public class FusionOnlineMatchHUD : MonoBehaviour
             endgamePlayer2ScoreText.text = FormatScoreForMode(matchMode, scoreP2, pointsToWin);
 
         ApplyGameResultTexts(winner, safeP1, safeP2, endReason);
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[FusionOnlineMatchHUD] ApplyState -> " +
-                "Mode=" + matchMode +
-                " | P1=" + safeP1 +
-                " | P2=" + safeP2 +
-                " | MatchEnded=" + matchEnded +
-                " | ReconnectPending=" + reconnectPending +
-                " | ReconnectMissingPlayer=" + reconnectMissingPlayer +
-                " | ReconnectTime=" + reconnectTimeRemaining.ToString("F2") +
-                " | EndReason=" + endReason,
-                this
-            );
-        }
     }
 
     public void ForceShowPostGame(
@@ -353,7 +341,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         string safeP1 = string.IsNullOrWhiteSpace(player1Name) ? player1FallbackName : player1Name;
         string safeP2 = string.IsNullOrWhiteSpace(player2Name) ? player2FallbackName : player2Name;
 
-        if (gameUIPanel != null)
+        if (hideGameplayUiWhenMatchEnds && gameUIPanel != null)
             gameUIPanel.SetActive(false);
 
         if (halfTimePanel != null)
@@ -398,11 +386,9 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         if (!visible)
         {
             reconnectDotsTimer = 0f;
-            reconnectDotsCount = 0;
-
+            reconnectDotsCount = 0f > 1f ? 1 : 0;
             if (reconnectCountdownText != null)
                 reconnectCountdownText.text = string.Empty;
-
             reconnectPanelWasVisibleLastFrame = false;
             return;
         }
@@ -464,6 +450,15 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     {
         previousMatchEnded = true;
 
+        if (!showPostGamePanelWhenMatchEnds)
+        {
+            postGameDelayActive = false;
+            postGameDelayRemaining = 0f;
+            if (postGamePanel != null)
+                postGamePanel.SetActive(false);
+            return;
+        }
+
         float delay = Mathf.Max(0f, postGamePanelShowDelaySeconds);
         if (delay <= 0f)
         {
@@ -488,6 +483,18 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         if (!matchEnded)
         {
             previousMatchEnded = false;
+            postGameDelayActive = false;
+            postGameDelayRemaining = 0f;
+
+            if (postGamePanel != null)
+                postGamePanel.SetActive(false);
+
+            return;
+        }
+
+        if (!showPostGamePanelWhenMatchEnds)
+        {
+            previousMatchEnded = true;
             postGameDelayActive = false;
             postGameDelayRemaining = 0f;
 
@@ -581,13 +588,9 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         if (showLocalDisconnected)
         {
             if (canUseDedicatedLocalDisconnectText)
-            {
                 localDisconnectedEndgameText.text = "YOU DISCONNECTED FROM THE MATCH";
-            }
             else if (opponentDisconnectedText != null)
-            {
                 opponentDisconnectedText.text = "YOU DISCONNECTED FROM THE MATCH";
-            }
         }
     }
 
@@ -699,7 +702,6 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         SetTextVisible(gameResultLoserText, false);
         SetTextVisible(drawText, false);
         SetTextVisible(opponentDisconnectedText, false);
-        SetTextVisible(localDisconnectedEndgameText, false);
         SetTextVisible(localDisconnectedEndgameText, false);
 
         if (reconnectPanel != null)
