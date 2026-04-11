@@ -34584,6 +34584,7 @@ GameObject:
   - component: {fileID: 1801468268}
   - component: {fileID: 1801468269}
   - component: {fileID: 1801468270}
+  - component: {fileID: 1801468271}
   m_Layer: 0
   m_Name: MatchRuntime
   m_TagString: Untagged
@@ -34813,6 +34814,23 @@ MonoBehaviour:
     overlayTitleText: LEVEL UP!
     sourceMatchId: 
   lastProcessedMatchId: 
+--- !u!114 &1801468271
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1801468248}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0d22c8a123ffd1f4ea353a701f1422d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OnlineFinishedMatchSessionRetirer
+  matchController: {fileID: 0}
+  runnerManager: {fileID: 1801468266}
+  retireSessionAsSoonAsMatchEnds: 1
+  onlyServerMayRetireSession: 1
+  logDebug: 1
 --- !u!1 &1805039842
 GameObject:
   m_ObjectHideFlags: 0

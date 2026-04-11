@@ -202,7 +202,6 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 result.startLevelProgress01,
                 result.endLevelProgress01,
                 startLevel,
-                endLevel,
                 xpAnimationDuration);
 
             yield break;
@@ -215,7 +214,6 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         yield return AnimateXpSegment(
             result.startLevelProgress01,
             1f,
-            startLevel,
             startLevel,
             firstSegmentDuration);
 
@@ -231,16 +229,10 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             0f,
             result.endLevelProgress01,
             endLevel,
-            endLevel,
             secondSegmentDuration);
     }
 
-    private IEnumerator AnimateXpSegment(
-        float fromFill,
-        float toFill,
-        int displayedStartLevel,
-        int displayedEndLevel,
-        float duration)
+    private IEnumerator AnimateXpSegment(float fromFill, float toFill, int levelToDisplay, float duration)
     {
         float safeDuration = Mathf.Max(0.01f, duration);
         float elapsed = 0f;
@@ -252,9 +244,8 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
             SetXpFill(Mathf.Lerp(fromFill, toFill, t));
 
-            int displayedLevel = Mathf.RoundToInt(Mathf.Lerp(displayedStartLevel, displayedEndLevel, t));
             if (playerLevelText != null)
-                playerLevelText.text = "LV " + Mathf.Max(1, displayedLevel);
+                playerLevelText.text = "LV " + Mathf.Max(1, levelToDisplay);
 
             yield return null;
         }
@@ -262,7 +253,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         SetXpFill(toFill);
 
         if (playerLevelText != null)
-            playerLevelText.text = "LV " + Mathf.Max(1, displayedEndLevel);
+            playerLevelText.text = "LV " + Mathf.Max(1, levelToDisplay);
     }
 
     private IEnumerator AnimateLp(OnlineMatchPresentationResult result)

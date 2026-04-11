@@ -8,6 +8,10 @@ using UnityEngine;
 
 public sealed class PhotonFusionMatchmakingService : IMatchmakingService
 {
+    private const string MatchStatePropertyKey = "match_state";
+    private const int MatchStateLive = 0;
+    private const int MatchStateEnded = 1;
+
     private readonly PhotonFusionRunnerManager runnerManager;
     private readonly OnlineQueueRulesConfig queueRulesConfig;
     private readonly bool logDebug;
@@ -156,6 +160,18 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
 
             if (playerCount >= 2)
             {
+                if (runnerManager.TryGetCurrentSessionProperty(MatchStatePropertyKey, out SessionProperty stateProperty))
+                {
+                    int stateValue = stateProperty;
+                    if (stateValue == MatchStateEnded)
+                    {
+                        if (logDebug)
+                            Debug.LogWarning("[PhotonFusionMatchmakingService] Joined an ended session. Aborting assignment.", runnerManager);
+
+                        throw new Exception("Joined ended session.");
+                    }
+                }
+
                 OnlinePlayerMatchStatsSnapshot remoteSnapshot = ResolveRemoteSnapshot(localIsHost);
 
                 if (remoteSnapshot == null || !remoteSnapshot.IsValid)
@@ -209,7 +225,8 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                         " | RemoteName=" + remoteName +
                         " | RemoteWL=" + remoteSnapshot.totalWins + "W-" + remoteSnapshot.totalLosses + "L" +
                         " | RemoteWR=" + remoteSnapshot.winRatePercent + "%" +
-                        " | PlayerCount=" + playerCount
+                        " | PlayerCount=" + playerCount,
+                        runnerManager
                     );
                 }
 
@@ -263,7 +280,8 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
             { OnlineSessionPropertyKeys.PointsToWin, Mathf.Max(1, pointsToWin) },
             { OnlineSessionPropertyKeys.MatchDuration, Mathf.RoundToInt(Mathf.Max(1f, matchDurationSeconds)) },
             { OnlineSessionPropertyKeys.TurnDuration, Mathf.RoundToInt(Mathf.Max(1f, turnDurationSeconds)) },
-            { OnlineSessionPropertyKeys.Ranked, isRanked ? 1 : 0 }
+            { OnlineSessionPropertyKeys.Ranked, isRanked ? 1 : 0 },
+            { MatchStatePropertyKey, MatchStateLive }
         };
     }
 

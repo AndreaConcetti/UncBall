@@ -15280,7 +15280,7 @@ MonoBehaviour:
   startDelaySeconds: 0.05
   xpAnimationDuration: 0.75
   lpAnimationDuration: 0.9
-  levelUpOverlayVisibleSeconds: 2.5
+  levelUpOverlayVisibleSeconds: 3
   levelUpXpResetPauseSeconds: 0.15
 --- !u!1 &1242200877
 GameObject:
@@ -16499,7 +16499,7 @@ MonoBehaviour:
   matchController: {fileID: 0}
   onlineFlowController: {fileID: 0}
   presentationResultStore: {fileID: 0}
-  autoReturnToMenuIfFinishedMatchWasAlreadyProcessed: 1
+  autoReturnToMenuIfSceneStartsInsideAlreadyProcessedFinishedMatch: 1
   logDebug: 0
 --- !u!1 &1404626876
 GameObject:
