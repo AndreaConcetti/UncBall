@@ -28,13 +28,16 @@ public class OnlineMatchPresentationResult
     public int newRankedLpTotal = 1000;
 
     public int totalSoftCurrencyGained = 0;
-
     public int totalChestCount = 0;
+    public ChestType totalChestType = ChestType.Random;
 
     public bool leveledUp;
     public int levelUpCount = 0;
     public int levelUpBonusSoftCurrency = 0;
     public int levelUpBonusChestCount = 0;
+    public ChestType levelUpBonusChestType = ChestType.Random;
 
     public string overlayTitleText = "LEVEL UP!";
+
+    public string sourceMatchId = string.Empty;
 }

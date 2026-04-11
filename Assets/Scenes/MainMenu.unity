@@ -34620,7 +34620,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RewardManager
   playerChestSlotInventory: {fileID: 1726694513}
   enableMatchWinChestReward: 1
-  defaultWinChestType: 0
+  defaultWinChestType: 1
   logDebug: 1
 --- !u!114 &1801468266
 MonoBehaviour:
@@ -34657,7 +34657,7 @@ MonoBehaviour:
   runnerManager: {fileID: 1801468266}
   profileManager: {fileID: 1445563842}
   queueRulesConfig: {fileID: 11400000, guid: 61a0ea018582ecc44b8646479d7b3504, type: 2}
-  rewardsConfig: {fileID: 0}
+  rewardsConfig: {fileID: 11400000, guid: 281bc0d748cb8994d81b2e0026a98b70, type: 2}
   gameplaySceneName: Gameplay
   mainMenuSceneName: MainMenu
   matchFoundUiDelaySeconds: 10
@@ -34804,11 +34804,15 @@ MonoBehaviour:
     newRankedLpTotal: 1000
     totalSoftCurrencyGained: 0
     totalChestCount: 0
+    totalChestType: 0
     leveledUp: 0
     levelUpCount: 0
     levelUpBonusSoftCurrency: 0
     levelUpBonusChestCount: 0
+    levelUpBonusChestType: 0
     overlayTitleText: LEVEL UP!
+    sourceMatchId: 
+  lastProcessedMatchId: 
 --- !u!1 &1805039842
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,8 +1,16 @@
-
+using System;
 using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+
+[Serializable]
+public struct ChestVisualMapping
+{
+    public ChestType chestType;
+    public Sprite sprite;
+    public string label;
+}
 
 public class OnlineRewardsObtainedPresenter : MonoBehaviour
 {
@@ -22,7 +30,11 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     [SerializeField] private TMP_Text animatedTotalLpText;
     [SerializeField] private TMP_Text normalCurrencyGainText;
     [SerializeField] private TMP_Text chestCountText;
+    [SerializeField] private TMP_Text chestTypeText;
     [SerializeField] private TMP_Text summaryText;
+
+    [Header("Main Chest Visual")]
+    [SerializeField] private Image chestTypeImage;
 
     [Header("XP Progress")]
     [SerializeField] private Image experienceFillImage;
@@ -33,6 +45,11 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     [SerializeField] private TMP_Text levelUpOverlaySoftCurrencyText;
     [SerializeField] private GameObject levelUpOverlayChestParent;
     [SerializeField] private TMP_Text levelUpOverlayChestCountText;
+    [SerializeField] private TMP_Text levelUpOverlayChestTypeText;
+    [SerializeField] private Image levelUpOverlayChestTypeImage;
+
+    [Header("Chest Visual Mappings")]
+    [SerializeField] private ChestVisualMapping[] chestVisualMappings;
 
     [Header("Animation")]
     [SerializeField] private bool playOnEnable = true;
@@ -40,43 +57,18 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     [SerializeField] private float xpAnimationDuration = 0.75f;
     [SerializeField] private float lpAnimationDuration = 0.90f;
     [SerializeField] private float levelUpOverlayVisibleSeconds = 2.5f;
-
-    [Header("Debug")]
-    [SerializeField] private bool logDebug = true;
+    [SerializeField] private float levelUpXpResetPauseSeconds = 0.15f;
 
     private Coroutine playRoutine;
 
     private void Awake()
     {
         ResolveDependencies();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineRewardsObtainedPresenter] Awake -> " +
-                "StoreResolved=" + (resultStore != null) +
-                " | PanelRoot=" + SafeName(panelRoot) +
-                " | HeaderText=" + SafeName(headerText) +
-                " | PlayerNameText=" + SafeName(playerNameText) +
-                " | PlayerLevelText=" + SafeName(playerLevelText),
-                this
-            );
-        }
     }
 
     private void OnEnable()
     {
         ResolveDependencies();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineRewardsObtainedPresenter] OnEnable -> " +
-                "PlayOnEnable=" + playOnEnable +
-                " | StoreResolved=" + (resultStore != null),
-                this
-            );
-        }
 
         if (playOnEnable)
             ShowLatest();
@@ -86,38 +78,11 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     {
         ResolveDependencies();
 
-        if (logDebug)
-            Debug.Log("[OnlineRewardsObtainedPresenter] ShowLatest invoked.", this);
-
         if (resultStore == null)
-        {
-            Debug.LogWarning("[OnlineRewardsObtainedPresenter] resultStore is NULL.", this);
             return;
-        }
 
         if (!resultStore.TryGetLatest(out OnlineMatchPresentationResult result))
-        {
-            Debug.LogWarning("[OnlineRewardsObtainedPresenter] No latest result found in store.", this);
             return;
-        }
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineRewardsObtainedPresenter] Result found -> " +
-                "HasData=" + result.hasData +
-                " | Title=" + result.titleText +
-                " | PlayerName=" + result.playerName +
-                " | StartLevel=" + result.startLevel +
-                " | EndLevel=" + result.endLevel +
-                " | LpDelta=" + result.rankedLpDelta +
-                " | NewTotalLp=" + result.newRankedLpTotal +
-                " | Soft=" + result.totalSoftCurrencyGained +
-                " | ChestCount=" + result.totalChestCount +
-                " | LeveledUp=" + result.leveledUp,
-                this
-            );
-        }
 
         Show(result);
     }
@@ -125,19 +90,13 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     public void Show(OnlineMatchPresentationResult result)
     {
         if (result == null || !result.hasData)
-        {
-            Debug.LogWarning("[OnlineRewardsObtainedPresenter] Show aborted because result is null or hasData=false.", this);
             return;
-        }
 
         if (panelRoot != null)
             panelRoot.SetActive(true);
 
         if (playRoutine != null)
             StopCoroutine(playRoutine);
-
-        if (logDebug)
-            Debug.Log("[OnlineRewardsObtainedPresenter] Starting PlaySequence.", this);
 
         playRoutine = StartCoroutine(PlaySequence(result));
     }
@@ -155,9 +114,6 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
         if (panelRoot != null)
             panelRoot.SetActive(false);
-
-        if (logDebug)
-            Debug.Log("[OnlineRewardsObtainedPresenter] Hide called.", this);
     }
 
     private IEnumerator PlaySequence(OnlineMatchPresentationResult result)
@@ -171,7 +127,11 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         yield return AnimateXp(result);
         yield return AnimateLp(result);
 
-        if (result.leveledUp && levelUpOverlayPanel != null)
+        bool shouldShowLevelUpOverlay =
+            levelUpOverlayPanel != null &&
+            (result.leveledUp || result.levelUpCount > 0 || result.endLevel > result.startLevel);
+
+        if (shouldShowLevelUpOverlay)
         {
             ShowLevelUpOverlay(result);
 
@@ -179,15 +139,9 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 yield return new WaitForSecondsRealtime(levelUpOverlayVisibleSeconds);
 
             levelUpOverlayPanel.SetActive(false);
-
-            if (logDebug)
-                Debug.Log("[OnlineRewardsObtainedPresenter] Level up overlay hidden after timer.", this);
         }
 
         playRoutine = null;
-
-        if (logDebug)
-            Debug.Log("[OnlineRewardsObtainedPresenter] PlaySequence completed.", this);
     }
 
     private void ApplyStaticTexts(OnlineMatchPresentationResult result)
@@ -214,22 +168,10 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         if (chestCountText != null)
             chestCountText.text = hasChestGain ? "X" + result.totalChestCount : string.Empty;
 
+        ApplyChestVisual(result.totalChestType, chestTypeImage, chestTypeText, hasChestGain);
+
         if (levelUpOverlayPanel != null)
             levelUpOverlayPanel.SetActive(false);
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineRewardsObtainedPresenter] ApplyStaticTexts -> " +
-                "Header=" + (headerText != null ? headerText.text : "<null>") +
-                " | PlayerName=" + (playerNameText != null ? playerNameText.text : "<null>") +
-                " | Summary=" + (summaryText != null ? summaryText.text : "<null>") +
-                " | Soft=" + (normalCurrencyGainText != null ? normalCurrencyGainText.text : "<null>") +
-                " | ChestActive=" + hasChestGain +
-                " | ChestText=" + (chestCountText != null ? chestCountText.text : "<null>"),
-                this
-            );
-        }
     }
 
     private void ApplyImmediateVisuals(OnlineMatchPresentationResult result)
@@ -247,56 +189,80 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             int startLp = Mathf.Max(0, result.newRankedLpTotal - result.rankedLpDelta);
             animatedTotalLpText.text = "NEW TOTAL: " + startLp + " LP";
         }
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineRewardsObtainedPresenter] ApplyImmediateVisuals -> " +
-                "PlayerLevel=" + (playerLevelText != null ? playerLevelText.text : "<null>") +
-                " | LpDelta=" + (lpGainedText != null ? lpGainedText.text : "<null>") +
-                " | AnimatedTotal=" + (animatedTotalLpText != null ? animatedTotalLpText.text : "<null>") +
-                " | StartFill=" + result.startLevelProgress01,
-                this
-            );
-        }
     }
 
     private IEnumerator AnimateXp(OnlineMatchPresentationResult result)
     {
-        float duration = Mathf.Max(0.01f, xpAnimationDuration);
+        int startLevel = Mathf.Max(1, result.startLevel);
+        int endLevel = Mathf.Max(1, result.endLevel);
+
+        if (endLevel <= startLevel)
+        {
+            yield return AnimateXpSegment(
+                result.startLevelProgress01,
+                result.endLevelProgress01,
+                startLevel,
+                endLevel,
+                xpAnimationDuration);
+
+            yield break;
+        }
+
+        float firstSegmentDuration = Mathf.Max(0.05f, xpAnimationDuration * 0.55f);
+        float resetPause = Mathf.Max(0f, levelUpXpResetPauseSeconds);
+        float secondSegmentDuration = Mathf.Max(0.05f, xpAnimationDuration * 0.45f);
+
+        yield return AnimateXpSegment(
+            result.startLevelProgress01,
+            1f,
+            startLevel,
+            startLevel,
+            firstSegmentDuration);
+
+        if (playerLevelText != null)
+            playerLevelText.text = "LV " + endLevel;
+
+        SetXpFill(0f);
+
+        if (resetPause > 0f)
+            yield return new WaitForSecondsRealtime(resetPause);
+
+        yield return AnimateXpSegment(
+            0f,
+            result.endLevelProgress01,
+            endLevel,
+            endLevel,
+            secondSegmentDuration);
+    }
+
+    private IEnumerator AnimateXpSegment(
+        float fromFill,
+        float toFill,
+        int displayedStartLevel,
+        int displayedEndLevel,
+        float duration)
+    {
+        float safeDuration = Mathf.Max(0.01f, duration);
         float elapsed = 0f;
 
-        while (elapsed < duration)
+        while (elapsed < safeDuration)
         {
             elapsed += Time.unscaledDeltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
+            float t = Mathf.Clamp01(elapsed / safeDuration);
 
-            SetXpFill(Mathf.Lerp(result.startLevelProgress01, result.endLevelProgress01, t));
+            SetXpFill(Mathf.Lerp(fromFill, toFill, t));
 
-            int displayedLevel = (!result.leveledUp || t < 0.85f)
-                ? Mathf.Max(1, result.startLevel)
-                : Mathf.Max(1, result.endLevel);
-
+            int displayedLevel = Mathf.RoundToInt(Mathf.Lerp(displayedStartLevel, displayedEndLevel, t));
             if (playerLevelText != null)
-                playerLevelText.text = "LV " + displayedLevel;
+                playerLevelText.text = "LV " + Mathf.Max(1, displayedLevel);
 
             yield return null;
         }
 
-        SetXpFill(result.endLevelProgress01);
+        SetXpFill(toFill);
 
         if (playerLevelText != null)
-            playerLevelText.text = "LV " + Mathf.Max(1, result.endLevel);
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineRewardsObtainedPresenter] AnimateXp completed -> " +
-                "EndFill=" + result.endLevelProgress01 +
-                " | FinalLevel=" + (playerLevelText != null ? playerLevelText.text : "<null>"),
-                this
-            );
-        }
+            playerLevelText.text = "LV " + Mathf.Max(1, displayedEndLevel);
     }
 
     private IEnumerator AnimateLp(OnlineMatchPresentationResult result)
@@ -322,15 +288,6 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
         if (animatedTotalLpText != null)
             animatedTotalLpText.text = "NEW TOTAL: " + endLp + " LP";
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OnlineRewardsObtainedPresenter] AnimateLp completed -> " +
-                "FinalLpText=" + (animatedTotalLpText != null ? animatedTotalLpText.text : "<null>"),
-                this
-            );
-        }
     }
 
     private void ShowLevelUpOverlay(OnlineMatchPresentationResult result)
@@ -356,17 +313,79 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         if (levelUpOverlayChestCountText != null)
             levelUpOverlayChestCountText.text = hasChest ? "X" + result.levelUpBonusChestCount : string.Empty;
 
-        if (logDebug)
+        ApplyChestVisual(result.levelUpBonusChestType, levelUpOverlayChestTypeImage, levelUpOverlayChestTypeText, hasChest);
+    }
+
+    private void ApplyChestVisual(ChestType chestType, Image imageTarget, TMP_Text labelTarget, bool visible)
+    {
+        if (imageTarget != null)
+            imageTarget.gameObject.SetActive(visible);
+
+        if (labelTarget != null)
+            labelTarget.gameObject.SetActive(visible);
+
+        if (!visible)
         {
-            Debug.Log(
-                "[OnlineRewardsObtainedPresenter] ShowLevelUpOverlay -> " +
-                "Title=" + (levelUpOverlayTitleText != null ? levelUpOverlayTitleText.text : "<null>") +
-                " | Soft=" + (levelUpOverlaySoftCurrencyText != null ? levelUpOverlaySoftCurrencyText.text : "<null>") +
-                " | ChestActive=" + hasChest +
-                " | ChestText=" + (levelUpOverlayChestCountText != null ? levelUpOverlayChestCountText.text : "<null>"),
-                this
-            );
+            if (labelTarget != null)
+                labelTarget.text = string.Empty;
+
+            return;
         }
+
+        ChestVisualMapping mapping = FindChestVisualMapping(chestType);
+
+        if (imageTarget != null)
+            imageTarget.sprite = mapping.sprite;
+
+        if (labelTarget != null)
+        {
+            string resolvedLabel = string.IsNullOrWhiteSpace(mapping.label)
+                ? BuildFallbackChestLabel(chestType)
+                : mapping.label;
+
+            labelTarget.text = resolvedLabel.ToUpperInvariant();
+        }
+    }
+
+    private ChestVisualMapping FindChestVisualMapping(ChestType chestType)
+    {
+        if (chestVisualMappings != null)
+        {
+            for (int i = 0; i < chestVisualMappings.Length; i++)
+            {
+                if (chestVisualMappings[i].chestType.Equals(chestType))
+                    return chestVisualMappings[i];
+            }
+        }
+
+        return new ChestVisualMapping
+        {
+            chestType = chestType,
+            sprite = null,
+            label = BuildFallbackChestLabel(chestType)
+        };
+    }
+
+    private string BuildFallbackChestLabel(ChestType chestType)
+    {
+        string raw = chestType.ToString().ToUpperInvariant();
+
+        if (raw == "RANDOM")
+            return "RANDOM";
+
+        if (raw.Contains("LEGENDARY"))
+            return "LEGENDARY";
+
+        if (raw.Contains("EPIC"))
+            return "EPIC";
+
+        if (raw.Contains("RARE"))
+            return "RARE";
+
+        if (raw.Contains("COMMON"))
+            return "COMMON";
+
+        return raw.Replace("GUARANTEED_", string.Empty).Replace("_", " ");
     }
 
     private void SetXpFill(float value)
@@ -395,11 +414,6 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     {
         string resolved = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         return resolved.ToUpperInvariant();
-    }
-
-    private string SafeName(Object obj)
-    {
-        return obj == null ? "<null>" : obj.name;
     }
 
     private void ResolveDependencies()

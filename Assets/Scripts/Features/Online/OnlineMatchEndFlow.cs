@@ -34,6 +34,10 @@ public class OnlineMatchEndFlow : MonoBehaviour
     [SerializeField] private bool allowXpRewards = false;
     [SerializeField] private bool allowStatsProgression = false;
 
+    [Header("Rematch Policy")]
+    [SerializeField] private bool allowRematchInRanked = false;
+    [SerializeField] private bool hideRematchButtonWhenUnavailable = true;
+
     [Header("Main Endgame Buttons")]
     [SerializeField] private Button requestRematchButton;
     [SerializeField] private Button backHomeButton;
@@ -56,7 +60,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
     [SerializeField] private UnityEvent onRankedChestRewardRequested;
 
     [Header("Debug")]
-    [SerializeField] private bool logDebug = true;
+    [SerializeField] private bool logDebug = false;
 
     private readonly List<LevelRewardEntry> cachedLevelRewards = new List<LevelRewardEntry>();
 
@@ -68,6 +72,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
     private int lastGrantedSoftCurrency;
     private int lastGrantedChestCount;
     private int lastGrantedRankedLp;
+    private ChestType lastGrantedChestType = ChestType.Random;
+    private ChestType lastLevelUpBonusChestType = ChestType.Random;
 
     private void Awake()
     {
@@ -173,6 +179,10 @@ public class OnlineMatchEndFlow : MonoBehaviour
         if (matchController == null || !matchController.MatchEnded)
             return false;
 
+        QueueType queueType = ResolveQueueType();
+        if (queueType == QueueType.Ranked && !allowRematchInRanked)
+            return false;
+
         OnlineRewardCategory category = ResolveRewardCategory();
         return category == OnlineRewardCategory.NormalCompletionWin ||
                category == OnlineRewardCategory.NormalCompletionLoss ||
@@ -255,16 +265,24 @@ public class OnlineMatchEndFlow : MonoBehaviour
             onlineFlowController.CurrentState == OnlineFlowState.ReturningToMenu;
 
         bool matchEnded = matchController != null && matchController.MatchEnded;
-        bool canRequest = rematchController != null && matchEnded && CanUseRematch() && rematchController.CanLocalRequestRematch();
+        bool canUseRematch = CanUseRematch();
+        bool canRequest = rematchController != null && matchEnded && canUseRematch && rematchController.CanLocalRequestRematch();
 
         if (requestRematchButton != null)
+        {
+            if (hideRematchButtonWhenUnavailable)
+                requestRematchButton.gameObject.SetActive(canUseRematch);
+            else
+                requestRematchButton.gameObject.SetActive(true);
+
             requestRematchButton.interactable = !exitTriggered && !returningToMenu && canRequest;
+        }
 
         if (cancelRequestButton != null)
             cancelRequestButton.interactable =
                 !exitTriggered &&
                 !returningToMenu &&
-                CanUseRematch() &&
+                canUseRematch &&
                 rematchController != null &&
                 rematchController.HasOutgoingRequestFromLocalPlayer();
 
@@ -272,7 +290,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
             acceptRequestButton.interactable =
                 !exitTriggered &&
                 !returningToMenu &&
-                CanUseRematch() &&
+                canUseRematch &&
                 rematchController != null &&
                 rematchController.HasIncomingRequestForLocalPlayer();
 
@@ -280,7 +298,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
             declineRequestButton.interactable =
                 !exitTriggered &&
                 !returningToMenu &&
-                CanUseRematch() &&
+                canUseRematch &&
                 rematchController != null &&
                 rematchController.HasIncomingRequestForLocalPlayer();
 
@@ -342,6 +360,20 @@ public class OnlineMatchEndFlow : MonoBehaviour
         if (profileManager == null || matchController == null || rewardsConfig == null)
             return;
 
+        string currentMatchId = ResolveCurrentMatchId();
+
+        if (presentationResultStore != null &&
+            !string.IsNullOrWhiteSpace(currentMatchId) &&
+            presentationResultStore.HasProcessedMatch(currentMatchId))
+        {
+            rewardsApplied = true;
+
+            if (logDebug)
+                Debug.LogWarning("[OnlineMatchEndFlow] Reward application skipped because this match was already processed: " + currentMatchId, this);
+
+            return;
+        }
+
         QueueType queueType = ResolveQueueType();
         MatchMode matchMode = ResolveMatchMode();
         OnlineRewardCategory category = ResolveRewardCategory();
@@ -367,6 +399,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
         lastGrantedSoftCurrency = 0;
         lastGrantedChestCount = 0;
         lastGrantedRankedLp = 0;
+        lastGrantedChestType = ChestType.Random;
+        lastLevelUpBonusChestType = ChestType.Random;
 
         if (allowStatsProgression && rewardResult.CountAsMatchPlayed)
         {
@@ -395,7 +429,14 @@ public class OnlineMatchEndFlow : MonoBehaviour
             profileManager.AddSoftCurrency(lastGrantedSoftCurrency);
 
         if (allowChestRewards && rewardResult.GrantChest)
-            lastGrantedChestCount += TryGrantChest(rewardResult.ChestType, queueType, category.ToString(), queueType == QueueType.Ranked);
+        {
+            int granted = TryGrantChest(rewardResult.ChestType, queueType, category.ToString(), queueType == QueueType.Ranked);
+            if (granted > 0)
+            {
+                lastGrantedChestCount += granted;
+                lastGrantedChestType = rewardResult.ChestType;
+            }
+        }
 
         int endLevelAfterBase = profileManager.ActiveProfile != null ? Mathf.Max(1, profileManager.ActiveProfile.level) : startLevel;
         int endTotalXpAfterBase = profileManager.ActiveProfile != null ? Mathf.Max(0, profileManager.ActiveProfile.xp) : startTotalXp;
@@ -422,8 +463,12 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 for (int chestIndex = 0; chestIndex < Mathf.Max(0, entry.chestCount); chestIndex++)
                 {
                     int granted = TryGrantChest(entry.chestType, queueType, "level_up_reward_level_" + entry.targetLevel, false);
-                    levelUpBonusChestCount += granted;
-                    lastGrantedChestCount += granted;
+                    if (granted > 0)
+                    {
+                        levelUpBonusChestCount += granted;
+                        lastGrantedChestCount += granted;
+                        lastLevelUpBonusChestType = entry.chestType;
+                    }
                 }
             }
         }
@@ -434,7 +479,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
         if (presentationResultStore != null)
         {
-            presentationResultStore.SetLatest(BuildPresentationResult(
+            OnlineMatchPresentationResult result = BuildPresentationResult(
                 category,
                 startLevel,
                 endLevel,
@@ -444,8 +489,11 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 endRankedLp,
                 levelUpCount,
                 levelUpBonusSoft,
-                levelUpBonusChestCount
-            ));
+                levelUpBonusChestCount);
+
+            result.sourceMatchId = currentMatchId;
+            presentationResultStore.SetLatest(result);
+            presentationResultStore.MarkMatchProcessed(currentMatchId);
         }
 
         rewardsApplied = true;
@@ -457,7 +505,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
         {
             Debug.Log(
                 "[OnlineMatchEndFlow] Rewards applied -> " +
-                "Category=" + category +
+                "MatchId=" + currentMatchId +
+                " | Category=" + category +
                 " | XP=" + lastGrantedXp +
                 " | Soft=" + lastGrantedSoftCurrency +
                 " | ChestCount=" + lastGrantedChestCount +
@@ -528,10 +577,12 @@ public class OnlineMatchEndFlow : MonoBehaviour
             newRankedLpTotal = Mathf.Max(0, endRankedLp),
             totalSoftCurrencyGained = Mathf.Max(0, lastGrantedSoftCurrency),
             totalChestCount = Mathf.Max(0, lastGrantedChestCount),
+            totalChestType = lastGrantedChestType,
             leveledUp = levelUpCount > 0,
             levelUpCount = Mathf.Max(0, levelUpCount),
             levelUpBonusSoftCurrency = Mathf.Max(0, levelUpBonusSoft),
             levelUpBonusChestCount = Mathf.Max(0, levelUpBonusChestCount),
+            levelUpBonusChestType = lastLevelUpBonusChestType,
             overlayTitleText = "LEVEL UP!"
         };
 
@@ -614,6 +665,19 @@ public class OnlineMatchEndFlow : MonoBehaviour
             default:
                 return OnlineRewardCategory.None;
         }
+    }
+
+    private string ResolveCurrentMatchId()
+    {
+        if (onlineFlowController == null ||
+            onlineFlowController.RuntimeContext == null ||
+            onlineFlowController.RuntimeContext.currentSession == null)
+        {
+            return string.Empty;
+        }
+
+        MatchSessionContext session = onlineFlowController.RuntimeContext.currentSession;
+        return session.matchId ?? string.Empty;
     }
 
     private void ResolveDependencies()

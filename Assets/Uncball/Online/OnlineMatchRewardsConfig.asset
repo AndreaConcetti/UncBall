@@ -17,21 +17,21 @@ MonoBehaviour:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 25
+      xpReward: 35
       softCurrencyReward: 20
       premiumCurrencyReward: 0
-      grantChest: 1
+      grantChest: 0
       chestType: 1
       rankedLpDelta: 0
     ranked:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 600
+      xpReward: 60
       softCurrencyReward: 35
       premiumCurrencyReward: 1
-      grantChest: 1
-      chestType: 4
+      grantChest: 0
+      chestType: 1
       rankedLpDelta: 20
   normalCompletionLoss:
     normal:
