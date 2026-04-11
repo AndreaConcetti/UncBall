@@ -1,0 +1,245 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9ec3f170fb0f1084b815b0edeb98f1b2, type: 3}
+  m_Name: OnlineMatchRewardsConfig
+  m_EditorClassIdentifier: Assembly-CSharp::OnlineMatchRewardsConfig
+  normalCompletionWin:
+    normal:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 25
+      softCurrencyReward: 20
+      premiumCurrencyReward: 0
+      grantChest: 1
+      chestType: 1
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 600
+      softCurrencyReward: 35
+      premiumCurrencyReward: 1
+      grantChest: 1
+      chestType: 4
+      rankedLpDelta: 20
+  normalCompletionLoss:
+    normal:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 10
+      softCurrencyReward: 8
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 20
+      softCurrencyReward: 12
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 2
+      rankedLpDelta: -20
+  draw:
+    normal:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 0
+      xpReward: 15
+      softCurrencyReward: 12
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 0
+      xpReward: 30
+      softCurrencyReward: 18
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 2
+      rankedLpDelta: 0
+  disconnectWin:
+    normal:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 25
+      softCurrencyReward: 20
+      premiumCurrencyReward: 0
+      grantChest: 1
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 60
+      softCurrencyReward: 35
+      premiumCurrencyReward: 1
+      grantChest: 1
+      chestType: 2
+      rankedLpDelta: 20
+  disconnectLoss:
+    normal:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 2
+      rankedLpDelta: -20
+  surrenderWin:
+    normal:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 25
+      softCurrencyReward: 20
+      premiumCurrencyReward: 0
+      grantChest: 1
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 60
+      softCurrencyReward: 35
+      premiumCurrencyReward: 1
+      grantChest: 1
+      chestType: 2
+      rankedLpDelta: 20
+  surrenderLoss:
+    normal:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 3
+      softCurrencyReward: 1
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 5
+      softCurrencyReward: 2
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 2
+      rankedLpDelta: -20
+  reconnectTimeoutLoss:
+    normal:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 2
+      rankedLpDelta: -20
+  prematchHostLeftWin:
+    normal:
+      countAsMatchPlayed: 0
+      countAsWin: 0
+      countAsLoss: 0
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 0
+      countAsWin: 0
+      countAsLoss: 0
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 2
+      rankedLpDelta: 5
+  matchCancelled:
+    normal:
+      countAsMatchPlayed: 0
+      countAsWin: 0
+      countAsLoss: 0
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 0
+      countAsWin: 0
+      countAsLoss: 0
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+  queueTimeout:
+    normal:
+      countAsMatchPlayed: 0
+      countAsWin: 0
+      countAsLoss: 0
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0
+    ranked:
+      countAsMatchPlayed: 0
+      countAsWin: 0
+      countAsLoss: 0
+      xpReward: 0
+      softCurrencyReward: 0
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 0

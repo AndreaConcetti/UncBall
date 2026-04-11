@@ -11,10 +11,10 @@ public sealed class OnlineRuntimeContext
     public string statusMessage;
     public string lastError;
 
-    [Header("Pre-Gameplay Integrity")]
+    [Header("Prematch Integrity")]
     public bool hasGameplayValidation;
-    public bool hasPrematchHostForfeitWin;
-    public bool hasAppliedPrematchHostForfeitWin;
+    public bool prematchHostForfeitWinResolved;
+    public bool prematchHostForfeitRewardsApplied;
     public string prematchResolutionMessage;
 
     public OnlineRuntimeContext()
@@ -30,7 +30,10 @@ public sealed class OnlineRuntimeContext
         currentSession = null;
         statusMessage = "Idle";
         lastError = string.Empty;
-        ResetPrematchIntegrity();
+        hasGameplayValidation = false;
+        prematchHostForfeitWinResolved = false;
+        prematchHostForfeitRewardsApplied = false;
+        prematchResolutionMessage = string.Empty;
     }
 
     public void SetError(string message)
@@ -40,21 +43,12 @@ public sealed class OnlineRuntimeContext
         statusMessage = lastError;
     }
 
-    public void ResetPrematchIntegrity()
+    public void ResetMatchLifecycleFlags()
     {
         hasGameplayValidation = false;
-        hasPrematchHostForfeitWin = false;
-        hasAppliedPrematchHostForfeitWin = false;
+        prematchHostForfeitWinResolved = false;
+        prematchHostForfeitRewardsApplied = false;
         prematchResolutionMessage = string.Empty;
-    }
-
-    public bool IsWaitingForGameplayValidation()
-    {
-        return !hasGameplayValidation &&
-               (state == OnlineFlowState.MatchAssigned ||
-                state == OnlineFlowState.JoiningSession ||
-                state == OnlineFlowState.LoadingGameplay ||
-                state == OnlineFlowState.InMatch);
     }
 
     public void MarkGameplayValidated()
@@ -62,19 +56,26 @@ public sealed class OnlineRuntimeContext
         hasGameplayValidation = true;
     }
 
-    public bool TryMarkPrematchHostForfeitWin(string message)
+    public bool CanResolvePrematchHostForfeitWin()
     {
-        if (hasGameplayValidation)
+        return !hasGameplayValidation && !prematchHostForfeitWinResolved;
+    }
+
+    public bool TryResolvePrematchHostForfeitWin(string message)
+    {
+        if (!CanResolvePrematchHostForfeitWin())
             return false;
 
-        if (hasPrematchHostForfeitWin)
-            return false;
-
-        hasPrematchHostForfeitWin = true;
+        prematchHostForfeitWinResolved = true;
         prematchResolutionMessage = string.IsNullOrWhiteSpace(message)
-            ? "Host left before gameplay start."
+            ? "Host disconnected before gameplay start."
             : message.Trim();
 
         return true;
+    }
+
+    public void MarkPrematchHostForfeitRewardsApplied()
+    {
+        prematchHostForfeitRewardsApplied = true;
     }
 }

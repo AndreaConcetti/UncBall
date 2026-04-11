@@ -30,6 +30,7 @@ public class PlayerProfileManager : MonoBehaviour
     public PlayerProfileRuntimeData ActiveProfile => activeProfile;
     public string ActiveProfileId => activeProfile != null ? activeProfile.profileId : string.Empty;
     public string ActiveDisplayName => activeProfile != null ? activeProfile.displayName : string.Empty;
+    public int ActiveRankedLp => activeProfile != null ? Mathf.Max(0, activeProfile.rankedLp) : 1000;
 
     private void Awake()
     {
@@ -221,6 +222,38 @@ public class PlayerProfileManager : MonoBehaviour
         NotifyActiveProfileDataChanged();
     }
 
+    public void AddRankedLp(int amount)
+    {
+        EnsureRuntimeStructure();
+
+        if (amount == 0)
+            return;
+
+        activeProfile.rankedLp = Mathf.Max(0, activeProfile.rankedLp + amount);
+
+        if (!IsUsingCoreProfile())
+            SaveLegacyActiveProfile();
+
+        NotifyActiveProfileDataChanged();
+    }
+
+    public void SetRankedLp(int value)
+    {
+        EnsureRuntimeStructure();
+
+        int sanitized = Mathf.Max(0, value);
+
+        if (activeProfile.rankedLp == sanitized)
+            return;
+
+        activeProfile.rankedLp = sanitized;
+
+        if (!IsUsingCoreProfile())
+            SaveLegacyActiveProfile();
+
+        NotifyActiveProfileDataChanged();
+    }
+
     public void ApplyProgressionState(
         int? totalXp = null,
         int? totalLevel = null,
@@ -236,6 +269,7 @@ public class PlayerProfileManager : MonoBehaviour
         int? multiplayerWins = null,
         int? rankedMatchesPlayed = null,
         int? rankedWins = null,
+        int? rankedLp = null,
         string lastDailyLoginClaimDateUtc = null,
         int? consecutiveLoginDays = null)
     {
@@ -282,6 +316,9 @@ public class PlayerProfileManager : MonoBehaviour
 
         if (rankedWins.HasValue)
             activeProfile.rankedWins = Mathf.Max(0, rankedWins.Value);
+
+        if (rankedLp.HasValue)
+            activeProfile.rankedLp = Mathf.Max(0, rankedLp.Value);
 
         if (lastDailyLoginClaimDateUtc != null)
             activeProfile.lastDailyLoginClaimDateUtc = lastDailyLoginClaimDateUtc;
@@ -521,6 +558,7 @@ public class PlayerProfileManager : MonoBehaviour
         int legacyVersusScoreMatches = activeProfile != null ? activeProfile.versusScoreMatchesPlayed : 0;
         int legacyBotMatches = activeProfile != null ? activeProfile.botMatchesPlayed : 0;
         int legacyBotWins = activeProfile != null ? activeProfile.botWins : 0;
+        int legacyRankedLp = activeProfile != null ? activeProfile.rankedLp : 1000;
         string legacyLastDailyClaim = activeProfile != null ? activeProfile.lastDailyLoginClaimDateUtc : string.Empty;
         int legacyConsecutiveDays = activeProfile != null ? activeProfile.consecutiveLoginDays : 0;
 
@@ -545,6 +583,7 @@ public class PlayerProfileManager : MonoBehaviour
             multiplayerWins = Mathf.Max(0, snapshot.MultiplayerWins),
             rankedMatchesPlayed = Mathf.Max(0, snapshot.RankedMatches),
             rankedWins = Mathf.Max(0, snapshot.RankedWins),
+            rankedLp = Mathf.Max(0, legacyRankedLp),
             lastDailyLoginClaimDateUtc = legacyLastDailyClaim,
             consecutiveLoginDays = Mathf.Max(0, legacyConsecutiveDays),
             createdFromServer = false,
@@ -613,6 +652,7 @@ public class PlayerProfileManager : MonoBehaviour
             multiplayerWins = Mathf.Max(0, saveData.multiplayerWins),
             rankedMatchesPlayed = Mathf.Max(0, saveData.rankedMatchesPlayed),
             rankedWins = Mathf.Max(0, saveData.rankedWins),
+            rankedLp = Mathf.Max(0, saveData.rankedLp <= 0 ? 1000 : saveData.rankedLp),
             lastDailyLoginClaimDateUtc = string.IsNullOrWhiteSpace(saveData.lastDailyLoginClaimDateUtc)
                 ? string.Empty
                 : saveData.lastDailyLoginClaimDateUtc,
@@ -649,6 +689,7 @@ public class PlayerProfileManager : MonoBehaviour
             multiplayerWins = 0,
             rankedMatchesPlayed = 0,
             rankedWins = 0,
+            rankedLp = 1000,
             lastDailyLoginClaimDateUtc = string.Empty,
             consecutiveLoginDays = 0,
             createdFromServer = false,
@@ -687,6 +728,7 @@ public class PlayerProfileManager : MonoBehaviour
             multiplayerWins = activeProfile.multiplayerWins,
             rankedMatchesPlayed = activeProfile.rankedMatchesPlayed,
             rankedWins = activeProfile.rankedWins,
+            rankedLp = activeProfile.rankedLp,
             lastDailyLoginClaimDateUtc = activeProfile.lastDailyLoginClaimDateUtc,
             consecutiveLoginDays = activeProfile.consecutiveLoginDays,
             createdFromServer = activeProfile.createdFromServer,
@@ -759,6 +801,7 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.rankedMatchesPlayed = Mathf.Max(0, activeProfile.rankedMatchesPlayed);
         activeProfile.rankedWins = Mathf.Max(0, activeProfile.rankedWins);
+        activeProfile.rankedLp = Mathf.Max(0, activeProfile.rankedLp <= 0 ? 1000 : activeProfile.rankedLp);
 
         activeProfile.consecutiveLoginDays = Mathf.Max(0, activeProfile.consecutiveLoginDays);
         activeProfile.saveVersion = Mathf.Max(1, activeProfile.saveVersion);
@@ -792,6 +835,7 @@ public class PlayerProfileManager : MonoBehaviour
             multiplayerWins = source.multiplayerWins,
             rankedMatchesPlayed = source.rankedMatchesPlayed,
             rankedWins = source.rankedWins,
+            rankedLp = source.rankedLp,
             lastDailyLoginClaimDateUtc = source.lastDailyLoginClaimDateUtc,
             consecutiveLoginDays = source.consecutiveLoginDays,
             createdFromServer = source.createdFromServer,

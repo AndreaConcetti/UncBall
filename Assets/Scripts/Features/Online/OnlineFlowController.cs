@@ -16,6 +16,7 @@ public class OnlineFlowController : MonoBehaviour
     [SerializeField] private PhotonFusionRunnerManager runnerManager;
     [SerializeField] private PlayerProfileManager profileManager;
     [SerializeField] private OnlineQueueRulesConfig queueRulesConfig;
+    [SerializeField] private OnlineMatchRewardsConfig rewardsConfig;
 
     [Header("Config")]
     [SerializeField] private string gameplaySceneName = "Gameplay";
@@ -102,11 +103,7 @@ public class OnlineFlowController : MonoBehaviour
 
     private void SubscribeRunnerEvents()
     {
-        if (runnerEventsSubscribed)
-            return;
-
-        ResolveDependencies();
-        if (runnerManager == null)
+        if (runnerEventsSubscribed || runnerManager == null)
             return;
 
         runnerManager.OnShutdownEvent -= HandleRunnerShutdown;
@@ -118,21 +115,6 @@ public class OnlineFlowController : MonoBehaviour
         runnerManager.OnConnectedToServerEvent += HandleConnectedToServer;
 
         runnerEventsSubscribed = true;
-    }
-
-    private void UnsubscribeRunnerEvents()
-    {
-        if (!runnerEventsSubscribed)
-            return;
-
-        if (runnerManager != null)
-        {
-            runnerManager.OnShutdownEvent -= HandleRunnerShutdown;
-            runnerManager.OnDisconnectedFromServerEvent -= HandleDisconnectedFromServer;
-            runnerManager.OnConnectedToServerEvent -= HandleConnectedToServer;
-        }
-
-        runnerEventsSubscribed = false;
     }
 
     public async void EnterQueue(QueueType queueType)
@@ -168,7 +150,7 @@ public class OnlineFlowController : MonoBehaviour
             profileManager.ActiveDisplayName
         );
 
-        runtimeContext.ResetPrematchIntegrity();
+        runtimeContext.ResetMatchLifecycleFlags();
         runtimeContext.queueType = queueType;
         runtimeContext.currentAssignment = null;
         runtimeContext.currentSession = null;
@@ -241,7 +223,7 @@ public class OnlineFlowController : MonoBehaviour
             }
 
             runtimeContext.state = OnlineFlowState.InMatch;
-            runtimeContext.statusMessage = "Gameplay scene loaded.";
+            runtimeContext.statusMessage = "Gameplay scene loaded. Waiting validation...";
             NotifyStateChanged();
 
             if (logDebug)
@@ -252,8 +234,7 @@ public class OnlineFlowController : MonoBehaviour
                     " | MatchId=" + assignment.matchId +
                     " | Session=" + assignment.sessionName +
                     " | LocalIsHost=" + assignment.localIsHost,
-                    this
-                );
+                    this);
             }
         }
         catch (OperationCanceledException)
@@ -278,9 +259,10 @@ public class OnlineFlowController : MonoBehaviour
             return;
         }
 
+        localShutdownRequested = true;
+
         try
         {
-            localShutdownRequested = true;
             CancelCurrentFlowSilently();
 
             if (matchmakingService != null)
@@ -417,31 +399,12 @@ public class OnlineFlowController : MonoBehaviour
 
     private void HandleRunnerShutdown(ShutdownReason reason)
     {
-        if (!ShouldResolvePrematchHostForfeitWin())
-            return;
-
-        ResolvePrematchHostForfeitWin("Host left before gameplay start.");
-
-        if (logDebug)
-            Debug.LogWarning("[OnlineFlowController] Prematch host forfeit win resolved from OnShutdown -> " + reason, this);
+        TryResolvePrematchHostForfeitWin("Host disconnected before gameplay start.");
     }
 
     private void HandleDisconnectedFromServer()
     {
-        if (!ShouldResolvePrematchHostForfeitWin())
-            return;
-
-        if (Application.internetReachability == NetworkReachability.NotReachable)
-        {
-            if (logDebug)
-                Debug.LogWarning("[OnlineFlowController] Local internet unreachable. Prematch host forfeit win not awarded.", this);
-            return;
-        }
-
-        ResolvePrematchHostForfeitWin("Host disconnected before gameplay start.");
-
-        if (logDebug)
-            Debug.LogWarning("[OnlineFlowController] Prematch host forfeit win resolved from OnDisconnectedFromServer.", this);
+        TryResolvePrematchHostForfeitWin("Host disconnected before gameplay start.");
     }
 
     private void HandleConnectedToServer()
@@ -449,83 +412,67 @@ public class OnlineFlowController : MonoBehaviour
         localShutdownRequested = false;
     }
 
-    private bool ShouldResolvePrematchHostForfeitWin()
+    private void TryResolvePrematchHostForfeitWin(string message)
     {
-        if (runtimeContext == null)
-            return false;
-
         if (localShutdownRequested)
-            return false;
+            return;
+
+        if (runtimeContext == null)
+            return;
 
         if (runtimeContext.currentAssignment == null)
-            return false;
+            return;
 
         if (runtimeContext.currentAssignment.localIsHost)
-            return false;
-
-        if (!runtimeContext.IsWaitingForGameplayValidation())
-            return false;
-
-        if (runtimeContext.hasPrematchHostForfeitWin)
-            return false;
-
-        return true;
-    }
-
-    private void ResolvePrematchHostForfeitWin(string message)
-    {
-        if (!runtimeContext.TryMarkPrematchHostForfeitWin(message))
             return;
 
-        ApplyPrematchHostForfeitWinProgressionIfNeeded();
+        if (runtimeContext.state != OnlineFlowState.MatchAssigned &&
+            runtimeContext.state != OnlineFlowState.JoiningSession &&
+            runtimeContext.state != OnlineFlowState.LoadingGameplay)
+        {
+            return;
+        }
+
+        if (!runtimeContext.TryResolvePrematchHostForfeitWin(message))
+            return;
+
+        ApplyPrematchHostForfeitRewardsIfNeeded();
 
         runtimeContext.state = OnlineFlowState.EndingMatch;
-        runtimeContext.statusMessage = runtimeContext.prematchResolutionMessage;
+        runtimeContext.statusMessage = message;
         NotifyStateChanged();
 
-        if (SceneManager.GetActiveScene().name != mainMenuSceneName)
-        {
-            Time.timeScale = 1f;
-            SceneManager.LoadScene(mainMenuSceneName);
-        }
+        if (logDebug)
+            Debug.LogWarning("[OnlineFlowController] Prematch host forfeit win resolved.", this);
     }
 
-    private void ApplyPrematchHostForfeitWinProgressionIfNeeded()
+    private void ApplyPrematchHostForfeitRewardsIfNeeded()
     {
-        if (runtimeContext == null || runtimeContext.hasAppliedPrematchHostForfeitWin)
+        if (runtimeContext == null || runtimeContext.prematchHostForfeitRewardsApplied)
             return;
 
-        MatchSessionContext session = runtimeContext.currentSession;
-        MatchAssignment assignment = runtimeContext.currentAssignment;
-
-        bool allowStats = false;
-        bool ranked = false;
-        MatchMode matchMode = MatchMode.ScoreTarget;
-
-        if (session != null)
+        if (profileManager == null || rewardsConfig == null)
         {
-            allowStats = session.allowStatsProgression;
-            ranked = session.isRanked;
-            matchMode = session.matchMode;
-        }
-        else if (assignment != null)
-        {
-            allowStats = assignment.allowStatsProgression;
-            ranked = assignment.isRanked;
-            matchMode = assignment.matchMode;
+            runtimeContext.MarkPrematchHostForfeitRewardsApplied();
+            return;
         }
 
-        if (allowStats && profileManager != null)
-        {
-            profileManager.RegisterMatchResult(
-                PlayerMatchCategory.OnlineMultiplayer,
-                matchMode,
-                true,
-                ranked
-            );
-        }
+        OnlineRewardRule rule = rewardsConfig.GetRule(
+            OnlineRewardCategory.PrematchHostLeftWin,
+            runtimeContext.queueType
+        );
 
-        runtimeContext.hasAppliedPrematchHostForfeitWin = true;
+        if (runtimeContext.queueType == QueueType.Ranked && rule.rankedLpDelta != 0)
+            profileManager.AddRankedLp(rule.rankedLpDelta);
+
+        runtimeContext.MarkPrematchHostForfeitRewardsApplied();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineFlowController] Prematch host-left rewards applied -> LP=" + rule.rankedLpDelta,
+                this);
+        }
     }
 
     private void CancelCurrentFlowSilently()
@@ -570,7 +517,6 @@ public class OnlineFlowController : MonoBehaviour
         if (Instance == this)
             Instance = null;
 
-        UnsubscribeRunnerEvents();
         CancelCurrentFlowSilently();
     }
 }

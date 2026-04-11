@@ -21,7 +21,7 @@ MonoBehaviour:
     allowXpRewards: 1
     allowStatsProgression: 1
   ranked:
-    matchMode: 1
+    matchMode: 0
     pointsToWin: 1
     matchDurationSeconds: 360
     turnDurationSeconds: 8

@@ -23739,6 +23739,7 @@ MonoBehaviour:
     multiplayerWins: 0
     rankedMatchesPlayed: 0
     rankedWins: 0
+    rankedLp: 1000
     lastDailyLoginClaimDateUtc: 
     consecutiveLoginDays: 0
     createdFromServer: 0
@@ -34582,6 +34583,7 @@ GameObject:
   - component: {fileID: 1801468267}
   - component: {fileID: 1801468268}
   - component: {fileID: 1801468269}
+  - component: {fileID: 1801468270}
   m_Layer: 0
   m_Name: MatchRuntime
   m_TagString: Untagged
@@ -34655,6 +34657,7 @@ MonoBehaviour:
   runnerManager: {fileID: 1801468266}
   profileManager: {fileID: 1445563842}
   queueRulesConfig: {fileID: 11400000, guid: 61a0ea018582ecc44b8646479d7b3504, type: 2}
+  rewardsConfig: {fileID: 0}
   gameplaySceneName: Gameplay
   mainMenuSceneName: MainMenu
   matchFoundUiDelaySeconds: 10
@@ -34733,8 +34736,8 @@ MonoBehaviour:
     statusMessage: Idle
     lastError: 
     hasGameplayValidation: 0
-    hasPrematchHostForfeitWin: 0
-    hasAppliedPrematchHostForfeitWin: 0
+    prematchHostForfeitWinResolved: 0
+    prematchHostForfeitRewardsApplied: 0
     prematchResolutionMessage: 
 --- !u!114 &1801468268
 MonoBehaviour:
@@ -34749,7 +34752,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OnlinePlayerPresentationResolver
   onlineFlowController: {fileID: 1801468267}
-  logDebug: 1
+  logDebug: 0
 --- !u!114 &1801468269
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -34768,6 +34771,44 @@ MonoBehaviour:
   ignoreEditorFocusEvents: 1
   ignoreDesktopFocusEvents: 1
   logDebug: 1
+--- !u!114 &1801468270
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1801468248}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a05f8ee1040c4114182391668d433680, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OnlineMatchPresentationResultStore
+  dontDestroyOnLoad: 1
+  latestResult:
+    hasData: 0
+    isVictory: 0
+    isDefeat: 0
+    isDraw: 0
+    titleText: VICTORY
+    playerName: PLAYER
+    levelText: LV 1
+    rewardSummaryText: 
+    startLevel: 1
+    endLevel: 1
+    startTotalXp: 0
+    endTotalXp: 0
+    grantedXp: 0
+    startLevelProgress01: 0
+    endLevelProgress01: 0
+    rankedLpDelta: 0
+    newRankedLpTotal: 1000
+    totalSoftCurrencyGained: 0
+    totalChestCount: 0
+    leveledUp: 0
+    levelUpCount: 0
+    levelUpBonusSoftCurrency: 0
+    levelUpBonusChestCount: 0
+    overlayTitleText: LEVEL UP!
 --- !u!1 &1805039842
 GameObject:
   m_ObjectHideFlags: 0

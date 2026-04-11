@@ -30,6 +30,7 @@ public class PlayerProfileRuntimeData
 
     public int rankedMatchesPlayed = 0;
     public int rankedWins = 0;
+    public int rankedLp = 1000;
 
     public string lastDailyLoginClaimDateUtc = "";
     public int consecutiveLoginDays = 0;
