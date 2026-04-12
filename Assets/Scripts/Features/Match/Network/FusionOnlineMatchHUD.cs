@@ -36,6 +36,9 @@ public class FusionOnlineMatchHUD : MonoBehaviour
     [SerializeField] private bool hideGameplayUiWhenMatchEnds = true;
     [SerializeField] private bool showPostGamePanelWhenMatchEnds = true;
 
+    [Header("Start Preview Policy")]
+    [SerializeField] private bool forceGameplayUiVisibleDuringSessionPreview = true;
+
     [Header("Post Game Delay")]
     [SerializeField] private float postGamePanelShowDelaySeconds = 0f;
 
@@ -233,7 +236,9 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         bool showGameplayHud = matchStarted && !matchEnded && !midBreakActive && !showReconnectOverlay && !forcedPostGameRequested;
 
         if (gameUIPanel != null)
-            gameUIPanel.SetActive(hideGameplayUiWhenMatchEnds ? showGameplayHud : (matchStarted && !midBreakActive && !showReconnectOverlay && !forcedPostGameRequested));
+            gameUIPanel.SetActive(hideGameplayUiWhenMatchEnds
+                ? showGameplayHud
+                : (matchStarted && !midBreakActive && !showReconnectOverlay && !forcedPostGameRequested));
 
         if (halfTimePanel != null)
             halfTimePanel.SetActive(isTimeHalftime && !matchEnded && !showReconnectOverlay && !forcedPostGameRequested);
@@ -626,6 +631,9 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         bool isTimeMode = mode == MatchMode.TimeLimit;
         bool isScoreMode = mode == MatchMode.ScoreTarget;
 
+        if (gameUIPanel != null && forceGameplayUiVisibleDuringSessionPreview)
+            gameUIPanel.SetActive(true);
+
         if (timeModeInfoRoot != null)
             timeModeInfoRoot.SetActive(isTimeMode);
 
@@ -704,11 +712,33 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         SetTextVisible(opponentDisconnectedText, false);
         SetTextVisible(localDisconnectedEndgameText, false);
 
+        if (halfTimePanel != null)
+            halfTimePanel.SetActive(false);
+
+        if (halfPointPanel != null)
+            halfPointPanel.SetActive(false);
+
+        if (pausePanel != null)
+            pausePanel.SetActive(false);
+
         if (reconnectPanel != null)
             reconnectPanel.SetActive(false);
 
         if (postGamePanel != null)
             postGamePanel.SetActive(false);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchHUD] ApplySessionPreviewIfPossible -> " +
+                "ForceGameplayUiVisible=" + forceGameplayUiVisibleDuringSessionPreview +
+                " | Player1=" + safeP1 +
+                " | Player2=" + safeP2 +
+                " | MatchDuration=" + matchDuration +
+                " | TurnDuration=" + turnDuration,
+                this
+            );
+        }
     }
 
     private void ResetPostGameDelayState()
