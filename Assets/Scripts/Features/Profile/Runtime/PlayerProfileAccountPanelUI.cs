@@ -39,6 +39,8 @@ public class PlayerProfileAccountPanelUI : MonoBehaviour
     [SerializeField] private string rankPrefix = "RANK: ";
     [SerializeField] private string rankSuffix = " LP";
     [SerializeField] private int fallbackRankPoints = 1000;
+    [SerializeField] private bool useActiveRankedLpFromProfile = true;
+    [SerializeField] private bool clampRankPointsToZero = true;
 
     [Header("Section Labels")]
     [SerializeField] private GameObject linkAccountTextRoot;
@@ -173,11 +175,35 @@ public class PlayerProfileAccountPanelUI : MonoBehaviour
         if (rankText == null)
             return;
 
-        int points = fallbackRankPoints;
+        int points = ResolveCurrentRankPoints();
         rankText.text = rankPrefix + points + rankSuffix;
 
         if (logDebug)
-            Debug.Log("[PlayerProfileAccountPanelUI] Rank text -> " + rankText.text, this);
+        {
+            Debug.Log(
+                "[PlayerProfileAccountPanelUI] Rank text -> " + rankText.text +
+                " | SourceActiveRankedLp=" + (profileManager != null ? profileManager.ActiveRankedLp : -1),
+                this
+            );
+        }
+    }
+
+    private int ResolveCurrentRankPoints()
+    {
+        int points = fallbackRankPoints;
+
+        if (useActiveRankedLpFromProfile && profileManager != null)
+            points = profileManager.ActiveRankedLp;
+        else if (profileManager != null && profileManager.ActiveProfile != null)
+            points = profileManager.ActiveProfile.rankedLp;
+
+        if (clampRankPointsToZero)
+            points = Mathf.Max(0, points);
+
+        if (points <= 0)
+            points = Mathf.Max(0, fallbackRankPoints);
+
+        return points;
     }
 
     private void RefreshAccountActionVisibility()
@@ -256,11 +282,19 @@ public class PlayerProfileAccountPanelUI : MonoBehaviour
         if (accountPresenter == null && autoFindDependencies)
             accountPresenter = GetComponent<AccountPresenter>();
 
+#if UNITY_2023_1_OR_NEWER
         if (accountPresenter == null && autoFindDependencies)
             accountPresenter = FindFirstObjectByType<AccountPresenter>(FindObjectsInactive.Include);
 
         if (feedbackPanel == null && autoFindDependencies)
             feedbackPanel = FindFirstObjectByType<AccountOperationFeedbackPanel>(FindObjectsInactive.Include);
+#else
+        if (accountPresenter == null && autoFindDependencies)
+            accountPresenter = FindObjectOfType<AccountPresenter>(true);
+
+        if (feedbackPanel == null && autoFindDependencies)
+            feedbackPanel = FindObjectOfType<AccountOperationFeedbackPanel>(true);
+#endif
     }
 
     private void Subscribe()

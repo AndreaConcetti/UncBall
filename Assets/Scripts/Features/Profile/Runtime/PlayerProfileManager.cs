@@ -57,7 +57,8 @@ public class PlayerProfileManager : MonoBehaviour
                 " | XP=" + activeProfile.xp +
                 " | Level=" + activeProfile.level +
                 " | Matches=" + activeProfile.totalMatchesPlayed +
-                " | Wins=" + activeProfile.totalWins,
+                " | Wins=" + activeProfile.totalWins +
+                " | RankedLp=" + activeProfile.rankedLp,
                 this
             );
         }
@@ -231,10 +232,18 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.rankedLp = Mathf.Max(0, activeProfile.rankedLp + amount);
 
-        if (!IsUsingCoreProfile())
-            SaveLegacyActiveProfile();
-
+        SaveLegacyActiveProfile();
         NotifyActiveProfileDataChanged();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerProfileManager] AddRankedLp -> Delta=" + amount +
+                " | NewRankedLp=" + activeProfile.rankedLp +
+                " | UsingCore=" + IsUsingCoreProfile(),
+                this
+            );
+        }
     }
 
     public void SetRankedLp(int value)
@@ -248,10 +257,17 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.rankedLp = sanitized;
 
-        if (!IsUsingCoreProfile())
-            SaveLegacyActiveProfile();
-
+        SaveLegacyActiveProfile();
         NotifyActiveProfileDataChanged();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerProfileManager] SetRankedLp -> NewRankedLp=" + activeProfile.rankedLp +
+                " | UsingCore=" + IsUsingCoreProfile(),
+                this
+            );
+        }
     }
 
     public void ApplyProgressionState(
@@ -328,9 +344,8 @@ public class PlayerProfileManager : MonoBehaviour
 
         if (IsUsingCoreProfile())
             PushFullProfileToCompositionRoot();
-        else
-            SaveLegacyActiveProfile();
 
+        SaveLegacyActiveProfile();
         NotifyActiveProfileDataChanged();
     }
 
@@ -421,22 +436,18 @@ public class PlayerProfileManager : MonoBehaviour
 
         if (IsUsingCoreProfile())
             PushFullProfileToCompositionRoot();
-        else
-            SaveLegacyActiveProfile();
 
+        SaveLegacyActiveProfile();
         ApplyActiveProfileToSystems();
         NotifyActiveProfileChanged();
     }
 
     public void SaveActiveProfile()
     {
-        if (IsUsingCoreProfile())
-        {
-            PushFullProfileToCompositionRoot();
-            return;
-        }
-
         SaveLegacyActiveProfile();
+
+        if (IsUsingCoreProfile())
+            PushFullProfileToCompositionRoot();
     }
 
     public void ReloadActiveProfile()
@@ -458,6 +469,7 @@ public class PlayerProfileManager : MonoBehaviour
         {
             CreateDefaultRuntimeProfile(ResolvePreferredProfileId(), ResolvePreferredDisplayName());
             PushFullProfileToCompositionRoot();
+            SaveLegacyActiveProfile();
             ApplyActiveProfileToSystems();
             NotifyActiveProfileChanged();
             return;
@@ -537,6 +549,21 @@ public class PlayerProfileManager : MonoBehaviour
         if (snapshot == null || !snapshot.IsValid())
             return;
 
+        int legacyVersusMatches = activeProfile != null ? activeProfile.versusMatchesPlayed : 0;
+        int legacyVersusWins = activeProfile != null ? activeProfile.versusWins : 0;
+        int legacyVersusTimeMatches = activeProfile != null ? activeProfile.versusTimeMatchesPlayed : 0;
+        int legacyVersusScoreMatches = activeProfile != null ? activeProfile.versusScoreMatchesPlayed : 0;
+        int legacyBotMatches = activeProfile != null ? activeProfile.botMatchesPlayed : 0;
+        int legacyBotWins = activeProfile != null ? activeProfile.botWins : 0;
+        string legacyLastDailyClaim = activeProfile != null ? activeProfile.lastDailyLoginClaimDateUtc : string.Empty;
+        int legacyConsecutiveDays = activeProfile != null ? activeProfile.consecutiveLoginDays : 0;
+
+        int fallbackRankedLp = (activeProfile != null && activeProfile.rankedLp > 0)
+            ? activeProfile.rankedLp
+            : 1000;
+
+        int persistedRankedLp = LoadLegacyRankedLpForProfile(snapshot.PlayerId, fallbackRankedLp);
+
         bool changed =
             activeProfile == null ||
             activeProfile.profileId != snapshot.PlayerId ||
@@ -550,17 +577,8 @@ public class PlayerProfileManager : MonoBehaviour
             activeProfile.multiplayerMatchesPlayed != snapshot.MultiplayerMatches ||
             activeProfile.multiplayerWins != snapshot.MultiplayerWins ||
             activeProfile.rankedMatchesPlayed != snapshot.RankedMatches ||
-            activeProfile.rankedWins != snapshot.RankedWins;
-
-        int legacyVersusMatches = activeProfile != null ? activeProfile.versusMatchesPlayed : 0;
-        int legacyVersusWins = activeProfile != null ? activeProfile.versusWins : 0;
-        int legacyVersusTimeMatches = activeProfile != null ? activeProfile.versusTimeMatchesPlayed : 0;
-        int legacyVersusScoreMatches = activeProfile != null ? activeProfile.versusScoreMatchesPlayed : 0;
-        int legacyBotMatches = activeProfile != null ? activeProfile.botMatchesPlayed : 0;
-        int legacyBotWins = activeProfile != null ? activeProfile.botWins : 0;
-        int legacyRankedLp = activeProfile != null ? activeProfile.rankedLp : 1000;
-        string legacyLastDailyClaim = activeProfile != null ? activeProfile.lastDailyLoginClaimDateUtc : string.Empty;
-        int legacyConsecutiveDays = activeProfile != null ? activeProfile.consecutiveLoginDays : 0;
+            activeProfile.rankedWins != snapshot.RankedWins ||
+            activeProfile.rankedLp != persistedRankedLp;
 
         activeProfile = new PlayerProfileRuntimeData
         {
@@ -583,7 +601,7 @@ public class PlayerProfileManager : MonoBehaviour
             multiplayerWins = Mathf.Max(0, snapshot.MultiplayerWins),
             rankedMatchesPlayed = Mathf.Max(0, snapshot.RankedMatches),
             rankedWins = Mathf.Max(0, snapshot.RankedWins),
-            rankedLp = Mathf.Max(0, legacyRankedLp),
+            rankedLp = Mathf.Max(0, persistedRankedLp),
             lastDailyLoginClaimDateUtc = legacyLastDailyClaim,
             consecutiveLoginDays = Mathf.Max(0, legacyConsecutiveDays),
             createdFromServer = false,
@@ -593,7 +611,22 @@ public class PlayerProfileManager : MonoBehaviour
         };
 
         EnsureRuntimeStructure();
+        SaveLegacyActiveProfile();
         ApplyActiveProfileToSystems();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerProfileManager] ApplySnapshotFromCore -> " +
+                "ProfileId=" + activeProfile.profileId +
+                " | DisplayName=" + activeProfile.displayName +
+                " | XP=" + activeProfile.xp +
+                " | Level=" + activeProfile.level +
+                " | RankedLp=" + activeProfile.rankedLp +
+                " | ForceNotify=" + forceNotify,
+                this
+            );
+        }
 
         if (changed || forceNotify)
             NotifyActiveProfileChanged();
@@ -740,6 +773,26 @@ public class PlayerProfileManager : MonoBehaviour
         string json = JsonUtility.ToJson(saveData);
         PlayerPrefs.SetString(GetLegacyResolvedSaveKey(activeProfile.profileId), json);
         PlayerPrefs.Save();
+    }
+
+    private int LoadLegacyRankedLpForProfile(string profileId, int fallbackValue)
+    {
+        string sanitizedProfileId = SanitizeProfileId(profileId);
+        string saveKey = GetLegacyResolvedSaveKey(sanitizedProfileId);
+
+        if (!PlayerPrefs.HasKey(saveKey))
+            return Mathf.Max(0, fallbackValue <= 0 ? 1000 : fallbackValue);
+
+        string json = PlayerPrefs.GetString(saveKey, string.Empty);
+        if (string.IsNullOrWhiteSpace(json))
+            return Mathf.Max(0, fallbackValue <= 0 ? 1000 : fallbackValue);
+
+        PlayerProfileSaveData saveData = JsonUtility.FromJson<PlayerProfileSaveData>(json);
+        if (saveData == null)
+            return Mathf.Max(0, fallbackValue <= 0 ? 1000 : fallbackValue);
+
+        int resolved = saveData.rankedLp > 0 ? saveData.rankedLp : fallbackValue;
+        return Mathf.Max(0, resolved <= 0 ? 1000 : resolved);
     }
 
     private void ApplyActiveProfileToSystems()

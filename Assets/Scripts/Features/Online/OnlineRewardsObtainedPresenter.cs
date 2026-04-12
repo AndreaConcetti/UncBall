@@ -58,6 +58,8 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     [SerializeField] private float lpAnimationDuration = 0.90f;
     [SerializeField] private float levelUpOverlayVisibleSeconds = 2.5f;
     [SerializeField] private float levelUpXpResetPauseSeconds = 0.15f;
+    [SerializeField] private float rewardTotalsUpdateDuration = 0.45f;
+    [SerializeField] private bool animateRewardTotalsAfterLevelUp = true;
     [SerializeField] private bool logDebug = true;
 
     private Coroutine playRoutine;
@@ -120,7 +122,11 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 " | StartProgress=" + result.startLevelProgress01 +
                 " | EndProgress=" + result.endLevelProgress01 +
                 " | LevelUpCount=" + result.levelUpCount +
-                " | LeveledUp=" + result.leveledUp,
+                " | LeveledUp=" + result.leveledUp +
+                " | TotalSoft=" + result.totalSoftCurrencyGained +
+                " | LevelUpSoft=" + result.levelUpBonusSoftCurrency +
+                " | TotalChest=" + result.totalChestCount +
+                " | LevelUpChest=" + result.levelUpBonusChestCount,
                 this);
         }
 
@@ -152,6 +158,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     {
         ApplyStaticTexts(result);
         ApplyImmediateVisuals(result);
+        ApplyBaseRewardVisuals(result);
 
         if (startDelaySeconds > 0f)
             yield return new WaitForSecondsRealtime(startDelaySeconds);
@@ -183,6 +190,15 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 yield return new WaitForSecondsRealtime(levelUpOverlayVisibleSeconds);
 
             levelUpOverlayPanel.SetActive(false);
+
+            if (animateRewardTotalsAfterLevelUp)
+                yield return AnimateRewardTotalsAfterLevelUp(result);
+            else
+                ApplyFinalRewardVisuals(result);
+        }
+        else
+        {
+            ApplyFinalRewardVisuals(result);
         }
 
         playRoutine = null;
@@ -200,19 +216,6 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             summaryText.text = string.IsNullOrWhiteSpace(result.rewardSummaryText)
                 ? string.Empty
                 : result.rewardSummaryText.ToUpperInvariant();
-
-        if (normalCurrencyGainText != null)
-            normalCurrencyGainText.text = Mathf.Max(0, result.totalSoftCurrencyGained).ToString();
-
-        bool hasChestGain = result.totalChestCount > 0;
-
-        if (chestGainParent != null)
-            chestGainParent.SetActive(hasChestGain);
-
-        if (chestCountText != null)
-            chestCountText.text = hasChestGain ? "X" + result.totalChestCount : string.Empty;
-
-        ApplyChestVisual(result.totalChestType, chestTypeImage, chestTypeText, hasChestGain);
 
         if (levelUpOverlayPanel != null)
             levelUpOverlayPanel.SetActive(false);
@@ -232,6 +235,85 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         {
             int startLp = Mathf.Max(0, result.newRankedLpTotal - result.rankedLpDelta);
             animatedTotalLpText.text = "NEW TOTAL: " + startLp + " LP";
+        }
+    }
+
+    private void ApplyBaseRewardVisuals(OnlineMatchPresentationResult result)
+    {
+        int baseSoft = GetBaseSoftCurrency(result);
+        int baseChestCount = GetBaseChestCount(result);
+        ChestType baseChestType = ResolveBaseChestType(result);
+
+        SetDisplayedSoftCurrency(baseSoft);
+        SetDisplayedChest(baseChestCount, baseChestType);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineRewardsObtainedPresenter] ApplyBaseRewardVisuals -> " +
+                "BaseSoft=" + baseSoft +
+                " | BaseChestCount=" + baseChestCount +
+                " | BaseChestType=" + baseChestType,
+                this);
+        }
+    }
+
+    private void ApplyFinalRewardVisuals(OnlineMatchPresentationResult result)
+    {
+        SetDisplayedSoftCurrency(Mathf.Max(0, result.totalSoftCurrencyGained));
+        SetDisplayedChest(Mathf.Max(0, result.totalChestCount), ResolveFinalChestType(result));
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineRewardsObtainedPresenter] ApplyFinalRewardVisuals -> " +
+                "FinalSoft=" + result.totalSoftCurrencyGained +
+                " | FinalChestCount=" + result.totalChestCount +
+                " | FinalChestType=" + ResolveFinalChestType(result),
+                this);
+        }
+    }
+
+    private IEnumerator AnimateRewardTotalsAfterLevelUp(OnlineMatchPresentationResult result)
+    {
+        int baseSoft = GetBaseSoftCurrency(result);
+        int finalSoft = Mathf.Max(0, result.totalSoftCurrencyGained);
+
+        int baseChestCount = GetBaseChestCount(result);
+        int finalChestCount = Mathf.Max(0, result.totalChestCount);
+
+        ChestType finalChestType = ResolveFinalChestType(result);
+
+        float duration = Mathf.Max(0.01f, rewardTotalsUpdateDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            int displayedSoft = Mathf.RoundToInt(Mathf.Lerp(baseSoft, finalSoft, t));
+            int displayedChest = Mathf.RoundToInt(Mathf.Lerp(baseChestCount, finalChestCount, t));
+
+            SetDisplayedSoftCurrency(displayedSoft);
+            SetDisplayedChest(displayedChest, finalChestType);
+
+            yield return null;
+        }
+
+        SetDisplayedSoftCurrency(finalSoft);
+        SetDisplayedChest(finalChestCount, finalChestType);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineRewardsObtainedPresenter] AnimateRewardTotalsAfterLevelUp complete -> " +
+                "BaseSoft=" + baseSoft +
+                " | FinalSoft=" + finalSoft +
+                " | BaseChestCount=" + baseChestCount +
+                " | FinalChestCount=" + finalChestCount +
+                " | FinalChestType=" + finalChestType,
+                this);
         }
     }
 
@@ -362,9 +444,14 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             levelUpOverlayTitleText.text = SafeUpper(result.overlayTitleText, "LEVEL UP!");
 
         if (levelUpOverlaySoftCurrencyText != null)
-            levelUpOverlaySoftCurrencyText.text = result.levelUpBonusSoftCurrency > 0
-                ? "+" + result.levelUpBonusSoftCurrency
-                : string.Empty;
+        {
+            levelUpOverlaySoftCurrencyText.gameObject.SetActive(result.levelUpBonusSoftCurrency > 0);
+
+            if (result.levelUpBonusSoftCurrency > 0)
+                levelUpOverlaySoftCurrencyText.text = "+" + result.levelUpBonusSoftCurrency;
+            else
+                levelUpOverlaySoftCurrencyText.text = string.Empty;
+        }
 
         bool hasChest = result.levelUpBonusChestCount > 0;
 
@@ -372,9 +459,75 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             levelUpOverlayChestParent.SetActive(hasChest);
 
         if (levelUpOverlayChestCountText != null)
+        {
+            levelUpOverlayChestCountText.gameObject.SetActive(hasChest);
             levelUpOverlayChestCountText.text = hasChest ? "X" + result.levelUpBonusChestCount : string.Empty;
+        }
 
         ApplyChestVisual(result.levelUpBonusChestType, levelUpOverlayChestTypeImage, levelUpOverlayChestTypeText, hasChest);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineRewardsObtainedPresenter] ShowLevelUpOverlay -> " +
+                "Soft=" + result.levelUpBonusSoftCurrency +
+                " | ChestCount=" + result.levelUpBonusChestCount +
+                " | ChestType=" + result.levelUpBonusChestType,
+                this
+            );
+        }
+    }
+
+    private int GetBaseSoftCurrency(OnlineMatchPresentationResult result)
+    {
+        return Mathf.Max(0, result.totalSoftCurrencyGained - Mathf.Max(0, result.levelUpBonusSoftCurrency));
+    }
+
+    private int GetBaseChestCount(OnlineMatchPresentationResult result)
+    {
+        return Mathf.Max(0, result.totalChestCount - Mathf.Max(0, result.levelUpBonusChestCount));
+    }
+
+    private ChestType ResolveBaseChestType(OnlineMatchPresentationResult result)
+    {
+        int baseChestCount = GetBaseChestCount(result);
+        if (baseChestCount <= 0)
+            return ChestType.Random;
+
+        return result.totalChestType;
+    }
+
+    private ChestType ResolveFinalChestType(OnlineMatchPresentationResult result)
+    {
+        if (result.totalChestCount <= 0)
+            return ChestType.Random;
+
+        if (result.totalChestType != ChestType.Random)
+            return result.totalChestType;
+
+        if (result.levelUpBonusChestCount > 0)
+            return result.levelUpBonusChestType;
+
+        return result.totalChestType;
+    }
+
+    private void SetDisplayedSoftCurrency(int amount)
+    {
+        if (normalCurrencyGainText != null)
+            normalCurrencyGainText.text = Mathf.Max(0, amount).ToString();
+    }
+
+    private void SetDisplayedChest(int count, ChestType chestType)
+    {
+        bool hasChestGain = count > 0;
+
+        if (chestGainParent != null)
+            chestGainParent.SetActive(hasChestGain);
+
+        if (chestCountText != null)
+            chestCountText.text = hasChestGain ? "X" + Mathf.Max(0, count) : string.Empty;
+
+        ApplyChestVisual(chestType, chestTypeImage, chestTypeText, hasChestGain);
     }
 
     private void ApplyChestVisual(ChestType chestType, Image imageTarget, TMP_Text labelTarget, bool visible)

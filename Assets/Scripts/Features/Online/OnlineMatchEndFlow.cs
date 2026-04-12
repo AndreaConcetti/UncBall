@@ -475,29 +475,62 @@ public class OnlineMatchEndFlow : MonoBehaviour
         int levelUpBonusSoft = 0;
         int levelUpBonusChestCount = 0;
 
-        if (levelUpCount > 0 && levelUpRewardsConfig != null)
+        if (levelUpCount > 0)
         {
-            levelUpRewardsConfig.GetRewardsBetweenLevels(effectiveStartLevel, effectiveEndLevelAfterBase, cachedLevelRewards);
-
-            for (int i = 0; i < cachedLevelRewards.Count; i++)
+            if (levelUpRewardsConfig == null)
             {
-                LevelRewardEntry entry = cachedLevelRewards[i];
+                Debug.LogError("[LEVEL UP] levelUpRewardsConfig NULL", this);
+            }
+            else
+            {
+                cachedLevelRewards.Clear();
 
-                if (entry.softCurrencyReward > 0)
-                {
-                    profileManager.AddSoftCurrency(entry.softCurrencyReward);
-                    levelUpBonusSoft += entry.softCurrencyReward;
-                    lastGrantedSoftCurrency += entry.softCurrencyReward;
-                }
+                levelUpRewardsConfig.GetRewardsBetweenLevels(
+                    effectiveStartLevel,
+                    effectiveEndLevelAfterBase,
+                    cachedLevelRewards
+                );
 
-                for (int chestIndex = 0; chestIndex < Mathf.Max(0, entry.chestCount); chestIndex++)
+                Debug.Log("[LEVEL UP] Rewards found: " + cachedLevelRewards.Count, this);
+
+                for (int i = 0; i < cachedLevelRewards.Count; i++)
                 {
-                    int granted = TryGrantChest(entry.chestType, queueType, "level_up_reward_level_" + entry.targetLevel, false);
-                    if (granted > 0)
+                    LevelRewardEntry entry = cachedLevelRewards[i];
+
+                    Debug.Log(
+                        "[LEVEL UP] Entry -> Level=" + entry.targetLevel +
+                        " | Soft=" + entry.softCurrencyReward +
+                        " | ChestCount=" + entry.chestCount +
+                        " | Type=" + entry.chestType,
+                        this
+                    );
+
+                    if (entry.softCurrencyReward > 0)
                     {
-                        levelUpBonusChestCount += granted;
-                        lastGrantedChestCount += granted;
-                        lastLevelUpBonusChestType = entry.chestType;
+                        profileManager.AddSoftCurrency(entry.softCurrencyReward);
+
+                        levelUpBonusSoft += entry.softCurrencyReward;
+                        lastGrantedSoftCurrency += entry.softCurrencyReward;
+                    }
+
+                    for (int chestIndex = 0; chestIndex < Mathf.Max(0, entry.chestCount); chestIndex++)
+                    {
+                        int granted = TryGrantChest(
+                            entry.chestType,
+                            queueType,
+                            "level_up_reward_level_" + entry.targetLevel,
+                            false
+                        );
+
+                        if (granted > 0)
+                        {
+                            levelUpBonusChestCount += granted;
+                            lastGrantedChestCount += granted;
+                            lastLevelUpBonusChestType = entry.chestType;
+
+                            if (lastGrantedChestType == ChestType.Random)
+                                lastGrantedChestType = entry.chestType;
+                        }
                     }
                 }
             }
@@ -519,7 +552,8 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 " | EndXpNeededForNext=" + endXpNeededForNext +
                 " | LevelUpCount=" + levelUpCount +
                 " | LevelUpBonusSoft=" + levelUpBonusSoft +
-                " | LevelUpBonusChestCount=" + levelUpBonusChestCount,
+                " | LevelUpBonusChestCount=" + levelUpBonusChestCount +
+                " | FinalChestType=" + lastGrantedChestType,
                 this);
         }
 

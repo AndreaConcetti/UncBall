@@ -5,58 +5,43 @@ using UnityEngine;
 [Serializable]
 public struct LevelRewardEntry
 {
-    [Min(2)] public int targetLevel;
-    [Min(0)] public int softCurrencyReward;
-    [Min(0)] public int chestCount;
+    [Min(2)]
+    public int targetLevel;
+
+    [Min(0)]
+    public int softCurrencyReward;
+
+    [Min(0)]
+    public int chestCount;
+
     public ChestType chestType;
 }
 
 [CreateAssetMenu(
     fileName = "LevelUpRewardsConfig",
-    menuName = "Uncball Arena/Profile/Level Up Rewards Config")]
+    menuName = "Uncball Arena/Rewards/Level Up Rewards Config")]
 public class LevelUpRewardsConfig : ScriptableObject
 {
     [Header("Rewards")]
     [SerializeField] private List<LevelRewardEntry> rewardsByLevel = new List<LevelRewardEntry>();
 
-    [Header("Auto Generate")]
-    [SerializeField, Min(2)] private int autoGenerateMaxLevel = 100;
-    [SerializeField, Min(0)] private int baseSoftCurrencyReward = 25;
-    [SerializeField, Min(0)] private int softCurrencyIncreasePer5Levels = 10;
-    [SerializeField, Min(1)] private int baseChestCount = 1;
-    [SerializeField, Min(1)] private int extraChestEveryNLevels = 20;
-    [SerializeField] private ChestType defaultChestType = ChestType.GuaranteedCommon;
-    [SerializeField] private ChestType every5LevelsChestType = ChestType.GuaranteedEpic;
-    [SerializeField] private ChestType every10LevelsChestType = ChestType.GuaranteedLegendary;
-
     public IReadOnlyList<LevelRewardEntry> RewardsByLevel => rewardsByLevel;
 
-    public int AutoGenerateMaxLevel => autoGenerateMaxLevel;
-    public int BaseSoftCurrencyReward => baseSoftCurrencyReward;
-    public int SoftCurrencyIncreasePer5Levels => softCurrencyIncreasePer5Levels;
-    public int BaseChestCount => baseChestCount;
-    public int ExtraChestEveryNLevels => extraChestEveryNLevels;
-    public ChestType DefaultChestType => defaultChestType;
-    public ChestType Every5LevelsChestType => every5LevelsChestType;
-    public ChestType Every10LevelsChestType => every10LevelsChestType;
-
-    public LevelRewardEntry GetRewardForLevel(int targetLevel)
+    public bool TryGetRewardForLevel(int targetLevel, out LevelRewardEntry entry)
     {
         int safeLevel = Mathf.Max(2, targetLevel);
 
         for (int i = 0; i < rewardsByLevel.Count; i++)
         {
             if (rewardsByLevel[i].targetLevel == safeLevel)
-                return rewardsByLevel[i];
+            {
+                entry = rewardsByLevel[i];
+                return true;
+            }
         }
 
-        return new LevelRewardEntry
-        {
-            targetLevel = safeLevel,
-            softCurrencyReward = 0,
-            chestCount = 0,
-            chestType = defaultChestType
-        };
+        entry = default;
+        return false;
     }
 
     public void GetRewardsBetweenLevels(int previousLevel, int newLevel, List<LevelRewardEntry> output)
@@ -66,79 +51,41 @@ public class LevelUpRewardsConfig : ScriptableObject
 
         output.Clear();
 
-        int fromExclusive = Mathf.Max(1, previousLevel);
-        int toInclusive = Mathf.Max(fromExclusive, newLevel);
+        int fromLevel = Mathf.Max(1, previousLevel);
+        int toLevel = Mathf.Max(fromLevel, newLevel);
 
-        for (int level = fromExclusive + 1; level <= toInclusive; level++)
+        if (toLevel <= fromLevel)
+            return;
+
+        for (int i = 0; i < rewardsByLevel.Count; i++)
         {
-            LevelRewardEntry reward = GetRewardForLevel(level);
+            LevelRewardEntry entry = rewardsByLevel[i];
 
-            if (reward.softCurrencyReward <= 0 && reward.chestCount <= 0)
-                continue;
-
-            output.Add(reward);
+            // Inclusivo sul livello raggiunto.
+            // Esempio: 1 -> 2 deve includere TargetLevel 2.
+            if (entry.targetLevel > fromLevel && entry.targetLevel <= toLevel)
+                output.Add(entry);
         }
+
+        output.Sort((a, b) => a.targetLevel.CompareTo(b.targetLevel));
     }
 
     public void AutoGenerateRewards()
     {
         rewardsByLevel.Clear();
 
-        int maxLevel = Mathf.Max(2, autoGenerateMaxLevel);
-
-        for (int level = 2; level <= maxLevel; level++)
+        for (int level = 2; level <= 100; level++)
         {
-            LevelRewardEntry entry = BuildEntryForLevel(level);
+            LevelRewardEntry entry = new LevelRewardEntry
+            {
+                targetLevel = level,
+                softCurrencyReward = GetSoftCurrencyReward(level),
+                chestCount = GetChestCount(level),
+                chestType = GetChestType(level)
+            };
+
             rewardsByLevel.Add(entry);
         }
-    }
-
-    public LevelRewardEntry BuildEntryForLevel(int level)
-    {
-        int safeLevel = Mathf.Max(2, level);
-
-        int softReward = ComputeSoftCurrencyReward(safeLevel);
-        int chestCount = ComputeChestCount(safeLevel);
-        ChestType chestType = ComputeChestType(safeLevel);
-
-        return new LevelRewardEntry
-        {
-            targetLevel = safeLevel,
-            softCurrencyReward = softReward,
-            chestCount = chestCount,
-            chestType = chestType
-        };
-    }
-
-    public int ComputeSoftCurrencyReward(int level)
-    {
-        int safeLevel = Mathf.Max(2, level);
-        int bonusSteps = Mathf.Max(0, (safeLevel - 1) / 5);
-        return Mathf.Max(0, baseSoftCurrencyReward + bonusSteps * softCurrencyIncreasePer5Levels);
-    }
-
-    public int ComputeChestCount(int level)
-    {
-        int safeLevel = Mathf.Max(2, level);
-
-        if (extraChestEveryNLevels <= 0)
-            return Mathf.Max(1, baseChestCount);
-
-        int extraSteps = safeLevel / extraChestEveryNLevels;
-        return Mathf.Max(1, baseChestCount + extraSteps);
-    }
-
-    public ChestType ComputeChestType(int level)
-    {
-        int safeLevel = Mathf.Max(2, level);
-
-        if (safeLevel % 10 == 0)
-            return every10LevelsChestType;
-
-        if (safeLevel % 5 == 0)
-            return every5LevelsChestType;
-
-        return defaultChestType;
     }
 
     public void SortAndDeduplicate()
@@ -149,17 +96,21 @@ public class LevelUpRewardsConfig : ScriptableObject
         {
             LevelRewardEntry entry = rewardsByLevel[i];
             int safeLevel = Mathf.Max(2, entry.targetLevel);
+
             entry.targetLevel = safeLevel;
+            entry.softCurrencyReward = Mathf.Max(0, entry.softCurrencyReward);
+            entry.chestCount = Mathf.Max(0, entry.chestCount);
+
             uniqueByLevel[safeLevel] = entry;
         }
 
-        List<int> keys = new List<int>(uniqueByLevel.Keys);
-        keys.Sort();
+        List<int> levels = new List<int>(uniqueByLevel.Keys);
+        levels.Sort();
 
         rewardsByLevel.Clear();
 
-        for (int i = 0; i < keys.Count; i++)
-            rewardsByLevel.Add(uniqueByLevel[keys[i]]);
+        for (int i = 0; i < levels.Count; i++)
+            rewardsByLevel.Add(uniqueByLevel[levels[i]]);
     }
 
     public void ClearRewards()
@@ -167,12 +118,41 @@ public class LevelUpRewardsConfig : ScriptableObject
         rewardsByLevel.Clear();
     }
 
+    private int GetSoftCurrencyReward(int level)
+    {
+        // Base 25, poi cresce di 10 ogni 5 livelli.
+        return 25 + ((level - 2) / 5) * 10;
+    }
+
+    private int GetChestCount(int level)
+    {
+        // 1 chest fino al 19, poi +1 ogni 20 livelli.
+        return 1 + (level / 20);
+    }
+
+    private ChestType GetChestType(int level)
+    {
+        // Ogni 10 livelli legendary, ogni 5 epic, altrimenti common.
+        if (level % 10 == 0)
+            return ChestType.GuaranteedLegendary;
+
+        if (level % 5 == 0)
+            return ChestType.GuaranteedEpic;
+
+        return ChestType.GuaranteedCommon;
+    }
+
 #if UNITY_EDITOR
     private void OnValidate()
     {
-        autoGenerateMaxLevel = Mathf.Max(2, autoGenerateMaxLevel);
-        baseChestCount = Mathf.Max(1, baseChestCount);
-        extraChestEveryNLevels = Mathf.Max(1, extraChestEveryNLevels);
+        for (int i = 0; i < rewardsByLevel.Count; i++)
+        {
+            LevelRewardEntry entry = rewardsByLevel[i];
+            entry.targetLevel = Mathf.Max(2, entry.targetLevel);
+            entry.softCurrencyReward = Mathf.Max(0, entry.softCurrencyReward);
+            entry.chestCount = Mathf.Max(0, entry.chestCount);
+            rewardsByLevel[i] = entry;
+        }
     }
 #endif
 }

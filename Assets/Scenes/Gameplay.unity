@@ -2392,8 +2392,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -770}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 370, y: -685}
+  m_SizeDelta: {x: 0, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &174616689
 MonoBehaviour:
@@ -2411,7 +2411,7 @@ MonoBehaviour:
   m_MinWidth: -1
   m_MinHeight: -1
   m_PreferredWidth: -1
-  m_PreferredHeight: 100
+  m_PreferredHeight: 50
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
@@ -2433,7 +2433,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &183821038
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2737,10 +2737,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 217964537}
+  - component: {fileID: 217964538}
   - component: {fileID: 217964541}
   - component: {fileID: 217964540}
   - component: {fileID: 217964539}
-  - component: {fileID: 217964538}
   m_Layer: 5
   m_Name: GoToRewardsButton
   m_TagString: Untagged
@@ -2764,8 +2764,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 400, y: -40}
-  m_SizeDelta: {x: 200, y: 80}
+  m_AnchoredPosition: {x: 470, y: -40}
+  m_SizeDelta: {x: 380, y: 60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &217964538
 MonoBehaviour:
@@ -2782,8 +2782,8 @@ MonoBehaviour:
   m_IgnoreLayout: 0
   m_MinWidth: -1
   m_MinHeight: -1
-  m_PreferredWidth: 200
-  m_PreferredHeight: 100
+  m_PreferredWidth: 300
+  m_PreferredHeight: 60
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
@@ -2807,7 +2807,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 0667c7733ba571c408c52c70531879c8, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 30365d3b2c280154da2db5f7c436b5dc, type: 3}
   m_Type: 0
   m_PreserveAspect: 1
   m_FillCenter: 1
@@ -6581,7 +6581,7 @@ MonoBehaviour:
   gameplayCamera: {fileID: 2130389375}
   ballVisualRoll: {fileID: 0}
   onlineAuthority: {fileID: 1394314180}
-  settingsPanelUI: {fileID: 0}
+  settingsPanelUI: {fileID: 596191374}
   activePlacementArea: {fileID: 0}
   placementYOffset: 0
   placementPickRadiusScreen: 140
@@ -6737,8 +6737,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 100, y: -40}
-  m_SizeDelta: {x: 200, y: 80}
+  m_AnchoredPosition: {x: 140, y: -40}
+  m_SizeDelta: {x: 280, y: 80}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &485161585
 MonoBehaviour:
@@ -8186,7 +8186,7 @@ MonoBehaviour:
   halfPointPanel: {fileID: 1317338104}
   postGamePanel: {fileID: 2123206093}
   pausePanel: {fileID: 0}
-  hideGameplayUiWhenMatchEnds: 1
+  hideGameplayUiWhenMatchEnds: 0
   showPostGamePanelWhenMatchEnds: 1
   postGamePanelShowDelaySeconds: 0
   reconnectPanel: {fileID: 790069027}
@@ -8321,8 +8321,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::OnlinePostMatchPanelsController
   postGameRoot: {fileID: 1577799494}
   rewardsObtainedRoot: {fileID: 1220081536}
-  rewardsPresenter: {fileID: 1220081542}
+  postGameCanvasGroup: {fileID: 0}
+  rewardsCanvasGroup: {fileID: 0}
+  inGameUiRoot: {fileID: 1940017666}
+  keepInGameUiActiveAtMatchEnd: 0
   hideRewardsOnAwake: 1
+  hidePostGameWhenOpeningRewards: 1
+  disablePostGameRaycastsWhenRewardsOpen: 1
+  restorePostGameOnReturn: 1
+  rewardsPresenter: {fileID: 1220081542}
   logDebug: 1
 --- !u!1 &603642409
 GameObject:
@@ -10895,7 +10902,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -260}
+  m_AnchoredPosition: {x: 370, y: -450}
   m_SizeDelta: {x: 660, y: 60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &808939099
@@ -12598,8 +12605,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -475}
-  m_SizeDelta: {x: 0, y: 70}
+  m_AnchoredPosition: {x: 370, y: -245}
+  m_SizeDelta: {x: 0, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &988166954
 CanvasRenderer:
@@ -15282,6 +15289,8 @@ MonoBehaviour:
   lpAnimationDuration: 0.9
   levelUpOverlayVisibleSeconds: 3
   levelUpXpResetPauseSeconds: 0.15
+  rewardTotalsUpdateDuration: 0.45
+  animateRewardTotalsAfterLevelUp: 1
   logDebug: 1
 --- !u!1 &1242200877
 GameObject:
@@ -16424,7 +16433,7 @@ MonoBehaviour:
   rewardsConfig: {fileID: 11400000, guid: 281bc0d748cb8994d81b2e0026a98b70, type: 2}
   progressionRules: {fileID: 0}
   presentationResultStore: {fileID: 0}
-  levelUpRewardsConfig: {fileID: 0}
+  levelUpRewardsConfig: {fileID: 11400000, guid: 04d9fb7ebf30e9644b448a2d4a6d92d8, type: 2}
   allowChestRewards: 1
   allowXpRewards: 1
   allowStatsProgression: 1
@@ -18316,7 +18325,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -290}
+  m_AnchoredPosition: {x: 370, y: -340}
   m_SizeDelta: {x: 600, y: 120}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1584665837
@@ -18368,8 +18377,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4283029839
-  m_fontColor: {r: 0.30872953, g: 0.8490566, b: 0.28435388, a: 1}
+    rgba: 4294967295
+  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 1
   m_colorMode: 3
   m_fontColorGradient:
@@ -18377,7 +18386,7 @@ MonoBehaviour:
     topRight: {r: 1, g: 1, b: 1, a: 1}
     bottomLeft: {r: 1, g: 1, b: 1, a: 1}
     bottomRight: {r: 0.99607843, g: 0.94509804, b: 0.7137255, a: 1}
-  m_fontColorGradientPreset: {fileID: 0}
+  m_fontColorGradientPreset: {fileID: 11400000, guid: 69a525efa7e6472eab268f6ea605f06e, type: 2}
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
@@ -18708,7 +18717,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -640}
+  m_AnchoredPosition: {x: 370, y: -530}
   m_SizeDelta: {x: 620, y: 220}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1602246105
@@ -20628,8 +20637,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 370, y: -830}
-  m_SizeDelta: {x: 500, y: 80}
+  m_AnchoredPosition: {x: 370, y: -770}
+  m_SizeDelta: {x: 660, y: 80}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1776758941
 MonoBehaviour:
@@ -20669,11 +20678,11 @@ MonoBehaviour:
     m_Top: 0
     m_Bottom: 0
   m_ChildAlignment: 4
-  m_Spacing: 100
-  m_ChildForceExpandWidth: 0
+  m_Spacing: 0
+  m_ChildForceExpandWidth: 1
   m_ChildForceExpandHeight: 0
   m_ChildControlWidth: 1
-  m_ChildControlHeight: 1
+  m_ChildControlHeight: 0
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
@@ -21323,11 +21332,11 @@ RectTransform:
   m_Children:
   - {fileID: 1376605513}
   - {fileID: 858606336}
-  - {fileID: 799682664}
+  - {fileID: 988166953}
   - {fileID: 1584665836}
+  - {fileID: 799682664}
   - {fileID: 183821038}
   - {fileID: 706883357}
-  - {fileID: 988166953}
   - {fileID: 1602246104}
   - {fileID: 174616688}
   - {fileID: 1776758940}
