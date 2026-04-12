@@ -82,10 +82,10 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = true,
             countAsLoss = false,
-            xpReward = 25,
-            softCurrencyReward = 20,
+            xpReward = 20,
+            softCurrencyReward = 30,
             premiumCurrencyReward = 0,
-            grantChest = true,
+            grantChest = false,
             chestType = ChestType.Random,
             rankedLpDelta = 0
         },
@@ -94,12 +94,12 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = true,
             countAsLoss = false,
-            xpReward = 60,
+            xpReward = 25,
             softCurrencyReward = 35,
-            premiumCurrencyReward = 1,
-            grantChest = true,
-            chestType = ChestType.GuaranteedRare,
-            rankedLpDelta = 20
+            premiumCurrencyReward = 0,
+            grantChest = false,
+            chestType = ChestType.Random,
+            rankedLpDelta = 25
         }
     };
 
@@ -111,8 +111,8 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = false,
             countAsLoss = true,
-            xpReward = 10,
-            softCurrencyReward = 8,
+            xpReward = 12,
+            softCurrencyReward = 15,
             premiumCurrencyReward = 0,
             grantChest = false,
             chestType = ChestType.Random,
@@ -123,11 +123,11 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = false,
             countAsLoss = true,
-            xpReward = 20,
+            xpReward = 15,
             softCurrencyReward = 12,
             premiumCurrencyReward = 0,
             grantChest = false,
-            chestType = ChestType.GuaranteedRare,
+            chestType = ChestType.Random,
             rankedLpDelta = -20
         }
     };
@@ -141,7 +141,7 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsWin = false,
             countAsLoss = false,
             xpReward = 15,
-            softCurrencyReward = 12,
+            softCurrencyReward = 20,
             premiumCurrencyReward = 0,
             grantChest = false,
             chestType = ChestType.Random,
@@ -152,11 +152,11 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = false,
             countAsLoss = false,
-            xpReward = 30,
+            xpReward = 18,
             softCurrencyReward = 18,
             premiumCurrencyReward = 0,
             grantChest = false,
-            chestType = ChestType.GuaranteedRare,
+            chestType = ChestType.Random,
             rankedLpDelta = 0
         }
     };
@@ -170,10 +170,10 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = true,
             countAsLoss = false,
-            xpReward = 25,
-            softCurrencyReward = 20,
+            xpReward = 20,
+            softCurrencyReward = 30,
             premiumCurrencyReward = 0,
-            grantChest = true,
+            grantChest = false,
             chestType = ChestType.Random,
             rankedLpDelta = 0
         },
@@ -182,12 +182,12 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = true,
             countAsLoss = false,
-            xpReward = 60,
+            xpReward = 25,
             softCurrencyReward = 35,
-            premiumCurrencyReward = 1,
-            grantChest = true,
-            chestType = ChestType.GuaranteedRare,
-            rankedLpDelta = 20
+            premiumCurrencyReward = 0,
+            grantChest = false,
+            chestType = ChestType.Random,
+            rankedLpDelta = 25
         }
     };
 
@@ -215,7 +215,7 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             softCurrencyReward = 0,
             premiumCurrencyReward = 0,
             grantChest = false,
-            chestType = ChestType.GuaranteedRare,
+            chestType = ChestType.Random,
             rankedLpDelta = -20
         }
     };
@@ -229,10 +229,10 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = true,
             countAsLoss = false,
-            xpReward = 25,
-            softCurrencyReward = 20,
+            xpReward = 20,
+            softCurrencyReward = 30,
             premiumCurrencyReward = 0,
-            grantChest = true,
+            grantChest = false,
             chestType = ChestType.Random,
             rankedLpDelta = 0
         },
@@ -241,12 +241,12 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = true,
             countAsLoss = false,
-            xpReward = 60,
+            xpReward = 25,
             softCurrencyReward = 35,
-            premiumCurrencyReward = 1,
-            grantChest = true,
-            chestType = ChestType.GuaranteedRare,
-            rankedLpDelta = 20
+            premiumCurrencyReward = 0,
+            grantChest = false,
+            chestType = ChestType.Random,
+            rankedLpDelta = 25
         }
     };
 
@@ -258,8 +258,8 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = false,
             countAsLoss = true,
-            xpReward = 3,
-            softCurrencyReward = 1,
+            xpReward = 0,
+            softCurrencyReward = 0,
             premiumCurrencyReward = 0,
             grantChest = false,
             chestType = ChestType.Random,
@@ -270,11 +270,11 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             countAsMatchPlayed = true,
             countAsWin = false,
             countAsLoss = true,
-            xpReward = 5,
-            softCurrencyReward = 2,
+            xpReward = 0,
+            softCurrencyReward = 0,
             premiumCurrencyReward = 0,
             grantChest = false,
-            chestType = ChestType.GuaranteedRare,
+            chestType = ChestType.Random,
             rankedLpDelta = -20
         }
     };
@@ -304,7 +304,7 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             softCurrencyReward = 0,
             premiumCurrencyReward = 0,
             grantChest = false,
-            chestType = ChestType.GuaranteedRare,
+            chestType = ChestType.Random,
             rankedLpDelta = -20
         }
     };
@@ -334,8 +334,8 @@ public class OnlineMatchRewardsConfig : ScriptableObject
             softCurrencyReward = 0,
             premiumCurrencyReward = 0,
             grantChest = false,
-            chestType = ChestType.GuaranteedRare,
-            rankedLpDelta = 5
+            chestType = ChestType.Random,
+            rankedLpDelta = 0
         }
     };
 

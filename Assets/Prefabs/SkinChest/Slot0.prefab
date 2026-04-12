@@ -167,9 +167,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 6372861974587387064}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 92.5, y: -185}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 100, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &867183844989742666
@@ -928,7 +928,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &5352986894830446523
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1094,10 +1094,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 6372861974587387064}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 92.5, y: -95}
-  m_SizeDelta: {x: 180, y: 130}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 140, y: 130}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &82568080326514061
 CanvasRenderer:
@@ -1122,7 +1122,7 @@ MonoBehaviour:
   m_IgnoreLayout: 0
   m_MinWidth: -1
   m_MinHeight: -1
-  m_PreferredWidth: 180
+  m_PreferredWidth: 140
   m_PreferredHeight: 100
   m_FlexibleWidth: 1
   m_FlexibleHeight: -1
@@ -1147,9 +1147,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: PLAY MORE LOL
+  m_text: NO CHEST AVAILABLE
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 0161d805a3764c089bef00bfe00793f5, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
@@ -1180,7 +1180,7 @@ MonoBehaviour:
   m_enableAutoSizing: 1
   m_fontSizeMin: 18
   m_fontSizeMax: 72
-  m_fontStyle: 0
+  m_fontStyle: 16
   m_HorizontalAlignment: 2
   m_VerticalAlignment: 512
   m_textAlignment: 65535
@@ -1216,7 +1216,7 @@ MonoBehaviour:
   m_margin: {x: 0, y: 0, z: 0, w: 0}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
-  m_hasFontAssetChanged: 0
+  m_hasFontAssetChanged: 1
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
 --- !u!1 &5498054156631236932
@@ -1352,7 +1352,7 @@ MonoBehaviour:
   obtainNewSkin: {fileID: 0}
   chestTypeText: {fileID: 3438011272490266086}
   timerText: {fileID: 7002430312684855357}
-  chestTypeBackgroundImage: {fileID: 0}
+  chestTypeBackgroundImage: {fileID: 2130169705669202810}
   openButton: {fileID: 72211828829657511}
   availableBadgeObject: {fileID: 1843118472164125800}
   unavailableOverlayObject: {fileID: 1340227157405635326}
@@ -1361,19 +1361,19 @@ MonoBehaviour:
     displayLabel: RANDOM
     backgroundSprite: {fileID: 21300000, guid: 72559cf1f3be91d4381ec8d36d775be5, type: 3}
   - chestType: 1
-    displayLabel: COMMON+
+    displayLabel: COMMON
     backgroundSprite: {fileID: 21300000, guid: f88dc3f2dc92ead43abe0e723d761580, type: 3}
   - chestType: 2
-    displayLabel: RARE+
+    displayLabel: RARE
     backgroundSprite: {fileID: 21300000, guid: 4422738466b30da4494fc454a57d5112, type: 3}
   - chestType: 3
-    displayLabel: EPIC+
+    displayLabel: EPIC
     backgroundSprite: {fileID: 21300000, guid: bbc1a9310014a4242ac061f0856e2412, type: 3}
   - chestType: 4
     displayLabel: LEGENDARY
     backgroundSprite: {fileID: 21300000, guid: 2a2f19435f62655429c32769f480d7f4, type: 3}
   readyText: OPEN NOW
-  logDebug: 0
+  logDebug: 1
 --- !u!114 &2747876485288053066
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1499,9 +1499,11 @@ MonoBehaviour:
   chestCardUI: {fileID: 9140718844610792252}
   refreshOnEnable: 1
   timerRefreshInterval: 1
+  dependencyRetryInterval: 0.25
   forceOccupiedPreviewInEditor: 0
   forceEmptyPreviewInEditor: 0
   logDebug: 0
+  logMissingInventoryWarning: 0
 --- !u!114 &1612085301913728799
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2216,7 +2218,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &8285568341254107957
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2308,9 +2310,9 @@ RectTransform:
   - {fileID: 8178852477096589910}
   m_Father: {fileID: 6372861974587387064}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 92.5, y: -240}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 180, y: 60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &4552375659720532765

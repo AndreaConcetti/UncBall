@@ -17,29 +17,29 @@ MonoBehaviour:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 35
-      softCurrencyReward: 20
+      xpReward: 20
+      softCurrencyReward: 30
       premiumCurrencyReward: 0
       grantChest: 0
-      chestType: 1
+      chestType: 0
       rankedLpDelta: 0
     ranked:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 120
+      xpReward: 25
       softCurrencyReward: 35
-      premiumCurrencyReward: 1
+      premiumCurrencyReward: 0
       grantChest: 0
-      chestType: 1
-      rankedLpDelta: 20
+      chestType: 0
+      rankedLpDelta: 25
   normalCompletionLoss:
     normal:
       countAsMatchPlayed: 1
       countAsWin: 0
       countAsLoss: 1
-      xpReward: 10
-      softCurrencyReward: 8
+      xpReward: 12
+      softCurrencyReward: 15
       premiumCurrencyReward: 0
       grantChest: 0
       chestType: 0
@@ -48,11 +48,11 @@ MonoBehaviour:
       countAsMatchPlayed: 1
       countAsWin: 0
       countAsLoss: 1
-      xpReward: 20
+      xpReward: 15
       softCurrencyReward: 12
       premiumCurrencyReward: 0
       grantChest: 0
-      chestType: 2
+      chestType: 0
       rankedLpDelta: -20
   draw:
     normal:
@@ -60,7 +60,7 @@ MonoBehaviour:
       countAsWin: 0
       countAsLoss: 0
       xpReward: 15
-      softCurrencyReward: 12
+      softCurrencyReward: 20
       premiumCurrencyReward: 0
       grantChest: 0
       chestType: 0
@@ -69,33 +69,33 @@ MonoBehaviour:
       countAsMatchPlayed: 1
       countAsWin: 0
       countAsLoss: 0
-      xpReward: 30
+      xpReward: 18
       softCurrencyReward: 18
       premiumCurrencyReward: 0
       grantChest: 0
-      chestType: 2
+      chestType: 0
       rankedLpDelta: 0
   disconnectWin:
     normal:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 25
-      softCurrencyReward: 20
+      xpReward: 20
+      softCurrencyReward: 30
       premiumCurrencyReward: 0
-      grantChest: 1
+      grantChest: 0
       chestType: 0
       rankedLpDelta: 0
     ranked:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 60
+      xpReward: 25
       softCurrencyReward: 35
-      premiumCurrencyReward: 1
-      grantChest: 1
-      chestType: 2
-      rankedLpDelta: 20
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 25
   disconnectLoss:
     normal:
       countAsMatchPlayed: 1
@@ -115,36 +115,36 @@ MonoBehaviour:
       softCurrencyReward: 0
       premiumCurrencyReward: 0
       grantChest: 0
-      chestType: 2
+      chestType: 0
       rankedLpDelta: -20
   surrenderWin:
     normal:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 25
-      softCurrencyReward: 20
+      xpReward: 20
+      softCurrencyReward: 30
       premiumCurrencyReward: 0
-      grantChest: 1
+      grantChest: 0
       chestType: 0
       rankedLpDelta: 0
     ranked:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 60
+      xpReward: 25
       softCurrencyReward: 35
-      premiumCurrencyReward: 1
-      grantChest: 1
-      chestType: 2
-      rankedLpDelta: 20
+      premiumCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+      rankedLpDelta: 25
   surrenderLoss:
     normal:
       countAsMatchPlayed: 1
       countAsWin: 0
       countAsLoss: 1
-      xpReward: 3
-      softCurrencyReward: 1
+      xpReward: 0
+      softCurrencyReward: 0
       premiumCurrencyReward: 0
       grantChest: 0
       chestType: 0
@@ -153,11 +153,11 @@ MonoBehaviour:
       countAsMatchPlayed: 1
       countAsWin: 0
       countAsLoss: 1
-      xpReward: 5
-      softCurrencyReward: 2
+      xpReward: 0
+      softCurrencyReward: 0
       premiumCurrencyReward: 0
       grantChest: 0
-      chestType: 2
+      chestType: 0
       rankedLpDelta: -20
   reconnectTimeoutLoss:
     normal:
@@ -178,7 +178,7 @@ MonoBehaviour:
       softCurrencyReward: 0
       premiumCurrencyReward: 0
       grantChest: 0
-      chestType: 2
+      chestType: 0
       rankedLpDelta: -20
   prematchHostLeftWin:
     normal:
@@ -199,8 +199,8 @@ MonoBehaviour:
       softCurrencyReward: 0
       premiumCurrencyReward: 0
       grantChest: 0
-      chestType: 2
-      rankedLpDelta: 5
+      chestType: 0
+      rankedLpDelta: 0
   matchCancelled:
     normal:
       countAsMatchPlayed: 0

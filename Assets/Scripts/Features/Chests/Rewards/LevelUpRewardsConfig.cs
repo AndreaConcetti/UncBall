@@ -61,8 +61,6 @@ public class LevelUpRewardsConfig : ScriptableObject
         {
             LevelRewardEntry entry = rewardsByLevel[i];
 
-            // Inclusivo sul livello raggiunto.
-            // Esempio: 1 -> 2 deve includere TargetLevel 2.
             if (entry.targetLevel > fromLevel && entry.targetLevel <= toLevel)
                 output.Add(entry);
         }
@@ -79,13 +77,40 @@ public class LevelUpRewardsConfig : ScriptableObject
             LevelRewardEntry entry = new LevelRewardEntry
             {
                 targetLevel = level,
-                softCurrencyReward = GetSoftCurrencyReward(level),
-                chestCount = GetChestCount(level),
-                chestType = GetChestType(level)
+                softCurrencyReward = GetLegacySoftCurrencyReward(level),
+                chestCount = GetLegacyChestCount(level),
+                chestType = GetLegacyChestType(level)
             };
 
             rewardsByLevel.Add(entry);
         }
+    }
+
+    public void ApplyEconomyV2PresetUpTo9999()
+    {
+        ApplyEconomyV2PresetUpToLevel(9999);
+    }
+
+    public void ApplyEconomyV2PresetUpToLevel(int maxLevel)
+    {
+        rewardsByLevel.Clear();
+
+        int safeMaxLevel = Mathf.Max(2, maxLevel);
+
+        for (int level = 2; level <= safeMaxLevel; level++)
+        {
+            LevelRewardEntry entry = new LevelRewardEntry
+            {
+                targetLevel = level,
+                softCurrencyReward = GetEconomyV2SoftCurrencyReward(level),
+                chestCount = GetEconomyV2ChestCount(level),
+                chestType = GetEconomyV2ChestType(level)
+            };
+
+            rewardsByLevel.Add(entry);
+        }
+
+        SortAndDeduplicate();
     }
 
     public void SortAndDeduplicate()
@@ -118,21 +143,105 @@ public class LevelUpRewardsConfig : ScriptableObject
         rewardsByLevel.Clear();
     }
 
-    private int GetSoftCurrencyReward(int level)
+    private int GetEconomyV2SoftCurrencyReward(int level)
     {
-        // Base 25, poi cresce di 10 ogni 5 livelli.
+        if (level <= 4)
+            return 25;
+
+        if (level <= 9)
+            return 35;
+
+        if (level <= 14)
+            return 50;
+
+        if (level <= 19)
+            return 60;
+
+        if (level <= 29)
+            return 75;
+
+        if (level <= 49)
+            return 90;
+
+        if (level <= 74)
+            return 110;
+
+        if (level <= 99)
+            return 130;
+
+        if (level <= 149)
+            return 150;
+
+        if (level <= 249)
+            return 175;
+
+        if (level <= 499)
+            return 200;
+
+        if (level <= 999)
+            return 225;
+
+        if (level <= 1999)
+            return 250;
+
+        if (level <= 4999)
+            return 300;
+
+        return 350;
+    }
+
+    private int GetEconomyV2ChestCount(int level)
+    {
+        if (level == 2)
+            return 1;
+
+        if (level % 100 == 0)
+            return 1;
+
+        if (level % 25 == 0)
+            return 1;
+
+        if (level <= 20 && (level == 5 || level == 10 || level == 15 || level == 20))
+            return 1;
+
+        return 0;
+    }
+
+    private ChestType GetEconomyV2ChestType(int level)
+    {
+        if (level == 2)
+            return ChestType.GuaranteedCommon;
+
+        if (level == 5)
+            return ChestType.GuaranteedRare;
+
+        if (level == 10 || level == 15)
+            return ChestType.GuaranteedEpic;
+
+        if (level == 20)
+            return ChestType.GuaranteedLegendary;
+
+        if (level % 100 == 0)
+            return ChestType.GuaranteedLegendary;
+
+        if (level % 25 == 0)
+            return ChestType.GuaranteedEpic;
+
+        return ChestType.Random;
+    }
+
+    private int GetLegacySoftCurrencyReward(int level)
+    {
         return 25 + ((level - 2) / 5) * 10;
     }
 
-    private int GetChestCount(int level)
+    private int GetLegacyChestCount(int level)
     {
-        // 1 chest fino al 19, poi +1 ogni 20 livelli.
         return 1 + (level / 20);
     }
 
-    private ChestType GetChestType(int level)
+    private ChestType GetLegacyChestType(int level)
     {
-        // Ogni 10 livelli legendary, ogni 5 epic, altrimenti common.
         if (level % 10 == 0)
             return ChestType.GuaranteedLegendary;
 

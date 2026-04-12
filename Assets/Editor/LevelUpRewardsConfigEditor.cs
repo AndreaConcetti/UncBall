@@ -16,6 +16,14 @@ public class LevelUpRewardsConfigEditor : Editor
 
         LevelUpRewardsConfig config = (LevelUpRewardsConfig)target;
 
+        if (GUILayout.Button("Apply Economy V2 Preset (Levels 2-9999)"))
+        {
+            Undo.RecordObject(config, "Apply Economy V2 Level Rewards");
+            config.ApplyEconomyV2PresetUpTo9999();
+            EditorUtility.SetDirty(config);
+            AssetDatabase.SaveAssets();
+        }
+
         if (GUILayout.Button("Auto Generate Rewards"))
         {
             Undo.RecordObject(config, "Auto Generate Level Rewards");
