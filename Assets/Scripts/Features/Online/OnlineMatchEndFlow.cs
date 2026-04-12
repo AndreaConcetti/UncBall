@@ -60,7 +60,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
     [SerializeField] private UnityEvent onRankedChestRewardRequested;
 
     [Header("Debug")]
-    [SerializeField] private bool logDebug = false;
+    [SerializeField] private bool logDebug = true;
 
     private readonly List<LevelRewardEntry> cachedLevelRewards = new List<LevelRewardEntry>();
 
@@ -94,7 +94,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
             return;
         }
 
-        bool matchEnded = (matchController != null) && matchController.MatchEnded;
+        bool matchEnded = matchController != null && matchController.MatchEnded;
 
         if (matchEnded)
             ApplyEndMatchRewardsIfNeeded();
@@ -379,9 +379,24 @@ public class OnlineMatchEndFlow : MonoBehaviour
         OnlineRewardCategory category = ResolveRewardCategory();
         OnlineRewardRule rule = rewardsConfig.GetRule(category, queueType);
 
-        int startLevel = profileManager.ActiveProfile != null ? Mathf.Max(1, profileManager.ActiveProfile.level) : 1;
         int startTotalXp = profileManager.ActiveProfile != null ? Mathf.Max(0, profileManager.ActiveProfile.xp) : 0;
         int startRankedLp = profileManager.ActiveRankedLp;
+        int effectiveStartLevel = ComputeLevelFromTotalXp(startTotalXp);
+        int startXpIntoLevel = progressionRules != null ? progressionRules.GetXpIntoCurrentLevel(startTotalXp) : 0;
+        int startXpNeededForNext = progressionRules != null ? progressionRules.GetXpNeededForNextLevel(startTotalXp) : 0;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineMatchEndFlow] Before rewards -> " +
+                "MatchId=" + currentMatchId +
+                " | EffectiveStartLevel=" + effectiveStartLevel +
+                " | StartTotalXp=" + startTotalXp +
+                " | StartXpIntoLevel=" + startXpIntoLevel +
+                " | StartXpNeededForNext=" + startXpNeededForNext +
+                " | StartRankedLp=" + startRankedLp,
+                this);
+        }
 
         OnlineMatchRewardResult rewardResult = new OnlineMatchRewardResult
         {
@@ -438,16 +453,31 @@ public class OnlineMatchEndFlow : MonoBehaviour
             }
         }
 
-        int endLevelAfterBase = profileManager.ActiveProfile != null ? Mathf.Max(1, profileManager.ActiveProfile.level) : startLevel;
         int endTotalXpAfterBase = profileManager.ActiveProfile != null ? Mathf.Max(0, profileManager.ActiveProfile.xp) : startTotalXp;
+        int effectiveEndLevelAfterBase = ComputeLevelFromTotalXp(endTotalXpAfterBase);
+        int endXpIntoLevelAfterBase = progressionRules != null ? progressionRules.GetXpIntoCurrentLevel(endTotalXpAfterBase) : 0;
+        int endXpNeededAfterBase = progressionRules != null ? progressionRules.GetXpNeededForNextLevel(endTotalXpAfterBase) : 0;
+        int levelUpCount = Mathf.Max(0, effectiveEndLevelAfterBase - effectiveStartLevel);
 
-        int levelUpCount = Mathf.Max(0, endLevelAfterBase - startLevel);
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineMatchEndFlow] After base rewards -> " +
+                "EffectiveEndLevelAfterBase=" + effectiveEndLevelAfterBase +
+                " | EndTotalXpAfterBase=" + endTotalXpAfterBase +
+                " | EndXpIntoLevelAfterBase=" + endXpIntoLevelAfterBase +
+                " | EndXpNeededAfterBase=" + endXpNeededAfterBase +
+                " | GrantedXp=" + lastGrantedXp +
+                " | ComputedLevelUpCount=" + levelUpCount,
+                this);
+        }
+
         int levelUpBonusSoft = 0;
         int levelUpBonusChestCount = 0;
 
         if (levelUpCount > 0 && levelUpRewardsConfig != null)
         {
-            levelUpRewardsConfig.GetRewardsBetweenLevels(startLevel, endLevelAfterBase, cachedLevelRewards);
+            levelUpRewardsConfig.GetRewardsBetweenLevels(effectiveStartLevel, effectiveEndLevelAfterBase, cachedLevelRewards);
 
             for (int i = 0; i < cachedLevelRewards.Count; i++)
             {
@@ -473,16 +503,32 @@ public class OnlineMatchEndFlow : MonoBehaviour
             }
         }
 
-        int endLevel = profileManager.ActiveProfile != null ? Mathf.Max(1, profileManager.ActiveProfile.level) : endLevelAfterBase;
         int endTotalXp = profileManager.ActiveProfile != null ? Mathf.Max(0, profileManager.ActiveProfile.xp) : endTotalXpAfterBase;
+        int effectiveEndLevel = ComputeLevelFromTotalXp(endTotalXp);
         int endRankedLp = profileManager.ActiveRankedLp;
+        int endXpIntoLevel = progressionRules != null ? progressionRules.GetXpIntoCurrentLevel(endTotalXp) : 0;
+        int endXpNeededForNext = progressionRules != null ? progressionRules.GetXpNeededForNextLevel(endTotalXp) : 0;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineMatchEndFlow] Final progression snapshot -> " +
+                "EffectiveEndLevel=" + effectiveEndLevel +
+                " | EndTotalXp=" + endTotalXp +
+                " | EndXpIntoLevel=" + endXpIntoLevel +
+                " | EndXpNeededForNext=" + endXpNeededForNext +
+                " | LevelUpCount=" + levelUpCount +
+                " | LevelUpBonusSoft=" + levelUpBonusSoft +
+                " | LevelUpBonusChestCount=" + levelUpBonusChestCount,
+                this);
+        }
 
         if (presentationResultStore != null)
         {
             OnlineMatchPresentationResult result = BuildPresentationResult(
                 category,
-                startLevel,
-                endLevel,
+                effectiveStartLevel,
+                effectiveEndLevel,
                 startTotalXp,
                 endTotalXp,
                 startRankedLp,
@@ -514,6 +560,32 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 " | LevelUpCount=" + levelUpCount,
                 this);
         }
+    }
+
+    private int ComputeLevelFromTotalXp(int totalXp)
+    {
+        int safeTotalXp = Mathf.Max(0, totalXp);
+
+        if (progressionRules == null)
+            return 1;
+
+        int level = 1;
+        int remainingXp = safeTotalXp;
+        int safety = 0;
+
+        while (safety < 10000)
+        {
+            int required = Mathf.Max(1, progressionRules.GetXpRequiredToAdvanceFromLevel(level));
+
+            if (remainingXp < required)
+                break;
+
+            remainingXp -= required;
+            level++;
+            safety++;
+        }
+
+        return Mathf.Max(1, level);
     }
 
     private int TryGrantChest(ChestType chestType, QueueType queueType, string reason, bool invokeLegacyHookIfFailed)

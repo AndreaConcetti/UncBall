@@ -6,7 +6,6 @@ public class OnlineFinishedMatchSessionRetirer : MonoBehaviour
 {
     private const string MatchStatePropertyKey = "match_state";
     private const int MatchStateEnded = 1;
-    private const string MatchEndedTicksPropertyKey = "match_end_ticks";
 
     [Header("Dependencies")]
     [SerializeField] private FusionOnlineMatchController matchController;
@@ -45,8 +44,7 @@ public class OnlineFinishedMatchSessionRetirer : MonoBehaviour
 
         Dictionary<string, SessionProperty> props = new Dictionary<string, SessionProperty>
         {
-            { MatchStatePropertyKey, MatchStateEnded },
-            { MatchEndedTicksPropertyKey, (int)(System.DateTimeOffset.UtcNow.ToUnixTimeSeconds() % int.MaxValue) }
+            { MatchStatePropertyKey, MatchStateEnded }
         };
 
         bool ok = runnerManager.TryUpdateSessionProperties(props);

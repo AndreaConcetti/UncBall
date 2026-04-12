@@ -58,8 +58,10 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     [SerializeField] private float lpAnimationDuration = 0.90f;
     [SerializeField] private float levelUpOverlayVisibleSeconds = 2.5f;
     [SerializeField] private float levelUpXpResetPauseSeconds = 0.15f;
+    [SerializeField] private bool logDebug = true;
 
     private Coroutine playRoutine;
+    private bool showTriggeredThisEnable;
 
     private void Awake()
     {
@@ -69,9 +71,15 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     private void OnEnable()
     {
         ResolveDependencies();
+        showTriggeredThisEnable = false;
 
         if (playOnEnable)
             ShowLatest();
+    }
+
+    private void OnDisable()
+    {
+        showTriggeredThisEnable = false;
     }
 
     public void ShowLatest()
@@ -92,13 +100,37 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         if (result == null || !result.hasData)
             return;
 
+        if (showTriggeredThisEnable)
+            return;
+
+        showTriggeredThisEnable = true;
+
         if (panelRoot != null)
             panelRoot.SetActive(true);
 
         if (playRoutine != null)
             StopCoroutine(playRoutine);
 
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineRewardsObtainedPresenter] Show -> " +
+                "StartLevel=" + result.startLevel +
+                " | EndLevel=" + result.endLevel +
+                " | StartProgress=" + result.startLevelProgress01 +
+                " | EndProgress=" + result.endLevelProgress01 +
+                " | LevelUpCount=" + result.levelUpCount +
+                " | LeveledUp=" + result.leveledUp,
+                this);
+        }
+
         playRoutine = StartCoroutine(PlaySequence(result));
+    }
+
+    public void ForceReplayLatest()
+    {
+        showTriggeredThisEnable = false;
+        ShowLatest();
     }
 
     public void Hide()
@@ -130,6 +162,18 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         bool shouldShowLevelUpOverlay =
             levelUpOverlayPanel != null &&
             (result.leveledUp || result.levelUpCount > 0 || result.endLevel > result.startLevel);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineRewardsObtainedPresenter] LevelUp overlay decision -> " +
+                "ShouldShow=" + shouldShowLevelUpOverlay +
+                " | StartLevel=" + result.startLevel +
+                " | EndLevel=" + result.endLevel +
+                " | LevelUpCount=" + result.levelUpCount +
+                " | LeveledUp=" + result.leveledUp,
+                this);
+        }
 
         if (shouldShowLevelUpOverlay)
         {
@@ -196,6 +240,17 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         int startLevel = Mathf.Max(1, result.startLevel);
         int endLevel = Mathf.Max(1, result.endLevel);
 
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineRewardsObtainedPresenter] AnimateXp start -> " +
+                "StartLevel=" + startLevel +
+                " | EndLevel=" + endLevel +
+                " | StartProgress=" + result.startLevelProgress01 +
+                " | EndProgress=" + result.endLevelProgress01,
+                this);
+        }
+
         if (endLevel <= startLevel)
         {
             yield return AnimateXpSegment(
@@ -222,6 +277,9 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
         SetXpFill(0f);
 
+        if (logDebug)
+            Debug.Log("[OnlineRewardsObtainedPresenter] AnimateXp -> reached full bar, changed level text, reset to zero.", this);
+
         if (resetPause > 0f)
             yield return new WaitForSecondsRealtime(resetPause);
 
@@ -234,15 +292,27 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
     private IEnumerator AnimateXpSegment(float fromFill, float toFill, int levelToDisplay, float duration)
     {
+        float safeFrom = Mathf.Clamp01(fromFill);
+        float safeTo = Mathf.Clamp01(toFill);
         float safeDuration = Mathf.Max(0.01f, duration);
         float elapsed = 0f;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineRewardsObtainedPresenter] AnimateXpSegment -> " +
+                "From=" + safeFrom +
+                " | To=" + safeTo +
+                " | Level=" + levelToDisplay,
+                this);
+        }
 
         while (elapsed < safeDuration)
         {
             elapsed += Time.unscaledDeltaTime;
             float t = Mathf.Clamp01(elapsed / safeDuration);
 
-            SetXpFill(Mathf.Lerp(fromFill, toFill, t));
+            SetXpFill(Mathf.Lerp(safeFrom, safeTo, t));
 
             if (playerLevelText != null)
                 playerLevelText.text = "LV " + Mathf.Max(1, levelToDisplay);
@@ -250,7 +320,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             yield return null;
         }
 
-        SetXpFill(toFill);
+        SetXpFill(safeTo);
 
         if (playerLevelText != null)
             playerLevelText.text = "LV " + Mathf.Max(1, levelToDisplay);

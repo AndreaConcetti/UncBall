@@ -15282,6 +15282,7 @@ MonoBehaviour:
   lpAnimationDuration: 0.9
   levelUpOverlayVisibleSeconds: 3
   levelUpXpResetPauseSeconds: 0.15
+  logDebug: 1
 --- !u!1 &1242200877
 GameObject:
   m_ObjectHideFlags: 0
@@ -16483,7 +16484,7 @@ MonoBehaviour:
   hideRewardsRootOnAwake: 1
   hideLevelUpOverlayOnAwake: 1
   showPostGamePanelRootOnAwake: 1
-  logDebug: 0
+  logDebug: 1
 --- !u!114 &1394314186
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -16500,7 +16501,7 @@ MonoBehaviour:
   onlineFlowController: {fileID: 0}
   presentationResultStore: {fileID: 0}
   autoReturnToMenuIfSceneStartsInsideAlreadyProcessedFinishedMatch: 1
-  logDebug: 0
+  logDebug: 1
 --- !u!1 &1404626876
 GameObject:
   m_ObjectHideFlags: 0

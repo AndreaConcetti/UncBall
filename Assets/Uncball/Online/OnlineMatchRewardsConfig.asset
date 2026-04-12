@@ -27,7 +27,7 @@ MonoBehaviour:
       countAsMatchPlayed: 1
       countAsWin: 1
       countAsLoss: 0
-      xpReward: 60
+      xpReward: 120
       softCurrencyReward: 35
       premiumCurrencyReward: 1
       grantChest: 0
