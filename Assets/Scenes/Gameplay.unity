@@ -4007,6 +4007,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 308316314}
   m_CullTransparentMesh: 1
+--- !u!1 &309990288
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 309990289}
+  m_Layer: 0
+  m_Name: ManagerBot
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &309990289
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309990288}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1106984856}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &324931215
 GameObject:
   m_ObjectHideFlags: 0
@@ -8239,6 +8270,7 @@ MonoBehaviour:
   pausePanel: {fileID: 0}
   hideGameplayUiWhenMatchEnds: 0
   showPostGamePanelWhenMatchEnds: 1
+  forceGameplayUiVisibleDuringSessionPreview: 1
   postGamePanelShowDelaySeconds: 0
   reconnectPanel: {fileID: 790069027}
   reconnectTitleText: {fileID: 1572722855}
@@ -14146,6 +14178,7 @@ Transform:
   - {fileID: 880244589}
   - {fileID: 596191364}
   - {fileID: 472537352}
+  - {fileID: 309990289}
   - {fileID: 891123376}
   - {fileID: 1138589480}
   - {fileID: 157508892}
@@ -25028,7 +25061,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 5.2827435
+  orthographic size: 4.568859
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2

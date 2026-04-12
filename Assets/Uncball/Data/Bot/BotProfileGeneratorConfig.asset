@@ -1,0 +1,104 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 037b54985996a194bad58470a4fe2c6c, type: 3}
+  m_Name: BotProfileGeneratorConfig
+  m_EditorClassIdentifier: Assembly-CSharp::BotProfileGeneratorConfig
+  botIdPrefix: bot
+  enableDebugLogs: 1
+  allowOnlineDisguiseByDefault: 1
+  localBotsByDefault: 1
+  fixedNames: []
+  optionalPrefixes: []
+  optionalSuffixes: []
+  avatarPool: []
+  framePool: []
+  easySettings:
+    prefixChance: 0.05
+    suffixChance: 0.1
+    allowedSkinIds: []
+    archetypeWeights:
+    - archetype: 0
+      weight: 4
+    - archetype: 2
+      weight: 3
+    - archetype: 3
+      weight: 1.5
+    - archetype: 1
+      weight: 1
+    - archetype: 4
+      weight: 0.5
+    fakeLevelRange:
+      min: 1
+      max: 8
+    fakeRankedLpRange:
+      min: 850
+      max: 1050
+    fakeWinRateRange:
+      min: 38
+      max: 52
+    fakeMatchesPlayedRange:
+      min: 20
+      max: 120
+  mediumSettings:
+    prefixChance: 0.08
+    suffixChance: 0.14
+    allowedSkinIds: []
+    archetypeWeights:
+    - archetype: 0
+      weight: 3
+    - archetype: 1
+      weight: 2
+    - archetype: 2
+      weight: 2
+    - archetype: 3
+      weight: 1.5
+    - archetype: 4
+      weight: 1.5
+    fakeLevelRange:
+      min: 5
+      max: 18
+    fakeRankedLpRange:
+      min: 1050
+      max: 1350
+    fakeWinRateRange:
+      min: 48
+      max: 61
+    fakeMatchesPlayedRange:
+      min: 80
+      max: 350
+  hardSettings:
+    prefixChance: 0.12
+    suffixChance: 0.18
+    allowedSkinIds: []
+    archetypeWeights:
+    - archetype: 4
+      weight: 3
+    - archetype: 1
+      weight: 2.5
+    - archetype: 0
+      weight: 2
+    - archetype: 2
+      weight: 1.5
+    - archetype: 3
+      weight: 1
+    fakeLevelRange:
+      min: 12
+      max: 30
+    fakeRankedLpRange:
+      min: 1350
+      max: 1800
+    fakeWinRateRange:
+      min: 58
+      max: 72
+    fakeMatchesPlayedRange:
+      min: 200
+      max: 1000
