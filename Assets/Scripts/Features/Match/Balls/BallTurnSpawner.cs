@@ -65,10 +65,7 @@ public class BallTurnSpawner : MonoBehaviour
 
         if (logDebug)
         {
-            Debug.Log(
-                "[BallTurnSpawner] SetPlayer1Side -> Player1IsOnLeft=" + player1IsOnLeft,
-                this
-            );
+            Debug.Log("[BallTurnSpawner] SetPlayer1Side -> Player1IsOnLeft=" + player1IsOnLeft, this);
         }
     }
 
@@ -78,10 +75,7 @@ public class BallTurnSpawner : MonoBehaviour
 
         if (logDebug)
         {
-            Debug.Log(
-                "[BallTurnSpawner] SwapPlayerSides -> Player1IsOnLeft=" + player1IsOnLeft,
-                this
-            );
+            Debug.Log("[BallTurnSpawner] SwapPlayerSides -> Player1IsOnLeft=" + player1IsOnLeft, this);
         }
     }
 
@@ -157,13 +151,57 @@ public class BallTurnSpawner : MonoBehaviour
 
         if (logDebug)
         {
-            Debug.Log(
-                "[BallTurnSpawner] SpawnOnlineBallForOwner -> " +
-                "Owner=" + ownerId +
-                " | SpawnSide=" + (IsPlayerIdOnLeft(ownerId) ? "LEFT" : "RIGHT") +
-                " | SkinId=" + skinUniqueId,
-                this
-            );
+            Debug.Log("[BallTurnSpawner] SpawnOnlineBallForOwner -> Owner=" + ownerId + " | SpawnSide=" + (IsPlayerIdOnLeft(ownerId) ? "LEFT" : "RIGHT") + " | SkinId=" + skinUniqueId, this);
+        }
+
+        return physics;
+    }
+
+    public BallPhysics SpawnOfflineBallForOwner(PlayerID ownerId)
+    {
+        ResolveDependencies();
+
+        Transform spawnPoint = GetSpawnPointForOwner(ownerId);
+        GameObject prefabToSpawn = GetPrefabForOwner(ownerId);
+
+        if (spawnPoint == null || prefabToSpawn == null)
+        {
+            Debug.LogError("[BallTurnSpawner] Missing spawn point or prefab for offline spawn.", this);
+            return null;
+        }
+
+        GameObject instance = Instantiate(prefabToSpawn, spawnPoint.position, spawnPoint.rotation);
+        instance.name = prefabToSpawn.name + "_Offline_" + ownerId;
+
+        BallOwnership ownership = instance.GetComponent<BallOwnership>();
+        if (ownership != null)
+            ownership.Owner = ownerId;
+
+        DisableFusionComponentsForOfflineInstance(instance);
+
+        BallPhysics physics = instance.GetComponent<BallPhysics>();
+        if (physics == null)
+        {
+            Debug.LogError("[BallTurnSpawner] Offline spawned object missing BallPhysics.", this);
+            Destroy(instance);
+            return null;
+        }
+
+        Rigidbody rb = instance.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.constraints = RigidbodyConstraints.FreezeAll;
+            rb.isKinematic = true;
+        }
+
+        ApplyOfflineSkin(instance, ownerId);
+
+        if (logDebug)
+        {
+            Debug.Log("[BallTurnSpawner] SpawnOfflineBallForOwner -> Owner=" + ownerId + " | SpawnSide=" + (IsPlayerIdOnLeft(ownerId) ? "LEFT" : "RIGHT"), this);
         }
 
         return physics;
@@ -200,13 +238,33 @@ public class BallTurnSpawner : MonoBehaviour
 
         if (logDebug)
         {
-            Debug.Log(
-                "[BallTurnSpawner] Bound local online ball -> " +
-                "Local=" + localPlayer +
-                " | Owner=" + owner +
-                " | Side=" + (IsPlayerIdOnLeft(owner) ? "LEFT" : "RIGHT"),
-                this
-            );
+            Debug.Log("[BallTurnSpawner] Bound local online ball -> Local=" + localPlayer + " | Owner=" + owner + " | Side=" + (IsPlayerIdOnLeft(owner) ? "LEFT" : "RIGHT"), this);
+        }
+    }
+
+    public void TryBindCurrentOfflineBallForLocalControl(BallPhysics currentBall, PlayerID owner, PlayerID localPlayer)
+    {
+        ResolveDependencies();
+
+        if (launcher == null || currentBall == null)
+            return;
+
+        if (owner != localPlayer)
+            return;
+
+        if (lastBoundLocalBall == currentBall && lastBoundLocalOwner == owner)
+            return;
+
+        launcher.ball = currentBall;
+        launcher.SetActivePlacementArea(GetPlacementAreaForOwner(owner));
+        launcher.ResetLaunch();
+
+        lastBoundLocalBall = currentBall;
+        lastBoundLocalOwner = owner;
+
+        if (logDebug)
+        {
+            Debug.Log("[BallTurnSpawner] Bound local offline ball -> Local=" + localPlayer + " | Owner=" + owner + " | Side=" + (IsPlayerIdOnLeft(owner) ? "LEFT" : "RIGHT"), this);
         }
     }
 
@@ -218,6 +276,23 @@ public class BallTurnSpawner : MonoBehaviour
             return;
 
         PlayerID localPlayer = ResolveEffectiveLocalPlayerId();
+        if (currentTurnOwner == localPlayer)
+            return;
+
+        launcher.ball = null;
+        launcher.SetActivePlacementArea(null);
+
+        lastBoundLocalBall = null;
+        lastBoundLocalOwner = PlayerID.None;
+    }
+
+    public void ClearOfflineLauncherBindingIfNeeded(PlayerID currentTurnOwner, PlayerID localPlayer)
+    {
+        ResolveDependencies();
+
+        if (launcher == null)
+            return;
+
         if (currentTurnOwner == localPlayer)
             return;
 
@@ -249,7 +324,7 @@ public class BallTurnSpawner : MonoBehaviour
 
             NetworkObject netObj = balls[i].GetComponent<NetworkObject>();
 
-            if (netObj != null && canDespawnNetworkObjects)
+            if (netObj != null && netObj.enabled && canDespawnNetworkObjects)
                 runnerManager.ActiveRunner.Despawn(netObj);
             else
                 Destroy(balls[i].gameObject);
@@ -302,6 +377,58 @@ public class BallTurnSpawner : MonoBehaviour
             return player2BallPrefab != null ? player2BallPrefab : fallbackBallPrefab;
 
         return fallbackBallPrefab;
+    }
+
+    private void ApplyOfflineSkin(GameObject spawnedObject, PlayerID owner)
+    {
+        if (spawnedObject == null)
+            return;
+
+        if (PlayerSkinLoadout.Instance == null || PlayerSkinLoadout.Instance.Database == null)
+            return;
+
+        BallSkinData skin = owner == PlayerID.Player1
+            ? PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer1()
+            : PlayerSkinLoadout.Instance.GetEquippedSkinForPlayer2();
+
+        if (skin == null)
+            return;
+
+        BallSkinApplier applier = spawnedObject.GetComponent<BallSkinApplier>();
+        if (applier == null)
+            applier = spawnedObject.GetComponentInChildren<BallSkinApplier>(true);
+
+        if (applier == null)
+            return;
+
+        applier.ApplySkinData(PlayerSkinLoadout.Instance.Database, skin);
+    }
+
+    private void DisableFusionComponentsForOfflineInstance(GameObject instance)
+    {
+        if (instance == null)
+            return;
+
+        FusionNetworkBall fusionBall = instance.GetComponent<FusionNetworkBall>();
+        if (fusionBall == null)
+            fusionBall = instance.GetComponentInChildren<FusionNetworkBall>(true);
+
+        if (fusionBall != null)
+            fusionBall.enabled = false;
+
+        NetworkTransform networkTransform = instance.GetComponent<NetworkTransform>();
+        if (networkTransform == null)
+            networkTransform = instance.GetComponentInChildren<NetworkTransform>(true);
+
+        if (networkTransform != null)
+            networkTransform.enabled = false;
+
+        NetworkObject networkObject = instance.GetComponent<NetworkObject>();
+        if (networkObject == null)
+            networkObject = instance.GetComponentInChildren<NetworkObject>(true);
+
+        if (networkObject != null)
+            networkObject.enabled = false;
     }
 
     private PlayerID ResolveEffectiveLocalPlayerId()

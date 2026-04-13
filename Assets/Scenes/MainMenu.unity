@@ -47332,6 +47332,7 @@ GameObject:
   - component: {fileID: 1973634697}
   - component: {fileID: 1973634696}
   - component: {fileID: 1973634695}
+  - component: {fileID: 1973634698}
   m_Layer: 0
   m_Name: BotSessionRuntime
   m_TagString: Untagged
@@ -47368,7 +47369,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BotMatchSetupController
   botProfileGenerator: {fileID: 1973634696}
   botSessionRuntime: {fileID: 1973634697}
-  botOfflineMatchRuntime: {fileID: 0}
+  botOfflineMatchRuntime: {fileID: 1973634698}
   offlineBotMatchRulesConfig: {fileID: 11400000, guid: 4235922eae60aba49a337c965c87ad80, type: 2}
   useDisguisedIdentity: 0
   easyOfflineLabel: 'BOT [EASY]'
@@ -47443,6 +47444,40 @@ MonoBehaviour:
     isBot: 0
     isLocalBot: 0
     difficulty: 0
+--- !u!114 &1973634698
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1973634693}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 931216c3d9ae62e4d90fec066a458f54, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BotOfflineMatchRuntime
+  dontDestroyOnLoad: 1
+  enableDebugLogs: 1
+  hasPendingRequest: 0
+  currentRequest:
+    requestId: 
+    difficulty: 0
+    localDisplayName: 
+    botDisplayName: 
+    localProfileId: 
+    botProfileId: 
+    matchMode: 0
+    pointsToWin: 0
+    matchDurationSeconds: 0
+    turnDurationSeconds: 0
+    localPlayerIsPlayer1: 0
+    player1StartsOnLeft: 0
+    initialTurnOwner: 0
+    player1SkinUniqueId: 
+    player2SkinUniqueId: 
+    useDisguisedBotIdentity: 0
+    createdOfflineWithoutInternet: 0
+    randomSeed: 0
 --- !u!1 &1974013593
 GameObject:
   m_ObjectHideFlags: 0

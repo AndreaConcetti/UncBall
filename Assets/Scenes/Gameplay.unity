@@ -4016,6 +4016,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 309990289}
+  - component: {fileID: 309990290}
   m_Layer: 0
   m_Name: ManagerBot
   m_TagString: Untagged
@@ -4038,6 +4039,59 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1106984856}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &309990290
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309990288}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01b39f2251ecde04bbff319ba2dd6902, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OfflineBotMatchController
+  ballTurnSpawner: {fileID: 472537354}
+  hud: {fileID: 596191368}
+  scoreManager: {fileID: 880244600}
+  bottomBarOrderSwapper: {fileID: 265633326}
+  enableStuckBallCheck: 1
+  stuckTimeout: 2.5
+  stuckVelocityThreshold: 0.05
+  logDebug: 1
+  isOfflineBotSessionActive: 0
+  activeRequest:
+    requestId: 
+    difficulty: 0
+    localDisplayName: 
+    botDisplayName: 
+    localProfileId: 
+    botProfileId: 
+    matchMode: 0
+    pointsToWin: 0
+    matchDurationSeconds: 0
+    turnDurationSeconds: 0
+    localPlayerIsPlayer1: 0
+    player1StartsOnLeft: 0
+    initialTurnOwner: 0
+    player1SkinUniqueId: 
+    player2SkinUniqueId: 
+    useDisguisedBotIdentity: 0
+    createdOfflineWithoutInternet: 0
+    randomSeed: 0
+  localPlayerId: 1
+  botPlayerId: 2
+  currentTurnOwner: 1
+  player1OnLeft: 1
+  matchStarted: 0
+  matchEnded: 0
+  winner: 0
+  turnTimeRemaining: 0
+  matchTimeRemaining: 0
+  scoreP1: 0
+  scoreP2: 0
+  shotInFlight: 0
+  currentPlayerScoredThisTurn: 0
 --- !u!1 &324931215
 GameObject:
   m_ObjectHideFlags: 0
@@ -6663,6 +6717,7 @@ MonoBehaviour:
   gameplayCamera: {fileID: 2130389375}
   ballVisualRoll: {fileID: 0}
   onlineAuthority: {fileID: 1394314180}
+  offlineBotMatchController: {fileID: 0}
   settingsPanelUI: {fileID: 596191374}
   activePlacementArea: {fileID: 0}
   placementYOffset: 0
@@ -16499,6 +16554,7 @@ GameObject:
   - component: {fileID: 1394314184}
   - component: {fileID: 1394314185}
   - component: {fileID: 1394314186}
+  - component: {fileID: 1394314187}
   m_Layer: 0
   m_Name: Gameplay_NetworkRuntime
   m_TagString: Untagged
@@ -16658,6 +16714,23 @@ MonoBehaviour:
   onlineFlowController: {fileID: 0}
   presentationResultStore: {fileID: 0}
   autoReturnToMenuIfSceneStartsInsideAlreadyProcessedFinishedMatch: 1
+  logDebug: 1
+--- !u!114 &1394314187
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1394314177}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 80b757c260d021b42959da7fdc08c60c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BotOfflineGameplayBootstrap
+  botOfflineMatchRuntime: {fileID: 0}
+  offlineBotMatchController: {fileID: 309990290}
+  bootstrapAttempted: 0
+  bootstrapCompleted: 0
   logDebug: 1
 --- !u!1 &1404626876
 GameObject:

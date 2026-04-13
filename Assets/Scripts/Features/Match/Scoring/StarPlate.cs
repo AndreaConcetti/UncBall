@@ -26,9 +26,12 @@ public class StarPlate : MonoBehaviour
     [Tooltip("Se attivo, il bonus full board è il maggiore tra bonus piatto e punti già accumulati su questa board")]
     public bool useBestBetweenFlatAndDouble = true;
 
+    [Header("Debug")]
+    [SerializeField] private bool logDebug = false;
+
     private PlayerID[] slotOwners;
 
-    private Dictionary<PlayerID, int> platePoints = new Dictionary<PlayerID, int>
+    private readonly Dictionary<PlayerID, int> platePoints = new Dictionary<PlayerID, int>
     {
         { PlayerID.Player1, 0 },
         { PlayerID.Player2, 0 }
@@ -43,10 +46,35 @@ public class StarPlate : MonoBehaviour
 
     void Awake()
     {
-        slotOwners = new PlayerID[totalSlots];
+        EnsureInitialized();
+    }
 
-        for (int i = 0; i < totalSlots; i++)
-            slotOwners[i] = PlayerID.None;
+    private void OnValidate()
+    {
+        totalSlots = Mathf.Max(1, totalSlots);
+        fullBoardFlatBonus = Mathf.Max(0, fullBoardFlatBonus);
+    }
+
+    private void EnsureInitialized()
+    {
+        int safeSlots = Mathf.Max(1, totalSlots);
+
+        if (slotOwners == null || slotOwners.Length != safeSlots)
+        {
+            slotOwners = new PlayerID[safeSlots];
+
+            for (int i = 0; i < safeSlots; i++)
+                slotOwners[i] = PlayerID.None;
+
+            if (logDebug)
+                Debug.Log($"[StarPlate {plateNumber}] EnsureInitialized -> slotOwners created. Slots={safeSlots}", this);
+        }
+
+        if (!platePoints.ContainsKey(PlayerID.Player1))
+            platePoints[PlayerID.Player1] = 0;
+
+        if (!platePoints.ContainsKey(PlayerID.Player2))
+            platePoints[PlayerID.Player2] = 0;
     }
 
     /// <summary>
@@ -54,21 +82,24 @@ public class StarPlate : MonoBehaviour
     /// </summary>
     public void OnBallEntered(int slotIndex, PlayerID owner, BallPhysics ball, Transform slotTransform)
     {
+        EnsureInitialized();
+
         if (owner == PlayerID.None)
         {
-            Debug.LogWarning($"[StarPlate {plateNumber}] Owner None non valido.");
+            Debug.LogWarning($"[StarPlate {plateNumber}] Owner None non valido.", this);
             return;
         }
 
         if (slotIndex < 0 || slotIndex >= totalSlots)
         {
-            Debug.LogWarning($"[StarPlate {plateNumber}] slotIndex {slotIndex} non valido.");
+            Debug.LogWarning($"[StarPlate {plateNumber}] slotIndex {slotIndex} non valido.", this);
             return;
         }
 
         if (slotOwners[slotIndex] != PlayerID.None)
         {
-            Debug.Log($"[StarPlate {plateNumber}] Slot {slotIndex} già occupato.");
+            if (logDebug)
+                Debug.Log($"[StarPlate {plateNumber}] Slot {slotIndex} già occupato.", this);
             return;
         }
 
@@ -117,22 +148,29 @@ public class StarPlate : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning($"[StarPlate {plateNumber}] ScoreManager.Instance nullo.");
+            Debug.LogWarning($"[StarPlate {plateNumber}] ScoreManager.Instance nullo.", this);
         }
     }
 
     public void ResetPlate()
     {
-        for (int i = 0; i < totalSlots; i++)
+        EnsureInitialized();
+
+        for (int i = 0; i < slotOwners.Length; i++)
             slotOwners[i] = PlayerID.None;
 
         platePoints[PlayerID.Player1] = 0;
         platePoints[PlayerID.Player2] = 0;
+
+        if (logDebug)
+            Debug.Log($"[StarPlate {plateNumber}] ResetPlate completed. Slots={slotOwners.Length}", this);
     }
 
     public PlayerID GetSlotOwner(int slotIndex)
     {
-        if (slotIndex < 0 || slotIndex >= totalSlots)
+        EnsureInitialized();
+
+        if (slotIndex < 0 || slotIndex >= slotOwners.Length)
             return PlayerID.None;
 
         return slotOwners[slotIndex];
@@ -140,7 +178,9 @@ public class StarPlate : MonoBehaviour
 
     public bool IsPlateFull()
     {
-        for (int i = 0; i < totalSlots; i++)
+        EnsureInitialized();
+
+        for (int i = 0; i < slotOwners.Length; i++)
         {
             if (slotOwners[i] == PlayerID.None)
                 return false;
@@ -151,9 +191,11 @@ public class StarPlate : MonoBehaviour
 
     public int GetOccupiedSlotsCount()
     {
+        EnsureInitialized();
+
         int count = 0;
 
-        for (int i = 0; i < totalSlots; i++)
+        for (int i = 0; i < slotOwners.Length; i++)
         {
             if (slotOwners[i] != PlayerID.None)
                 count++;
@@ -164,6 +206,8 @@ public class StarPlate : MonoBehaviour
 
     public int GetCurrentPlatePoints(PlayerID player)
     {
+        EnsureInitialized();
+
         if (player == PlayerID.None)
             return 0;
 
@@ -181,12 +225,14 @@ public class StarPlate : MonoBehaviour
     /// </summary>
     public int GetMaxAdditionalPointsForPlayer(PlayerID player)
     {
+        EnsureInitialized();
+
         if (player == PlayerID.None)
             return 0;
 
         List<int> emptySlots = new List<int>();
 
-        for (int i = 0; i < totalSlots; i++)
+        for (int i = 0; i < slotOwners.Length; i++)
         {
             if (slotOwners[i] == PlayerID.None)
                 emptySlots.Add(i);
@@ -273,7 +319,7 @@ public class StarPlate : MonoBehaviour
         }
 
         int right = slotIndex + 1;
-        while (right < totalSlots && ownersState[right] == owner)
+        while (right < ownersState.Length && ownersState[right] == owner)
         {
             count++;
             right++;
@@ -284,7 +330,7 @@ public class StarPlate : MonoBehaviour
 
     private bool IsFullStar(PlayerID[] ownersState, PlayerID owner)
     {
-        for (int i = 0; i < totalSlots; i++)
+        for (int i = 0; i < ownersState.Length; i++)
         {
             if (ownersState[i] != owner)
                 return false;

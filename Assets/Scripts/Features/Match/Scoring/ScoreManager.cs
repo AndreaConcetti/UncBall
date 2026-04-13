@@ -52,10 +52,18 @@ public class ScoreManager : MonoBehaviour
         }
 
         Instance = this;
+        AutoResolveMissingStarPlates();
+    }
+
+    private void OnValidate()
+    {
+        AutoResolveMissingStarPlatesEditorSafe();
     }
 
     public void StartMatch()
     {
+        AutoResolveMissingStarPlates();
+
         ScoreP1 = 0;
         ScoreP2 = 0;
 
@@ -63,8 +71,19 @@ public class ScoreManager : MonoBehaviour
         IsOvertime = false;
         MatchActive = true;
 
-        foreach (StarPlate plate in starPlates)
-            plate?.ResetPlate();
+        if (starPlates != null)
+        {
+            for (int i = 0; i < starPlates.Length; i++)
+            {
+                if (starPlates[i] == null)
+                {
+                    Debug.LogWarning($"[ScoreManager] StartMatch -> starPlates[{i}] is null.", this);
+                    continue;
+                }
+
+                starPlates[i].ResetPlate();
+            }
+        }
 
         if (logDebug)
             Debug.Log("[ScoreManager] StartMatch -> scores reset.", this);
@@ -86,8 +105,16 @@ public class ScoreManager : MonoBehaviour
 
         IsHalftime = false;
 
-        foreach (StarPlate plate in starPlates)
-            plate?.ResetPlate();
+        if (starPlates != null)
+        {
+            for (int i = 0; i < starPlates.Length; i++)
+            {
+                if (starPlates[i] == null)
+                    continue;
+
+                starPlates[i].ResetPlate();
+            }
+        }
     }
 
     public void BeginOvertime()
@@ -240,5 +267,49 @@ public class ScoreManager : MonoBehaviour
             return PlayerID.Player2;
 
         return PlayerID.None;
+    }
+
+    private void AutoResolveMissingStarPlates()
+    {
+        if (starPlates == null || starPlates.Length == 0)
+        {
+#if UNITY_2023_1_OR_NEWER
+            starPlates = FindObjectsByType<StarPlate>(FindObjectsSortMode.None);
+#else
+            starPlates = FindObjectsOfType<StarPlate>();
+#endif
+            return;
+        }
+
+        bool hasNull = false;
+        for (int i = 0; i < starPlates.Length; i++)
+        {
+            if (starPlates[i] == null)
+            {
+                hasNull = true;
+                break;
+            }
+        }
+
+        if (!hasNull)
+            return;
+
+#if UNITY_2023_1_OR_NEWER
+        StarPlate[] found = FindObjectsByType<StarPlate>(FindObjectsSortMode.None);
+#else
+        StarPlate[] found = FindObjectsOfType<StarPlate>();
+#endif
+
+        if (found != null && found.Length > 0)
+            starPlates = found;
+    }
+
+    private void AutoResolveMissingStarPlatesEditorSafe()
+    {
+        if (Application.isPlaying)
+            return;
+
+        if (starPlates == null)
+            starPlates = new StarPlate[0];
     }
 }

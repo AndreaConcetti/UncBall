@@ -20,6 +20,9 @@ public class BallLauncher : MonoBehaviour
     public BallVisualRoll ballVisualRoll;
     public OnlineGameplayAuthority onlineAuthority;
 
+    [Header("Offline Bot")]
+    [SerializeField] private OfflineBotMatchController offlineBotMatchController;
+
     [Header("Optional UI Lock")]
     [SerializeField] private SettingsPanelUI settingsPanelUI;
 
@@ -97,6 +100,9 @@ public class BallLauncher : MonoBehaviour
         if (onlineAuthority == null)
             onlineAuthority = FindFirstObjectByType<OnlineGameplayAuthority>();
 
+        if (offlineBotMatchController == null)
+            offlineBotMatchController = FindFirstObjectByType<OfflineBotMatchController>();
+
         cachedSpawner = FindFirstObjectByType<BallTurnSpawner>();
 
         if (settingsPanelUI == null)
@@ -104,6 +110,9 @@ public class BallLauncher : MonoBehaviour
 #else
         if (onlineAuthority == null)
             onlineAuthority = FindObjectOfType<OnlineGameplayAuthority>();
+
+        if (offlineBotMatchController == null)
+            offlineBotMatchController = FindObjectOfType<OfflineBotMatchController>();
 
         cachedSpawner = FindObjectOfType<BallTurnSpawner>();
 
@@ -137,9 +146,11 @@ public class BallLauncher : MonoBehaviour
     void Update()
     {
         ResolveOnlineController();
+        ResolveOfflineController();
         ResolveSpawner();
         ResolveSettingsPanel();
         SyncOnlineCurrentBallBinding();
+        SyncOfflineCurrentBallBinding();
         AbortLocalPresentationIfStateInvalid();
 
         if (ball == null)
@@ -186,6 +197,18 @@ public class BallLauncher : MonoBehaviour
 #endif
     }
 
+    private void ResolveOfflineController()
+    {
+        if (offlineBotMatchController != null && offlineBotMatchController.IsOfflineBotSessionActive)
+            return;
+
+#if UNITY_2023_1_OR_NEWER
+        offlineBotMatchController = FindFirstObjectByType<OfflineBotMatchController>();
+#else
+        offlineBotMatchController = FindObjectOfType<OfflineBotMatchController>();
+#endif
+    }
+
     private void ResolveSettingsPanel()
     {
         if (settingsPanelUI != null)
@@ -200,6 +223,9 @@ public class BallLauncher : MonoBehaviour
 
     private PlayerID ResolveEffectiveLocalPlayerId()
     {
+        if (IsOfflineBotSessionActive())
+            return offlineBotMatchController.LocalPlayerId;
+
         ResolveOnlineController();
 
         if (cachedController != null)
@@ -213,6 +239,9 @@ public class BallLauncher : MonoBehaviour
 
     private void SyncOnlineCurrentBallBinding()
     {
+        if (IsOfflineBotSessionActive())
+            return;
+
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
             return;
 
@@ -265,6 +294,62 @@ public class BallLauncher : MonoBehaviour
             {
                 Debug.Log(
                     "[BallLauncher] SyncOnlineCurrentBallBinding -> bound local ball for owner " + owner,
+                    this
+                );
+            }
+        }
+    }
+
+    private void SyncOfflineCurrentBallBinding()
+    {
+        if (!IsOfflineBotSessionActive())
+            return;
+
+        ResolveSpawner();
+
+        BallPhysics offlineBall = offlineBotMatchController.CurrentBall;
+        PlayerID localPlayer = offlineBotMatchController.LocalPlayerId;
+        PlayerID currentOwner = offlineBotMatchController.CurrentTurnOwner;
+
+        if (offlineBall == null)
+        {
+            if (ball != null)
+            {
+                ForceAbortCurrentInteraction(false);
+                ball = null;
+                activePlacementArea = null;
+            }
+
+            return;
+        }
+
+        if (currentOwner != localPlayer)
+        {
+            if (ball != null && ball == offlineBall)
+            {
+                ForceAbortCurrentInteraction(false);
+                ball = null;
+                activePlacementArea = null;
+            }
+
+            return;
+        }
+
+        if (ball != offlineBall)
+        {
+            ball = offlineBall;
+
+            if (cachedSpawner != null)
+                activePlacementArea = cachedSpawner.GetPlacementAreaForOwner(currentOwner);
+            else
+                activePlacementArea = null;
+
+            ResetLaunch();
+
+            if (debugLogs)
+            {
+                Debug.Log(
+                    "[BallLauncher] SyncOfflineCurrentBallBinding -> bound local offline ball for owner " + currentOwner,
                     this
                 );
             }
@@ -324,6 +409,25 @@ public class BallLauncher : MonoBehaviour
 
     private void AbortLocalPresentationIfStateInvalid()
     {
+        if (IsOfflineBotSessionActive())
+        {
+            if (offlineBotMatchController == null)
+                return;
+
+            bool offlineLostTurn = offlineBotMatchController.CurrentTurnOwner != offlineBotMatchController.LocalPlayerId;
+            bool offlineMatchBlocked = offlineBotMatchController.MatchEnded || offlineBotMatchController.MidMatchBreakActive;
+            bool offlineBallMissing = ball == null;
+            bool offlineLaunchedAlready = CurrentPhase == LaunchPhase.Launched;
+
+            if (offlineLaunchedAlready)
+                return;
+
+            if (offlineLostTurn || offlineMatchBlocked || offlineBallMissing)
+                ForceAbortCurrentInteraction(false);
+
+            return;
+        }
+
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
             return;
 
@@ -338,19 +442,19 @@ public class BallLauncher : MonoBehaviour
 
         PlayerID localPlayer = ResolveEffectiveLocalPlayerId();
 
-        bool localLostTurn = cachedController.CurrentTurnOwner != localPlayer;
-        bool matchBlocked =
+        bool onlineLostTurn = cachedController.CurrentTurnOwner != localPlayer;
+        bool onlineMatchBlocked =
             cachedController.MatchEnded ||
             cachedController.MidMatchBreakActive ||
             cachedController.IsAuthorityConnectionLostOverlayVisible;
 
-        bool ballMissing = ball == null;
-        bool launchedAlready = CurrentPhase == LaunchPhase.Launched;
+        bool onlineBallMissing = ball == null;
+        bool onlineLaunchedAlready = CurrentPhase == LaunchPhase.Launched;
 
-        if (launchedAlready)
+        if (onlineLaunchedAlready)
             return;
 
-        if (localLostTurn || matchBlocked || ballMissing)
+        if (onlineLostTurn || onlineMatchBlocked || onlineBallMissing)
             ForceAbortCurrentInteraction(false);
     }
 
@@ -628,7 +732,7 @@ public class BallLauncher : MonoBehaviour
         else
             ball.transform.position = targetWorld;
 
-        if (cachedController != null && cachedController.IsNetworkStateReadable)
+        if (!IsOfflineBotSessionActive() && cachedController != null && cachedController.IsNetworkStateReadable)
         {
             if (!hasLastRequestedPlacement ||
                 Vector3.SqrMagnitude(targetWorld - lastRequestedPlacementWorld) >= placementNetworkSendThreshold * placementNetworkSendThreshold)
@@ -642,7 +746,7 @@ public class BallLauncher : MonoBehaviour
 
     void EndPlacementDrag()
     {
-        if (ball != null && cachedController != null && cachedController.IsNetworkStateReadable)
+        if (!IsOfflineBotSessionActive() && ball != null && cachedController != null && cachedController.IsNetworkStateReadable)
         {
             Vector3 finalWorld = ball.transform.position;
 
@@ -662,7 +766,7 @@ public class BallLauncher : MonoBehaviour
 
     void EndMousePlacementDrag()
     {
-        if (ball != null && cachedController != null && cachedController.IsNetworkStateReadable)
+        if (!IsOfflineBotSessionActive() && ball != null && cachedController != null && cachedController.IsNetworkStateReadable)
         {
             Vector3 finalWorld = ball.transform.position;
 
@@ -792,7 +896,23 @@ public class BallLauncher : MonoBehaviour
         if (!IsCurrentBallOwnedByLocalPlayer())
             return;
 
-        ResolveOnlineController();
+        Vector3 impulseDir = LaunchDirection.normalized;
+        impulseDir.y = 0f;
+        float force = Mathf.Lerp(minForce, maxForce, ChargeRatio);
+
+        if (IsOfflineBotSessionActive())
+        {
+            if (offlineBotMatchController == null || offlineBotMatchController.MatchEnded || offlineBotMatchController.MidMatchBreakActive)
+                return;
+
+            hasLaunched = true;
+            CurrentPhase = LaunchPhase.Launched;
+
+            RefreshBallVisualRollReference();
+            offlineBotMatchController.RequestLaunchCurrentBall(impulseDir, force);
+            cameraController?.OnBallLaunched();
+            return;
+        }
 
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession || cachedController == null || !cachedController.IsNetworkStateReadable)
             return;
@@ -809,12 +929,7 @@ public class BallLauncher : MonoBehaviour
 
         RefreshBallVisualRollReference();
 
-        float force = Mathf.Lerp(minForce, maxForce, ChargeRatio);
-        Vector3 impulseDir = LaunchDirection.normalized;
-        impulseDir.y = 0f;
-
         cachedController.RequestLaunchCurrentBall(impulseDir, force);
-
         cameraController?.OnBallLaunched();
     }
 
@@ -921,6 +1036,23 @@ public class BallLauncher : MonoBehaviour
         if (settingsPanelUI != null && settingsPanelUI.IsPanelOpen)
             return true;
 
+        if (IsOfflineBotSessionActive())
+        {
+            if (offlineBotMatchController == null)
+                return true;
+
+            if (offlineBotMatchController.MatchEnded || offlineBotMatchController.MidMatchBreakActive)
+                return true;
+
+            if (offlineBotMatchController.CurrentTurnOwner != offlineBotMatchController.LocalPlayerId)
+                return true;
+
+            if (!IsCurrentBallOwnedByLocalPlayer())
+                return true;
+
+            return false;
+        }
+
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
             return true;
 
@@ -956,10 +1088,22 @@ public class BallLauncher : MonoBehaviour
         return owner == ResolveEffectiveLocalPlayerId();
     }
 
+    bool IsOfflineBotSessionActive()
+    {
+        return offlineBotMatchController != null && offlineBotMatchController.IsOfflineBotSessionActive;
+    }
+
     PlayerID GetOwnerFromBall(BallPhysics targetBall)
     {
         if (targetBall == null)
             return PlayerID.None;
+
+        if (IsOfflineBotSessionActive())
+        {
+            BallOwnership offlineOwnership = targetBall.GetComponent<BallOwnership>();
+            if (offlineOwnership != null)
+                return offlineOwnership.Owner;
+        }
 
         FusionNetworkBall fusionBall = targetBall.GetComponent<FusionNetworkBall>();
         if (fusionBall != null)

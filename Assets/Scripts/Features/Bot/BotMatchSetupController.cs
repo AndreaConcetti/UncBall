@@ -30,9 +30,8 @@ public sealed class BotMatchSetupController : MonoBehaviour
     [SerializeField] private BallSkinRandomGenerator ballSkinRandomGenerator;
     [SerializeField] private bool assignGeneratedBotSkinToPlayer2 = true;
 
-    [Header("Offline Side / Turn Policy")]
+    [Header("Offline Side Policy")]
     [SerializeField] private bool randomizeSidesForOfflineBot = true;
-    [SerializeField] private bool randomizeStartingTurnForOfflineBot = true;
 
     [Header("Scene Flow")]
     [SerializeField] private bool autoLoadGameplayScene = true;
@@ -232,9 +231,11 @@ public sealed class BotMatchSetupController : MonoBehaviour
 
         bool localPlayerIsPlayer1 = randomizeSidesForOfflineBot ? UnityEngine.Random.value >= 0.5f : true;
         bool player1StartsOnLeft = UnityEngine.Random.value >= 0.5f;
-        PlayerID initialTurnOwner = randomizeStartingTurnForOfflineBot
-            ? (UnityEngine.Random.value >= 0.5f ? PlayerID.Player1 : PlayerID.Player2)
-            : PlayerID.Player1;
+
+        // Offline bot rule:
+        // - player or bot can be on the left randomly
+        // - the LEFT side always starts
+        PlayerID initialTurnOwner = player1StartsOnLeft ? PlayerID.Player1 : PlayerID.Player2;
 
         string localSkinId = ResolveLocalEquippedSkinId();
         string botSkinId = botSkin != null && !string.IsNullOrWhiteSpace(botSkin.skinUniqueId)
