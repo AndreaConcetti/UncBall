@@ -4,6 +4,9 @@ public sealed class BotSessionRuntime : MonoBehaviour
 {
     public static BotSessionRuntime Instance { get; private set; }
 
+    [Header("Persistence")]
+    [SerializeField] private bool dontDestroyOnLoad = true;
+
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
 
@@ -25,12 +28,18 @@ public sealed class BotSessionRuntime : MonoBehaviour
                 Debug.Log("[BotSessionRuntime] Duplicate instance destroyed.", this);
             }
 
-            Destroy(gameObject);
+            GameObject duplicateRoot = transform.root != null ? transform.root.gameObject : gameObject;
+            Destroy(duplicateRoot);
             return;
         }
 
         Instance = this;
-        DontDestroyOnLoad(gameObject);
+
+        if (dontDestroyOnLoad)
+        {
+            GameObject runtimeRoot = transform.root != null ? transform.root.gameObject : gameObject;
+            DontDestroyOnLoad(runtimeRoot);
+        }
 
         if (enableDebugLogs)
         {

@@ -13,22 +13,22 @@ MonoBehaviour:
   m_Name: OfflineBotMatchRulesConfig
   m_EditorClassIdentifier: Assembly-CSharp::OfflineBotMatchRulesConfig
   easy:
-    matchMode: 0
-    pointsToWin: 10
-    matchDurationSeconds: 180
-    turnDurationSeconds: 14
-  medium:
     matchMode: 1
-    pointsToWin: 6
-    matchDurationSeconds: 60
-    turnDurationSeconds: 8
-  hard:
-    matchMode: 0
     pointsToWin: 200
     matchDurationSeconds: 360
-    turnDurationSeconds: 5
+    turnDurationSeconds: 12
+  medium:
+    matchMode: 1
+    pointsToWin: 200
+    matchDurationSeconds: 360
+    turnDurationSeconds: 12
+  hard:
+    matchMode: 1
+    pointsToWin: 200
+    matchDurationSeconds: 360
+    turnDurationSeconds: 12
   unbeatable:
     matchMode: 1
     pointsToWin: 200
-    matchDurationSeconds: 180
-    turnDurationSeconds: 8
+    matchDurationSeconds: 360
+    turnDurationSeconds: 12

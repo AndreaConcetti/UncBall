@@ -17,64 +17,27 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         WaitingPreLaunchDelay = 2
     }
 
-    private struct LocalBotTargetChoice
+    private struct BotShotErrorSettings
     {
-        public bool hasTarget;
-        public int targetPlateIndex;
-        public int targetSlotIndex;
-        public string reason;
-    }
+        public float majorMissChanceBoard1;
+        public float majorMissChanceBoard2;
+        public float majorMissChanceBoard3;
 
-    private struct LocalBoardSlotState
-    {
-        public int slotIndex;
-        public string slotName;
-        public Vector3 center;
-        public bool isOccupied;
-        public PlayerID occupiedOwner;
-    }
+        public float minorSwipeXBoard1;
+        public float minorSwipeXBoard2;
+        public float minorSwipeXBoard3;
 
-    private sealed class LocalBoardState
-    {
-        public int plateIndex;
-        public string plateName;
-        public List<LocalBoardSlotState> slots = new List<LocalBoardSlotState>();
+        public float minorSwipeYBoard1;
+        public float minorSwipeYBoard2;
+        public float minorSwipeYBoard3;
 
-        public int EnemyCount(PlayerID enemyOwner)
-        {
-            int count = 0;
-            for (int i = 0; i < slots.Count; i++)
-            {
-                if (slots[i].isOccupied && slots[i].occupiedOwner == enemyOwner)
-                    count++;
-            }
+        public float majorSwipeXBoard1;
+        public float majorSwipeXBoard2;
+        public float majorSwipeXBoard3;
 
-            return count;
-        }
-
-        public int FriendlyCount(PlayerID friendlyOwner)
-        {
-            int count = 0;
-            for (int i = 0; i < slots.Count; i++)
-            {
-                if (slots[i].isOccupied && slots[i].occupiedOwner == friendlyOwner)
-                    count++;
-            }
-
-            return count;
-        }
-
-        public int FreeCount()
-        {
-            int count = 0;
-            for (int i = 0; i < slots.Count; i++)
-            {
-                if (!slots[i].isOccupied)
-                    count++;
-            }
-
-            return count;
-        }
+        public float majorSwipeYBoard1;
+        public float majorSwipeYBoard2;
+        public float majorSwipeYBoard3;
     }
 
     [Header("Scene References")]
@@ -125,6 +88,62 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private float unbeatableThinkDelayMax = 0.45f;
     [SerializeField] private int maxAdaptiveMissStacks = 5;
     [SerializeField] private bool forceBrainSelectedTarget = true;
+    [SerializeField] private bool fallbackToGeneralSolveWhenForcedTargetFails = true;
+
+    [Header("Bot Shot Error")]
+    [SerializeField] private bool enableDifficultyShotError = true;
+    [SerializeField] private bool logShotError = true;
+
+    [Header("Easy Error Tuning")]
+    [SerializeField] private float easyMajorMissChanceBoard1 = 0.18f;
+    [SerializeField] private float easyMajorMissChanceBoard2 = 0.35f;
+    [SerializeField] private float easyMajorMissChanceBoard3 = 0.55f;
+    [SerializeField] private float easyMinorSwipeXBoard1 = 28f;
+    [SerializeField] private float easyMinorSwipeXBoard2 = 52f;
+    [SerializeField] private float easyMinorSwipeXBoard3 = 86f;
+    [SerializeField] private float easyMinorSwipeYBoard1 = 22f;
+    [SerializeField] private float easyMinorSwipeYBoard2 = 46f;
+    [SerializeField] private float easyMinorSwipeYBoard3 = 82f;
+    [SerializeField] private float easyMajorSwipeXBoard1 = 90f;
+    [SerializeField] private float easyMajorSwipeXBoard2 = 155f;
+    [SerializeField] private float easyMajorSwipeXBoard3 = 240f;
+    [SerializeField] private float easyMajorSwipeYBoard1 = 70f;
+    [SerializeField] private float easyMajorSwipeYBoard2 = 130f;
+    [SerializeField] private float easyMajorSwipeYBoard3 = 210f;
+
+    [Header("Medium Error Tuning")]
+    [SerializeField] private float mediumMajorMissChanceBoard1 = 0.08f;
+    [SerializeField] private float mediumMajorMissChanceBoard2 = 0.18f;
+    [SerializeField] private float mediumMajorMissChanceBoard3 = 0.30f;
+    [SerializeField] private float mediumMinorSwipeXBoard1 = 16f;
+    [SerializeField] private float mediumMinorSwipeXBoard2 = 30f;
+    [SerializeField] private float mediumMinorSwipeXBoard3 = 54f;
+    [SerializeField] private float mediumMinorSwipeYBoard1 = 14f;
+    [SerializeField] private float mediumMinorSwipeYBoard2 = 24f;
+    [SerializeField] private float mediumMinorSwipeYBoard3 = 45f;
+    [SerializeField] private float mediumMajorSwipeXBoard1 = 60f;
+    [SerializeField] private float mediumMajorSwipeXBoard2 = 95f;
+    [SerializeField] private float mediumMajorSwipeXBoard3 = 145f;
+    [SerializeField] private float mediumMajorSwipeYBoard1 = 42f;
+    [SerializeField] private float mediumMajorSwipeYBoard2 = 76f;
+    [SerializeField] private float mediumMajorSwipeYBoard3 = 118f;
+
+    [Header("Hard Error Tuning")]
+    [SerializeField] private float hardMajorMissChanceBoard1 = 0.03f;
+    [SerializeField] private float hardMajorMissChanceBoard2 = 0.08f;
+    [SerializeField] private float hardMajorMissChanceBoard3 = 0.16f;
+    [SerializeField] private float hardMinorSwipeXBoard1 = 8f;
+    [SerializeField] private float hardMinorSwipeXBoard2 = 16f;
+    [SerializeField] private float hardMinorSwipeXBoard3 = 28f;
+    [SerializeField] private float hardMinorSwipeYBoard1 = 8f;
+    [SerializeField] private float hardMinorSwipeYBoard2 = 14f;
+    [SerializeField] private float hardMinorSwipeYBoard3 = 26f;
+    [SerializeField] private float hardMajorSwipeXBoard1 = 28f;
+    [SerializeField] private float hardMajorSwipeXBoard2 = 48f;
+    [SerializeField] private float hardMajorSwipeXBoard3 = 78f;
+    [SerializeField] private float hardMajorSwipeYBoard1 = 20f;
+    [SerializeField] private float hardMajorSwipeYBoard2 = 36f;
+    [SerializeField] private float hardMajorSwipeYBoard3 = 58f;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
@@ -527,39 +546,33 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (launcher == null || botShotSolver == null)
             return;
 
-        BotShotSolution solution;
-        LocalBotTargetChoice localChoice = default;
         BotTargetDecisionService.BotTargetDecision serviceDecision = default;
-        bool useForcedTarget = false;
+        bool hasStrategicTarget = false;
 
-        if (ShouldUseInternalStrategicFallback(activeRequest.Difficulty))
-            localChoice = TryBuildInternalStrategicTarget();
-
-        if (localChoice.hasTarget)
-        {
-            useForcedTarget = forceBrainSelectedTarget;
-        }
-        else if (botTargetDecisionService != null)
+        if (botTargetDecisionService != null)
         {
             serviceDecision = botTargetDecisionService.DecideBestTarget(botPlayerId, localPlayerId, activeRequest.Difficulty);
-            useForcedTarget = serviceDecision.hasTarget && forceBrainSelectedTarget;
+            hasStrategicTarget = serviceDecision.hasTarget;
         }
 
-        if (useForcedTarget)
-        {
-            int targetPlate = localChoice.hasTarget ? localChoice.targetPlateIndex : serviceDecision.targetPlateIndex;
-            int targetSlot = localChoice.hasTarget ? localChoice.targetSlotIndex : serviceDecision.targetSlotIndex;
+        BotShotSolution solution = default;
+        bool usedForcedStrategicTarget = false;
 
+        if (hasStrategicTarget && forceBrainSelectedTarget)
+        {
             solution = botShotSolver.SolveBestShotForTarget(
                 currentBall,
                 launcher,
                 scoreManager,
                 activeRequest.Difficulty,
                 Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)),
-                targetPlate,
-                targetSlot);
+                serviceDecision.targetPlateIndex,
+                serviceDecision.targetSlotIndex);
+
+            usedForcedStrategicTarget = solution.hasSolution;
         }
-        else
+
+        if (!solution.hasSolution && fallbackToGeneralSolveWhenForcedTargetFails)
         {
             solution = botShotSolver.SolveBestShot(
                 currentBall,
@@ -573,45 +586,48 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         {
             if (logDebug)
             {
-                string targetInfo = string.Empty;
-
-                if (localChoice.hasTarget)
-                {
-                    targetInfo =
-                        " | BrainTargetPlate=" + localChoice.targetPlateIndex +
-                        " | BrainTargetSlot=" + localChoice.targetSlotIndex +
-                        " | Reason=" + localChoice.reason;
-                }
-                else if (serviceDecision.hasTarget)
-                {
-                    targetInfo =
-                        " | BrainTargetPlate=" + serviceDecision.targetPlateIndex +
-                        " | BrainTargetSlot=" + serviceDecision.targetSlotIndex +
-                        " | Reason=" + serviceDecision.reason;
-                }
+                string targetInfo = hasStrategicTarget
+                    ? " | BrainTargetPlate=" + serviceDecision.targetPlateIndex +
+                      " | BrainTargetSlot=" + serviceDecision.targetSlotIndex +
+                      " | Reason=" + serviceDecision.reason
+                    : string.Empty;
 
                 Debug.LogWarning(
-                    "[OfflineBotMatchController] BotShotSolver returned no solution." + targetInfo,
+                    "[OfflineBotMatchController] BotShotSolver returned no solution." +
+                    targetInfo +
+                    " | MissStacks=" + consecutiveBotMisses,
                     this);
             }
 
             return;
         }
 
-        pendingBotSwipe = solution.bestCandidate.swipeDelta;
-        pendingBotDirection = solution.bestCandidate.launchDirection;
-        pendingBotForce = solution.bestCandidate.launchForce;
+        Vector2 finalSwipe = solution.bestCandidate.swipeDelta;
+        Vector3 finalDirection = solution.bestCandidate.launchDirection;
+        float finalForce = solution.bestCandidate.launchForce;
+
+        ApplyDifficultyShotError(
+            launcher,
+            activeRequest.Difficulty,
+            solution.bestCandidate.targetPlateIndex,
+            ref finalSwipe,
+            ref finalDirection,
+            ref finalForce);
+
+        pendingBotSwipe = finalSwipe;
+        pendingBotDirection = finalDirection;
+        pendingBotForce = finalForce;
         pendingBotSeedId = botShotSolver.GetLastSeedId();
         pendingBotTargetPlateIndex = solution.bestCandidate.targetPlateIndex;
         pendingBotTargetSlotIndex = solution.bestCandidate.targetSlotIndex;
         pendingBotSeedStartPositionValid = botShotSolver.TryGetLastChosenSeedStartPosition(out pendingBotSeedStartPosition);
 
-        if (localChoice.hasTarget)
-            pendingBotDecisionReason = localChoice.reason;
-        else if (serviceDecision.hasTarget)
+        if (usedForcedStrategicTarget)
             pendingBotDecisionReason = serviceDecision.reason;
+        else if (hasStrategicTarget)
+            pendingBotDecisionReason = serviceDecision.reason + " | FallbackGeneralSolve";
         else
-            pendingBotDecisionReason = string.Empty;
+            pendingBotDecisionReason = "GeneralSolve";
 
         lastTargetPlateIndex = solution.bestCandidate.targetPlateIndex;
         lastTargetPlateName = solution.bestCandidate.targetPlateName;
@@ -619,9 +635,9 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         lastTargetSlotName = solution.bestCandidate.targetSlotName;
         lastTargetSlotCenter = solution.bestCandidate.targetSlotCenter;
         lastBestSamplePosition = solution.bestCandidate.bestSamplePosition;
-        lastSwipeDelta = solution.bestCandidate.swipeDelta;
-        lastLaunchDirection = solution.bestCandidate.launchDirection;
-        lastLaunchForce = solution.bestCandidate.launchForce;
+        lastSwipeDelta = finalSwipe;
+        lastLaunchDirection = finalDirection;
+        lastLaunchForce = finalForce;
         lastTargetDistance = solution.bestCandidate.bestDistanceToTarget;
         lastEnteredTargetTrigger = solution.bestCandidate.enteredTargetTrigger;
         lastDescendingAtEntry = solution.bestCandidate.descendingAtEntry;
@@ -645,353 +661,210 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         }
     }
 
-    private LocalBotTargetChoice TryBuildInternalStrategicTarget()
+    private void ApplyDifficultyShotError(
+        BallLauncher launcher,
+        BotDifficulty difficulty,
+        int targetPlateIndex,
+        ref Vector2 swipe,
+        ref Vector3 direction,
+        ref float force)
     {
-        LocalBotTargetChoice choice = default;
+        if (!enableDifficultyShotError)
+            return;
 
-        if (scoreManager == null || scoreManager.starPlates == null || scoreManager.starPlates.Length == 0)
-            return choice;
+        if (launcher == null)
+            return;
 
-        List<LocalBoardState> boards = BuildLocalBoardStates();
-        if (boards.Count == 0)
-            return choice;
+        if (difficulty == BotDifficulty.Unbeatable)
+            return;
 
-        if (TrySelectContestEnemyBoardTarget(boards, out choice))
-            return choice;
+        BotShotErrorSettings settings = GetShotErrorSettings(difficulty);
+        float missChance = GetMajorMissChance(settings, targetPlateIndex);
+        float minorX = GetMinorSwipeX(settings, targetPlateIndex);
+        float minorY = GetMinorSwipeY(settings, targetPlateIndex);
+        float majorX = GetMajorSwipeX(settings, targetPlateIndex);
+        float majorY = GetMajorSwipeY(settings, targetPlateIndex);
 
-        if (TrySelectAdjacentFriendlyComboTarget(boards, out choice))
-            return choice;
+        bool majorMiss = Random.value < missChance;
 
-        if (TrySelectOpeningHighBoardTarget(boards, out choice))
-            return choice;
+        float deltaX;
+        float deltaY;
 
-        return choice;
-    }
-
-    private bool ShouldUseInternalStrategicFallback(BotDifficulty difficulty)
-    {
-        return difficulty == BotDifficulty.Hard || difficulty == BotDifficulty.Unbeatable;
-    }
-
-    private List<LocalBoardState> BuildLocalBoardStates()
-    {
-        List<LocalBoardState> result = new List<LocalBoardState>();
-
-        for (int plateIndex = 0; plateIndex < scoreManager.starPlates.Length; plateIndex++)
+        if (majorMiss)
         {
-            StarPlate plate = scoreManager.starPlates[plateIndex];
-            if (plate == null)
-                continue;
-
-            SlotScorer[] slotScorers = plate.GetComponentsInChildren<SlotScorer>(true);
-            if (slotScorers == null || slotScorers.Length == 0)
-                continue;
-
-            LocalBoardState board = new LocalBoardState
-            {
-                plateIndex = plateIndex,
-                plateName = plate.name
-            };
-
-            for (int i = 0; i < slotScorers.Length; i++)
-            {
-                SlotScorer slot = slotScorers[i];
-                if (slot == null)
-                    continue;
-
-                Collider slotCollider = slot.GetComponent<Collider>();
-                if (slotCollider == null)
-                    continue;
-
-                PlayerID occupiedOwner;
-                bool isOccupied = TryDetectOccupiedOwner(slotCollider, out occupiedOwner);
-
-                board.slots.Add(new LocalBoardSlotState
-                {
-                    slotIndex = slot.slotIndex,
-                    slotName = slot.name,
-                    center = slotCollider.bounds.center,
-                    isOccupied = isOccupied,
-                    occupiedOwner = occupiedOwner
-                });
-            }
-
-            board.slots.Sort((a, b) => a.slotIndex.CompareTo(b.slotIndex));
-
-            if (board.slots.Count > 0)
-                result.Add(board);
+            deltaX = RandomSignedMagnitude(majorX * 0.55f, majorX);
+            deltaY = RandomSignedMagnitude(majorY * 0.45f, majorY);
+        }
+        else
+        {
+            deltaX = Random.Range(-minorX, minorX);
+            deltaY = Random.Range(-minorY, minorY);
         }
 
-        return result;
-    }
+        Vector2 originalSwipe = swipe;
+        swipe += new Vector2(deltaX, deltaY);
 
-    private bool TryDetectOccupiedOwner(Collider slotCollider, out PlayerID occupiedOwner)
-    {
-        occupiedOwner = PlayerID.None;
-
-        if (slotCollider == null)
-            return false;
-
-        Bounds bounds = slotCollider.bounds;
-        Vector3 halfExtents = bounds.extents;
-        if (halfExtents.x <= 0f) halfExtents.x = 0.01f;
-        if (halfExtents.y <= 0f) halfExtents.y = 0.01f;
-        if (halfExtents.z <= 0f) halfExtents.z = 0.01f;
-
-        Collider[] hits = Physics.OverlapBox(
-            bounds.center,
-            halfExtents * 0.9f,
-            slotCollider.transform.rotation,
-            ~0,
-            QueryTriggerInteraction.Collide);
-
-        for (int i = 0; i < hits.Length; i++)
+        if (!launcher.TryBuildLaunchFromSwipe(swipe, out Vector3 rebuiltDirection, out float rebuiltForce))
         {
-            Collider hit = hits[i];
-            if (hit == null || hit == slotCollider)
-                continue;
-
-            BallPhysics ball = hit.GetComponentInParent<BallPhysics>();
-            if (ball == null)
-                continue;
-
-            BallOwnership ownership = ball.GetComponent<BallOwnership>();
-            if (ownership != null)
-            {
-                occupiedOwner = ownership.Owner;
-                return true;
-            }
-
-            occupiedOwner = PlayerID.None;
-            return true;
+            swipe = originalSwipe;
+            return;
         }
 
-        return false;
-    }
+        direction = rebuiltDirection;
+        force = rebuiltForce;
 
-    private bool TrySelectContestEnemyBoardTarget(List<LocalBoardState> boards, out LocalBotTargetChoice choice)
-    {
-        choice = default;
-
-        int bestBoardPriority = int.MinValue;
-        int bestPlateIndex = -1;
-        int bestSlotIndex = -1;
-
-        for (int i = 0; i < boards.Count; i++)
-        {
-            LocalBoardState board = boards[i];
-            int enemyCount = board.EnemyCount(localPlayerId);
-            int freeCount = board.FreeCount();
-
-            if (enemyCount <= 0 || freeCount <= 0)
-                continue;
-
-            int boardPriority = enemyCount * 1000 + board.plateIndex * 100;
-
-            int candidateSlotIndex = FindBestFreeSlotForContest(board);
-            if (candidateSlotIndex < 0)
-                continue;
-
-            if (boardPriority > bestBoardPriority)
-            {
-                bestBoardPriority = boardPriority;
-                bestPlateIndex = board.plateIndex;
-                bestSlotIndex = candidateSlotIndex;
-            }
-        }
-
-        if (bestPlateIndex < 0 || bestSlotIndex < 0)
-            return false;
-
-        choice = new LocalBotTargetChoice
-        {
-            hasTarget = true,
-            targetPlateIndex = bestPlateIndex,
-            targetSlotIndex = bestSlotIndex,
-            reason = "LocalContestEnemyBoard"
-        };
-
-        if (logDebug)
+        if (logShotError)
         {
             Debug.Log(
-                "[OfflineBotMatchController] Internal tactical target selected -> " +
-                "PlateIndex=" + bestPlateIndex +
-                " | SlotIndex=" + bestSlotIndex +
-                " | Reason=" + choice.reason,
+                "[OfflineBotMatchController] ApplyDifficultyShotError -> " +
+                "Difficulty=" + difficulty +
+                " | Plate=" + targetPlateIndex +
+                " | MajorMiss=" + majorMiss +
+                " | SwipeBefore=" + originalSwipe +
+                " | SwipeAfter=" + swipe +
+                " | Delta=(" + deltaX + "," + deltaY + ")",
                 this);
         }
-
-        return true;
     }
 
-    private int FindBestFreeSlotForContest(LocalBoardState board)
+    private BotShotErrorSettings GetShotErrorSettings(BotDifficulty difficulty)
     {
-        int bestSlotIndex = -1;
-        int bestScore = int.MinValue;
-
-        for (int i = 0; i < board.slots.Count; i++)
+        switch (difficulty)
         {
-            LocalBoardSlotState slot = board.slots[i];
-            if (slot.isOccupied)
-                continue;
-
-            int score = 0;
-
-            bool leftEnemy = IsAdjacentOwnedBy(board, i - 1, localPlayerId);
-            bool rightEnemy = IsAdjacentOwnedBy(board, i + 1, localPlayerId);
-            bool leftFriendly = IsAdjacentOwnedBy(board, i - 1, botPlayerId);
-            bool rightFriendly = IsAdjacentOwnedBy(board, i + 1, botPlayerId);
-
-            if (leftEnemy) score += 1000;
-            if (rightEnemy) score += 1000;
-            if (leftFriendly) score += 400;
-            if (rightFriendly) score += 400;
-
-            int centerIndex = board.slots.Count / 2;
-            score -= Mathf.Abs(slot.slotIndex - centerIndex) * 10;
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestSlotIndex = slot.slotIndex;
-            }
-        }
-
-        return bestSlotIndex;
-    }
-
-    private bool TrySelectAdjacentFriendlyComboTarget(List<LocalBoardState> boards, out LocalBotTargetChoice choice)
-    {
-        choice = default;
-
-        int bestScore = int.MinValue;
-        int bestPlateIndex = -1;
-        int bestSlotIndex = -1;
-
-        for (int i = 0; i < boards.Count; i++)
-        {
-            LocalBoardState board = boards[i];
-            if (board.FreeCount() <= 0)
-                continue;
-
-            for (int s = 0; s < board.slots.Count; s++)
-            {
-                LocalBoardSlotState slot = board.slots[s];
-                if (slot.isOccupied)
-                    continue;
-
-                int score = 0;
-
-                bool leftFriendly = IsAdjacentOwnedBy(board, s - 1, botPlayerId);
-                bool rightFriendly = IsAdjacentOwnedBy(board, s + 1, botPlayerId);
-                bool leftEnemy = IsAdjacentOwnedBy(board, s - 1, localPlayerId);
-                bool rightEnemy = IsAdjacentOwnedBy(board, s + 1, localPlayerId);
-
-                if (leftFriendly) score += 1000;
-                if (rightFriendly) score += 1000;
-                if (leftEnemy) score += 350;
-                if (rightEnemy) score += 350;
-
-                score += board.plateIndex * 100;
-
-                if (score > bestScore)
+            case BotDifficulty.Easy:
+                return new BotShotErrorSettings
                 {
-                    bestScore = score;
-                    bestPlateIndex = board.plateIndex;
-                    bestSlotIndex = slot.slotIndex;
-                }
-            }
-        }
+                    majorMissChanceBoard1 = easyMajorMissChanceBoard1,
+                    majorMissChanceBoard2 = easyMajorMissChanceBoard2,
+                    majorMissChanceBoard3 = easyMajorMissChanceBoard3,
 
-        if (bestPlateIndex < 0 || bestSlotIndex < 0 || bestScore <= 0)
-            return false;
+                    minorSwipeXBoard1 = easyMinorSwipeXBoard1,
+                    minorSwipeXBoard2 = easyMinorSwipeXBoard2,
+                    minorSwipeXBoard3 = easyMinorSwipeXBoard3,
 
-        choice = new LocalBotTargetChoice
-        {
-            hasTarget = true,
-            targetPlateIndex = bestPlateIndex,
-            targetSlotIndex = bestSlotIndex,
-            reason = "LocalAdjacentFriendlyCombo"
-        };
+                    minorSwipeYBoard1 = easyMinorSwipeYBoard1,
+                    minorSwipeYBoard2 = easyMinorSwipeYBoard2,
+                    minorSwipeYBoard3 = easyMinorSwipeYBoard3,
 
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OfflineBotMatchController] Internal tactical target selected -> " +
-                "PlateIndex=" + bestPlateIndex +
-                " | SlotIndex=" + bestSlotIndex +
-                " | Reason=" + choice.reason,
-                this);
-        }
+                    majorSwipeXBoard1 = easyMajorSwipeXBoard1,
+                    majorSwipeXBoard2 = easyMajorSwipeXBoard2,
+                    majorSwipeXBoard3 = easyMajorSwipeXBoard3,
 
-        return true;
-    }
+                    majorSwipeYBoard1 = easyMajorSwipeYBoard1,
+                    majorSwipeYBoard2 = easyMajorSwipeYBoard2,
+                    majorSwipeYBoard3 = easyMajorSwipeYBoard3
+                };
 
-    private bool TrySelectOpeningHighBoardTarget(List<LocalBoardState> boards, out LocalBotTargetChoice choice)
-    {
-        choice = default;
-
-        int bestPlateIndex = -1;
-        int bestSlotIndex = -1;
-        int bestScore = int.MinValue;
-
-        for (int i = 0; i < boards.Count; i++)
-        {
-            LocalBoardState board = boards[i];
-            if (board.FreeCount() <= 0)
-                continue;
-
-            for (int s = 0; s < board.slots.Count; s++)
-            {
-                LocalBoardSlotState slot = board.slots[s];
-                if (slot.isOccupied)
-                    continue;
-
-                int centerIndex = board.slots.Count / 2;
-                int score = board.plateIndex * 1000 - Mathf.Abs(slot.slotIndex - centerIndex) * 25;
-
-                if (score > bestScore)
+            case BotDifficulty.Medium:
+                return new BotShotErrorSettings
                 {
-                    bestScore = score;
-                    bestPlateIndex = board.plateIndex;
-                    bestSlotIndex = slot.slotIndex;
-                }
-            }
+                    majorMissChanceBoard1 = mediumMajorMissChanceBoard1,
+                    majorMissChanceBoard2 = mediumMajorMissChanceBoard2,
+                    majorMissChanceBoard3 = mediumMajorMissChanceBoard3,
+
+                    minorSwipeXBoard1 = mediumMinorSwipeXBoard1,
+                    minorSwipeXBoard2 = mediumMinorSwipeXBoard2,
+                    minorSwipeXBoard3 = mediumMinorSwipeXBoard3,
+
+                    minorSwipeYBoard1 = mediumMinorSwipeYBoard1,
+                    minorSwipeYBoard2 = mediumMinorSwipeYBoard2,
+                    minorSwipeYBoard3 = mediumMinorSwipeYBoard3,
+
+                    majorSwipeXBoard1 = mediumMajorSwipeXBoard1,
+                    majorSwipeXBoard2 = mediumMajorSwipeXBoard2,
+                    majorSwipeXBoard3 = mediumMajorSwipeXBoard3,
+
+                    majorSwipeYBoard1 = mediumMajorSwipeYBoard1,
+                    majorSwipeYBoard2 = mediumMajorSwipeYBoard2,
+                    majorSwipeYBoard3 = mediumMajorSwipeYBoard3
+                };
+
+            case BotDifficulty.Hard:
+            default:
+                return new BotShotErrorSettings
+                {
+                    majorMissChanceBoard1 = hardMajorMissChanceBoard1,
+                    majorMissChanceBoard2 = hardMajorMissChanceBoard2,
+                    majorMissChanceBoard3 = hardMajorMissChanceBoard3,
+
+                    minorSwipeXBoard1 = hardMinorSwipeXBoard1,
+                    minorSwipeXBoard2 = hardMinorSwipeXBoard2,
+                    minorSwipeXBoard3 = hardMinorSwipeXBoard3,
+
+                    minorSwipeYBoard1 = hardMinorSwipeYBoard1,
+                    minorSwipeYBoard2 = hardMinorSwipeYBoard2,
+                    minorSwipeYBoard3 = hardMinorSwipeYBoard3,
+
+                    majorSwipeXBoard1 = hardMajorSwipeXBoard1,
+                    majorSwipeXBoard2 = hardMajorSwipeXBoard2,
+                    majorSwipeXBoard3 = hardMajorSwipeXBoard3,
+
+                    majorSwipeYBoard1 = hardMajorSwipeYBoard1,
+                    majorSwipeYBoard2 = hardMajorSwipeYBoard2,
+                    majorSwipeYBoard3 = hardMajorSwipeYBoard3
+                };
         }
-
-        if (bestPlateIndex < 0 || bestSlotIndex < 0)
-            return false;
-
-        choice = new LocalBotTargetChoice
-        {
-            hasTarget = true,
-            targetPlateIndex = bestPlateIndex,
-            targetSlotIndex = bestSlotIndex,
-            reason = "LocalOpeningHighBoard"
-        };
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OfflineBotMatchController] Internal tactical target selected -> " +
-                "PlateIndex=" + bestPlateIndex +
-                " | SlotIndex=" + bestSlotIndex +
-                " | Reason=" + choice.reason,
-                this);
-        }
-
-        return true;
     }
 
-    private bool IsAdjacentOwnedBy(LocalBoardState board, int listIndex, PlayerID owner)
+    private float GetMajorMissChance(BotShotErrorSettings settings, int targetPlateIndex)
     {
-        if (board == null)
-            return false;
+        switch (targetPlateIndex)
+        {
+            case 0: return settings.majorMissChanceBoard1;
+            case 1: return settings.majorMissChanceBoard2;
+            case 2: return settings.majorMissChanceBoard3;
+            default: return settings.majorMissChanceBoard3;
+        }
+    }
 
-        if (listIndex < 0 || listIndex >= board.slots.Count)
-            return false;
+    private float GetMinorSwipeX(BotShotErrorSettings settings, int targetPlateIndex)
+    {
+        switch (targetPlateIndex)
+        {
+            case 0: return settings.minorSwipeXBoard1;
+            case 1: return settings.minorSwipeXBoard2;
+            case 2: return settings.minorSwipeXBoard3;
+            default: return settings.minorSwipeXBoard3;
+        }
+    }
 
-        return board.slots[listIndex].isOccupied && board.slots[listIndex].occupiedOwner == owner;
+    private float GetMinorSwipeY(BotShotErrorSettings settings, int targetPlateIndex)
+    {
+        switch (targetPlateIndex)
+        {
+            case 0: return settings.minorSwipeYBoard1;
+            case 1: return settings.minorSwipeYBoard2;
+            case 2: return settings.minorSwipeYBoard3;
+            default: return settings.minorSwipeYBoard3;
+        }
+    }
+
+    private float GetMajorSwipeX(BotShotErrorSettings settings, int targetPlateIndex)
+    {
+        switch (targetPlateIndex)
+        {
+            case 0: return settings.majorSwipeXBoard1;
+            case 1: return settings.majorSwipeXBoard2;
+            case 2: return settings.majorSwipeXBoard3;
+            default: return settings.majorSwipeXBoard3;
+        }
+    }
+
+    private float GetMajorSwipeY(BotShotErrorSettings settings, int targetPlateIndex)
+    {
+        switch (targetPlateIndex)
+        {
+            case 0: return settings.majorSwipeYBoard1;
+            case 1: return settings.majorSwipeYBoard2;
+            case 2: return settings.majorSwipeYBoard3;
+            default: return settings.majorSwipeYBoard3;
+        }
+    }
+
+    private float RandomSignedMagnitude(float minAbs, float maxAbs)
+    {
+        float magnitude = Random.Range(minAbs, maxAbs);
+        return Random.value < 0.5f ? -magnitude : magnitude;
     }
 
     private void ExecutePendingBotLaunch()
@@ -1013,27 +886,12 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
         if (reSolveRightBeforeBotLaunch)
         {
-            BotShotSolution refreshed;
-            if (pendingBotTargetPlateIndex >= 0 && pendingBotTargetSlotIndex >= 0 && forceBrainSelectedTarget)
-            {
-                refreshed = botShotSolver.SolveBestShotForTarget(
-                    currentBall,
-                    launcher,
-                    scoreManager,
-                    activeRequest.Difficulty,
-                    Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)),
-                    pendingBotTargetPlateIndex,
-                    pendingBotTargetSlotIndex);
-            }
-            else
-            {
-                refreshed = botShotSolver.SolveBestShot(
-                    currentBall,
-                    launcher,
-                    scoreManager,
-                    activeRequest.Difficulty,
-                    Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)));
-            }
+            BotShotSolution refreshed = botShotSolver.SolveBestShot(
+                currentBall,
+                launcher,
+                scoreManager,
+                activeRequest.Difficulty,
+                Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)));
 
             if (!refreshed.hasSolution)
             {
@@ -1045,23 +903,25 @@ public sealed class OfflineBotMatchController : MonoBehaviour
                 return;
             }
 
-            pendingBotSwipe = refreshed.bestCandidate.swipeDelta;
-            pendingBotDirection = refreshed.bestCandidate.launchDirection;
-            pendingBotForce = refreshed.bestCandidate.launchForce;
+            Vector2 refreshedSwipe = refreshed.bestCandidate.swipeDelta;
+            Vector3 refreshedDirection = refreshed.bestCandidate.launchDirection;
+            float refreshedForce = refreshed.bestCandidate.launchForce;
+
+            ApplyDifficultyShotError(
+                launcher,
+                activeRequest.Difficulty,
+                refreshed.bestCandidate.targetPlateIndex,
+                ref refreshedSwipe,
+                ref refreshedDirection,
+                ref refreshedForce);
+
+            pendingBotSwipe = refreshedSwipe;
+            pendingBotDirection = refreshedDirection;
+            pendingBotForce = refreshedForce;
             pendingBotSeedId = botShotSolver.GetLastSeedId();
             pendingBotTargetPlateIndex = refreshed.bestCandidate.targetPlateIndex;
             pendingBotTargetSlotIndex = refreshed.bestCandidate.targetSlotIndex;
             pendingBotSeedStartPositionValid = botShotSolver.TryGetLastChosenSeedStartPosition(out pendingBotSeedStartPosition);
-
-            if (logDebug)
-            {
-                Debug.Log(
-                    "[OfflineBotMatchController] Bot launch refreshed right before shot -> " +
-                    "SeedId=" + pendingBotSeedId +
-                    " | TargetPlate=" + pendingBotTargetPlateIndex +
-                    " | TargetSlot=" + pendingBotTargetSlotIndex,
-                    this);
-            }
         }
 
         if (launcher.SimulateOfflineBotSwipe(currentBall, pendingBotSwipe) && logDebug)

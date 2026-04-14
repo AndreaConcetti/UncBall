@@ -4016,6 +4016,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 309990289}
+  - component: {fileID: 309990293}
   - component: {fileID: 309990290}
   - component: {fileID: 309990291}
   - component: {fileID: 309990292}
@@ -4059,9 +4060,10 @@ MonoBehaviour:
   bottomBarOrderSwapper: {fileID: 265633326}
   botShotSolver: {fileID: 309990291}
   playerShotDebugRecorder: {fileID: 309990292}
+  botTargetDecisionService: {fileID: 309990293}
   seedTestSideMode: 0
   forceBotStartsFirst: 0
-  deterministicBotTestMode: 1
+  deterministicBotTestMode: 0
   applySeedStartPositionBeforeBotLaunch: 1
   reSolveRightBeforeBotLaunch: 0
   deterministicPostSpawnDelaySeconds: 0.5
@@ -4077,13 +4079,64 @@ MonoBehaviour:
   continueBootstrapIfScoreManagerThrows: 1
   enableBotBrain: 1
   easyThinkDelayMin: 0.75
-  easyThinkDelayMax: 1.55
-  mediumThinkDelayMin: 0.55
-  mediumThinkDelayMax: 1.15
-  hardThinkDelayMin: 0.35
-  hardThinkDelayMax: 0.85
+  easyThinkDelayMax: 3
+  mediumThinkDelayMin: 0.5
+  mediumThinkDelayMax: 3
+  hardThinkDelayMin: 0.5
+  hardThinkDelayMax: 3
+  unbeatableThinkDelayMin: 0.5
+  unbeatableThinkDelayMax: 3
   maxAdaptiveMissStacks: 5
-  logDebug: 1
+  forceBrainSelectedTarget: 1
+  fallbackToGeneralSolveWhenForcedTargetFails: 1
+  enableDifficultyShotError: 1
+  logShotError: 1
+  easyMajorMissChanceBoard1: 0.25
+  easyMajorMissChanceBoard2: 0.45
+  easyMajorMissChanceBoard3: 0.7
+  easyMinorSwipeXBoard1: 32
+  easyMinorSwipeXBoard2: 54
+  easyMinorSwipeXBoard3: 88
+  easyMinorSwipeYBoard1: 28
+  easyMinorSwipeYBoard2: 50
+  easyMinorSwipeYBoard3: 82
+  easyMajorSwipeXBoard1: 90
+  easyMajorSwipeXBoard2: 155
+  easyMajorSwipeXBoard3: 240
+  easyMajorSwipeYBoard1: 70
+  easyMajorSwipeYBoard2: 130
+  easyMajorSwipeYBoard3: 210
+  mediumMajorMissChanceBoard1: 0.16
+  mediumMajorMissChanceBoard2: 0.25
+  mediumMajorMissChanceBoard3: 0.39
+  mediumMinorSwipeXBoard1: 16
+  mediumMinorSwipeXBoard2: 30
+  mediumMinorSwipeXBoard3: 54
+  mediumMinorSwipeYBoard1: 14
+  mediumMinorSwipeYBoard2: 24
+  mediumMinorSwipeYBoard3: 45
+  mediumMajorSwipeXBoard1: 60
+  mediumMajorSwipeXBoard2: 95
+  mediumMajorSwipeXBoard3: 145
+  mediumMajorSwipeYBoard1: 42
+  mediumMajorSwipeYBoard2: 76
+  mediumMajorSwipeYBoard3: 118
+  hardMajorMissChanceBoard1: 0.03
+  hardMajorMissChanceBoard2: 0.08
+  hardMajorMissChanceBoard3: 0.16
+  hardMinorSwipeXBoard1: 8
+  hardMinorSwipeXBoard2: 16
+  hardMinorSwipeXBoard3: 28
+  hardMinorSwipeYBoard1: 8
+  hardMinorSwipeYBoard2: 14
+  hardMinorSwipeYBoard3: 26
+  hardMajorSwipeXBoard1: 28
+  hardMajorSwipeXBoard2: 48
+  hardMajorSwipeXBoard3: 78
+  hardMajorSwipeYBoard1: 20
+  hardMajorSwipeYBoard2: 36
+  hardMajorSwipeYBoard3: 58
+  logDebug: 0
   drawBotTargetGizmos: 1
   gizmoSphereRadius: 0.08
   isOfflineBotSessionActive: 0
@@ -4131,6 +4184,7 @@ MonoBehaviour:
   pendingBotSeedStartPositionValid: 0
   pendingBotTargetPlateIndex: -1
   pendingBotTargetSlotIndex: -1
+  pendingBotDecisionReason: 
   lastTargetPlateIndex: -1
   lastTargetPlateName: 
   lastTargetSlotIndex: -1
@@ -4145,6 +4199,7 @@ MonoBehaviour:
   lastDescendingAtEntry: 0
   lastHitBlockingBoardBeforeEntry: 0
   lastCandidateScore: 0
+  lastDecisionReason: 
 --- !u!114 &309990291
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4164,8 +4219,8 @@ MonoBehaviour:
   stopAtFirstValidSlotWhenSequential: 1
   trustHumanSeedsDirectlyInSequentialMode: 1
   enableRightSideSeedMirroring: 1
-  logSeedMatchingDebug: 1
-  logSequentialRejections: 1
+  logSeedMatchingDebug: 0
+  logSequentialRejections: 0
   simulationDuration: 2.25
   slotBoundsPadding: 0.01
   blockingBoundsPadding: 0.02
@@ -4188,8 +4243,8 @@ MonoBehaviour:
   maxMissStacksApplied: 5
   extraSwipeYPerMiss: 24
   extraLateralWindowPerMiss: 6
-  preferHigherPlatesFirst: 1
-  requireDescendingEntry: 1
+  preferHigherPlatesFirst: 0
+  requireDescendingEntry: 0
   requireTargetTriggerEntry: 1
   enteredTargetReward: 2000
   descendingEntryReward: 6000
@@ -4205,7 +4260,7 @@ MonoBehaviour:
   targetColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   bestSampleColor: {r: 0, g: 1, b: 1, a: 1}
   entryColor: {r: 1, g: 0, b: 1, a: 1}
-  logSolver: 1
+  logSolver: 0
   lastSolveHasSolution: 0
   lastEvaluatedCandidates: 0
   lastTargetSlotCenter: {x: 0, y: 0, z: 0}
@@ -4251,6 +4306,21 @@ MonoBehaviour:
   lastResolvedScored: 0
   lastResolvedPlateIndex: -1
   lastResolvedSlotIndex: -1
+--- !u!114 &309990293
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309990288}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5013ff3e76a17544b10720a78b47198, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BotTargetDecisionService
+  scoreManager: {fileID: 880244600}
+  logDecision: 1
+  logAllCandidates: 0
 --- !u!1 &324931215
 GameObject:
   m_ObjectHideFlags: 0

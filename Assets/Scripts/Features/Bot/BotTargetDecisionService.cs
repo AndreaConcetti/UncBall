@@ -60,12 +60,18 @@ public sealed class BotTargetDecisionService : MonoBehaviour
         public bool isOccupied;
         public bool occupiedByBot;
         public bool occupiedByEnemy;
-        public bool hasAdjacentFriendly;
-        public bool hasAdjacentEnemy;
         public bool boardHasBotPresence;
         public bool boardHasEnemyPresence;
         public int boardBotCount;
         public int boardEnemyCount;
+        public bool hasAdjacentFriendly;
+        public bool hasAdjacentEnemy;
+        public int adjacentFriendlyCount;
+        public int adjacentEnemyCount;
+        public int friendlyChainLengthIfPlaced;
+        public int enemyChainBlockedIfPlaced;
+        public int futureExpansionPotential;
+        public int centerDistance;
         public float score;
         public string reason;
     }
@@ -79,13 +85,15 @@ public sealed class BotTargetDecisionService : MonoBehaviour
         public int enemyCount;
     }
 
-    public BotTargetDecision DecideBestTarget(
-        PlayerID botOwner,
-        PlayerID enemyOwner,
-        BotDifficulty difficulty)
+    public BotTargetDecision DecideBestTarget(PlayerID botOwner, PlayerID enemyOwner, BotDifficulty difficulty)
     {
+#if UNITY_2023_1_OR_NEWER
+        if (scoreManager == null)
+            scoreManager = FindFirstObjectByType<ScoreManager>();
+#else
         if (scoreManager == null)
             scoreManager = FindObjectOfType<ScoreManager>();
+#endif
 
         BotTargetDecision empty = default;
         empty.hasTarget = false;
@@ -139,14 +147,17 @@ public sealed class BotTargetDecisionService : MonoBehaviour
         if (candidates.Count == 0)
             return empty;
 
+        candidates.Sort((a, b) => b.score.CompareTo(a.score));
+
         SlotContext chosen;
         if (weights.alwaysChooseBestTarget)
         {
-            chosen = GetBestCandidate(candidates);
+            chosen = candidates[0];
         }
         else
         {
-            chosen = GetDifficultyFilteredCandidate(candidates, difficulty);
+            int takeCount = Mathf.Min(weights.GetSafeTopCandidateCount(), candidates.Count);
+            chosen = candidates[UnityEngine.Random.Range(0, takeCount)];
         }
 
         BotTargetDecision result = new BotTargetDecision
@@ -239,8 +250,14 @@ public sealed class BotTargetDecisionService : MonoBehaviour
                 slot.boardEnemyCount = enemyCount;
                 slot.boardHasBotPresence = botCount > 0;
                 slot.boardHasEnemyPresence = enemyCount > 0;
-                slot.hasAdjacentFriendly = HasAdjacentFriendly(slots, i);
-                slot.hasAdjacentEnemy = HasAdjacentEnemy(slots, i);
+                slot.hasAdjacentFriendly = HasAdjacentOwned(slots, i, true);
+                slot.hasAdjacentEnemy = HasAdjacentOwned(slots, i, false);
+                slot.adjacentFriendlyCount = CountAdjacentOwned(slots, i, true);
+                slot.adjacentEnemyCount = CountAdjacentOwned(slots, i, false);
+                slot.friendlyChainLengthIfPlaced = ComputeChainLengthIfPlaced(slots, i, true);
+                slot.enemyChainBlockedIfPlaced = ComputeChainLengthIfPlaced(slots, i, false);
+                slot.futureExpansionPotential = ComputeFutureExpansionPotential(slots, i);
+                slot.centerDistance = GetCenterDistance(slots.Count, slot.slotIndex);
                 slots[i] = slot;
             }
 
@@ -264,17 +281,22 @@ public sealed class BotTargetDecisionService : MonoBehaviour
         if (slot.boardHasEnemyPresence && !slot.boardHasBotPresence)
             score += weights.contestEnemyBoardWeight;
 
+        if (!slot.boardHasBotPresence)
+            score += weights.boardCoverageWeight;
+
         if (slot.hasAdjacentFriendly)
             score += weights.adjacentFriendlyWeight;
 
         if (slot.hasAdjacentEnemy)
             score += weights.adjacentEnemyWeight;
 
+        score += slot.friendlyChainLengthIfPlaced * weights.friendlyChainExtensionWeight;
+        score += slot.enemyChainBlockedIfPlaced * weights.enemyChainBlockWeight;
+        score += slot.futureExpansionPotential * weights.futureExpansionWeight;
+        score -= slot.centerDistance * weights.centerPreferenceWeight;
+
         if (openingPhase && !slot.boardHasBotPresence)
             score += weights.openingBoardSpreadWeight;
-
-        if (!slot.boardHasBotPresence)
-            score += weights.boardCoverageWeight;
 
         score += (slot.plateIndex + 1) * weights.boardValueWeight;
         score -= weights.GetRiskPenaltyForPlate(slot.plateIndex);
@@ -285,39 +307,6 @@ public sealed class BotTargetDecisionService : MonoBehaviour
         return score;
     }
 
-    private SlotContext GetBestCandidate(List<SlotContext> candidates)
-    {
-        SlotContext best = candidates[0];
-
-        for (int i = 1; i < candidates.Count; i++)
-        {
-            if (candidates[i].score > best.score)
-                best = candidates[i];
-        }
-
-        return best;
-    }
-
-    private SlotContext GetDifficultyFilteredCandidate(List<SlotContext> candidates, BotDifficulty difficulty)
-    {
-        candidates.Sort((a, b) => b.score.CompareTo(a.score));
-
-        if (difficulty == BotDifficulty.Easy)
-        {
-            int takeCount = Mathf.Min(5, candidates.Count);
-            return candidates[UnityEngine.Random.Range(0, takeCount)];
-        }
-
-        if (difficulty == BotDifficulty.Medium)
-        {
-            int takeCount = Mathf.Min(3, candidates.Count);
-            return candidates[UnityEngine.Random.Range(0, takeCount)];
-        }
-
-        int hardTakeCount = Mathf.Min(2, candidates.Count);
-        return candidates[UnityEngine.Random.Range(0, hardTakeCount)];
-    }
-
     private string BuildReason(SlotContext slot, bool openingPhase)
     {
         List<string> reasons = new List<string>();
@@ -325,17 +314,26 @@ public sealed class BotTargetDecisionService : MonoBehaviour
         if (slot.boardHasEnemyPresence && !slot.boardHasBotPresence)
             reasons.Add("ContestEnemyBoard");
 
-        if (slot.hasAdjacentFriendly)
-            reasons.Add("AdjacentFriendlyCombo");
-
-        if (slot.hasAdjacentEnemy)
-            reasons.Add("AdjacentEnemyPressure");
-
-        if (openingPhase && !slot.boardHasBotPresence)
-            reasons.Add("OpeningBoardSpread");
-
         if (!slot.boardHasBotPresence)
             reasons.Add("BoardCoverage");
+
+        if (slot.hasAdjacentFriendly)
+            reasons.Add("AdjacentFriendly");
+
+        if (slot.hasAdjacentEnemy)
+            reasons.Add("AdjacentEnemy");
+
+        if (slot.friendlyChainLengthIfPlaced > 1)
+            reasons.Add("FriendlyChain+" + slot.friendlyChainLengthIfPlaced);
+
+        if (slot.enemyChainBlockedIfPlaced > 1)
+            reasons.Add("EnemyBlock+" + slot.enemyChainBlockedIfPlaced);
+
+        if (slot.futureExpansionPotential > 0)
+            reasons.Add("FutureExpand+" + slot.futureExpansionPotential);
+
+        if (openingPhase && !slot.boardHasBotPresence)
+            reasons.Add("OpeningSpread");
 
         reasons.Add("BoardValueP" + slot.plateIndex);
 
@@ -345,33 +343,88 @@ public sealed class BotTargetDecisionService : MonoBehaviour
     private int GetTotalPlacedBalls(List<BoardContext> boards)
     {
         int total = 0;
-
         for (int i = 0; i < boards.Count; i++)
             total += boards[i].botCount + boards[i].enemyCount;
-
         return total;
     }
 
-    private bool HasAdjacentFriendly(List<SlotContext> slots, int index)
+    private bool HasAdjacentOwned(List<SlotContext> slots, int index, bool friendly)
     {
-        if (index - 1 >= 0 && slots[index - 1].occupiedByBot)
-            return true;
+        if (index - 1 >= 0)
+        {
+            if (friendly && slots[index - 1].occupiedByBot) return true;
+            if (!friendly && slots[index - 1].occupiedByEnemy) return true;
+        }
 
-        if (index + 1 < slots.Count && slots[index + 1].occupiedByBot)
-            return true;
+        if (index + 1 < slots.Count)
+        {
+            if (friendly && slots[index + 1].occupiedByBot) return true;
+            if (!friendly && slots[index + 1].occupiedByEnemy) return true;
+        }
 
         return false;
     }
 
-    private bool HasAdjacentEnemy(List<SlotContext> slots, int index)
+    private int CountAdjacentOwned(List<SlotContext> slots, int index, bool friendly)
     {
-        if (index - 1 >= 0 && slots[index - 1].occupiedByEnemy)
-            return true;
+        int count = 0;
 
-        if (index + 1 < slots.Count && slots[index + 1].occupiedByEnemy)
-            return true;
+        if (index - 1 >= 0)
+        {
+            if (friendly && slots[index - 1].occupiedByBot) count++;
+            if (!friendly && slots[index - 1].occupiedByEnemy) count++;
+        }
 
-        return false;
+        if (index + 1 < slots.Count)
+        {
+            if (friendly && slots[index + 1].occupiedByBot) count++;
+            if (!friendly && slots[index + 1].occupiedByEnemy) count++;
+        }
+
+        return count;
+    }
+
+    private int ComputeChainLengthIfPlaced(List<SlotContext> slots, int index, bool friendly)
+    {
+        int chain = 1;
+
+        for (int i = index - 1; i >= 0; i--)
+        {
+            bool occupied = friendly ? slots[i].occupiedByBot : slots[i].occupiedByEnemy;
+            if (!occupied) break;
+            chain++;
+        }
+
+        for (int i = index + 1; i < slots.Count; i++)
+        {
+            bool occupied = friendly ? slots[i].occupiedByBot : slots[i].occupiedByEnemy;
+            if (!occupied) break;
+            chain++;
+        }
+
+        return chain;
+    }
+
+    private int ComputeFutureExpansionPotential(List<SlotContext> slots, int index)
+    {
+        int potential = 0;
+
+        if (index - 1 >= 0 && !slots[index - 1].isOccupied)
+            potential++;
+
+        if (index + 1 < slots.Count && !slots[index + 1].isOccupied)
+            potential++;
+
+        return potential;
+    }
+
+    private int GetCenterDistance(int slotCount, int slotIndex)
+    {
+        int centerLeft = (slotCount - 1) / 2;
+        int centerRight = slotCount / 2;
+        int distanceLeft = Mathf.Abs(slotIndex - centerLeft);
+        int distanceRight = Mathf.Abs(slotIndex - centerRight);
+        return Mathf.Min(distanceLeft, distanceRight);
     }
 
     private BallPhysics FindBallInsideSlot(Collider slotCollider)
@@ -410,6 +463,16 @@ public sealed class BotTargetDecisionService : MonoBehaviour
 
         if (ball == null)
             return false;
+
+        BallOwnership ownership = ball.GetComponent<BallOwnership>();
+        if (ownership == null)
+            ownership = ball.GetComponentInParent<BallOwnership>();
+
+        if (ownership != null)
+        {
+            owner = ownership.Owner;
+            return true;
+        }
 
         Type type = ball.GetType();
 

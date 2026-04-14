@@ -10,6 +10,12 @@ public struct BotDecisionWeights
     public float boardCoverageWeight;
     public float boardValueWeight;
 
+    [Header("Combo / Pressure")]
+    public float friendlyChainExtensionWeight;
+    public float enemyChainBlockWeight;
+    public float futureExpansionWeight;
+    public float centerPreferenceWeight;
+
     [Header("Opening")]
     public int openingTurnThreshold;
     public float openingBoardSpreadWeight;
@@ -22,9 +28,10 @@ public struct BotDecisionWeights
     [Header("Noise")]
     public float decisionNoise;
 
+    [Header("Candidate Pool")]
+    public int chooseFromTopCandidates;
+
     [Header("Mode Flags")]
-    public bool preferRandomBoardSelection;
-    public bool preferRandomSlotSelection;
     public bool alwaysChooseBestTarget;
 
     public float GetRiskPenaltyForPlate(int plateIndex)
@@ -36,6 +43,11 @@ public struct BotDecisionWeights
             case 2: return board3RiskPenalty;
             default: return board3RiskPenalty + ((plateIndex - 2) * 25f);
         }
+    }
+
+    public int GetSafeTopCandidateCount()
+    {
+        return Mathf.Max(1, chooseFromTopCandidates);
     }
 }
 
@@ -49,56 +61,77 @@ public static class BotDifficultyProfile
                 return new BotDecisionWeights
                 {
                     contestEnemyBoardWeight = 120f,
-                    adjacentFriendlyWeight = 40f,
+                    adjacentFriendlyWeight = 35f,
                     adjacentEnemyWeight = 20f,
-                    boardCoverageWeight = 45f,
-                    boardValueWeight = 25f,
+                    boardCoverageWeight = 35f,
+                    boardValueWeight = 18f,
+
+                    friendlyChainExtensionWeight = 45f,
+                    enemyChainBlockWeight = 35f,
+                    futureExpansionWeight = 18f,
+                    centerPreferenceWeight = 12f,
+
                     openingTurnThreshold = 6,
-                    openingBoardSpreadWeight = 60f,
+                    openingBoardSpreadWeight = 55f,
+
                     board1RiskPenalty = 0f,
-                    board2RiskPenalty = 20f,
-                    board3RiskPenalty = 70f,
+                    board2RiskPenalty = 35f,
+                    board3RiskPenalty = 90f,
+
                     decisionNoise = 180f,
-                    preferRandomBoardSelection = true,
-                    preferRandomSlotSelection = true,
+                    chooseFromTopCandidates = 5,
                     alwaysChooseBestTarget = false
                 };
 
             case BotDifficulty.Medium:
                 return new BotDecisionWeights
                 {
-                    contestEnemyBoardWeight = 520f,
-                    adjacentFriendlyWeight = 150f,
-                    adjacentEnemyWeight = 75f,
-                    boardCoverageWeight = 100f,
-                    boardValueWeight = 55f,
+                    contestEnemyBoardWeight = 380f,
+                    adjacentFriendlyWeight = 120f,
+                    adjacentEnemyWeight = 70f,
+                    boardCoverageWeight = 80f,
+                    boardValueWeight = 42f,
+
+                    friendlyChainExtensionWeight = 150f,
+                    enemyChainBlockWeight = 110f,
+                    futureExpansionWeight = 65f,
+                    centerPreferenceWeight = 25f,
+
                     openingTurnThreshold = 5,
-                    openingBoardSpreadWeight = 125f,
+                    openingBoardSpreadWeight = 105f,
+
                     board1RiskPenalty = 0f,
-                    board2RiskPenalty = 35f,
-                    board3RiskPenalty = 110f,
-                    decisionNoise = 60f,
-                    preferRandomBoardSelection = false,
-                    preferRandomSlotSelection = false,
+                    board2RiskPenalty = 25f,
+                    board3RiskPenalty = 85f,
+
+                    decisionNoise = 70f,
+                    chooseFromTopCandidates = 3,
                     alwaysChooseBestTarget = false
                 };
 
             case BotDifficulty.Hard:
                 return new BotDecisionWeights
                 {
-                    contestEnemyBoardWeight = 900f,
-                    adjacentFriendlyWeight = 260f,
+                    contestEnemyBoardWeight = 780f,
+                    adjacentFriendlyWeight = 220f,
                     adjacentEnemyWeight = 110f,
-                    boardCoverageWeight = 145f,
-                    boardValueWeight = 80f,
+                    boardCoverageWeight = 120f,
+                    boardValueWeight = 60f,
+
+                    friendlyChainExtensionWeight = 260f,
+                    enemyChainBlockWeight = 220f,
+                    futureExpansionWeight = 130f,
+                    centerPreferenceWeight = 35f,
+
                     openingTurnThreshold = 4,
-                    openingBoardSpreadWeight = 180f,
+                    openingBoardSpreadWeight = 145f,
+
                     board1RiskPenalty = 0f,
-                    board2RiskPenalty = 55f,
-                    board3RiskPenalty = 160f,
-                    decisionNoise = 12f,
-                    preferRandomBoardSelection = false,
-                    preferRandomSlotSelection = false,
+                    board2RiskPenalty = 18f,
+                    board3RiskPenalty = 55f,
+
+                    decisionNoise = 18f,
+                    chooseFromTopCandidates = 2,
                     alwaysChooseBestTarget = false
                 };
 
@@ -106,19 +139,26 @@ public static class BotDifficultyProfile
             default:
                 return new BotDecisionWeights
                 {
-                    contestEnemyBoardWeight = 1200f,
-                    adjacentFriendlyWeight = 340f,
+                    contestEnemyBoardWeight = 1050f,
+                    adjacentFriendlyWeight = 300f,
                     adjacentEnemyWeight = 140f,
-                    boardCoverageWeight = 170f,
-                    boardValueWeight = 95f,
+                    boardCoverageWeight = 135f,
+                    boardValueWeight = 70f,
+
+                    friendlyChainExtensionWeight = 340f,
+                    enemyChainBlockWeight = 260f,
+                    futureExpansionWeight = 170f,
+                    centerPreferenceWeight = 40f,
+
                     openingTurnThreshold = 4,
-                    openingBoardSpreadWeight = 220f,
+                    openingBoardSpreadWeight = 170f,
+
                     board1RiskPenalty = 0f,
-                    board2RiskPenalty = 70f,
-                    board3RiskPenalty = 190f,
+                    board2RiskPenalty = 8f,
+                    board3RiskPenalty = 20f,
+
                     decisionNoise = 0f,
-                    preferRandomBoardSelection = false,
-                    preferRandomSlotSelection = false,
+                    chooseFromTopCandidates = 1,
                     alwaysChooseBestTarget = true
                 };
         }
