@@ -24,6 +24,6 @@ MonoBehaviour:
     turnDurationSeconds: 8
   hard:
     matchMode: 0
-    pointsToWin: 30
+    pointsToWin: 200
     matchDurationSeconds: 360
-    turnDurationSeconds: 8
+    turnDurationSeconds: 5

@@ -4059,11 +4059,14 @@ MonoBehaviour:
   bottomBarOrderSwapper: {fileID: 265633326}
   botShotSolver: {fileID: 309990291}
   playerShotDebugRecorder: {fileID: 309990292}
-  seedTestSideMode: 2
-  forceBotStartsFirst: 1
+  seedTestSideMode: 0
+  forceBotStartsFirst: 0
   deterministicBotTestMode: 1
   applySeedStartPositionBeforeBotLaunch: 1
   reSolveRightBeforeBotLaunch: 0
+  deterministicPostSpawnDelaySeconds: 0.5
+  postSpawnDelayMinSeconds: 0.35
+  postSpawnDelayMaxSeconds: 1
   deterministicPreLaunchDelaySeconds: 1
   preLaunchDelayMinSeconds: 0.5
   preLaunchDelayMaxSeconds: 3
@@ -4157,7 +4160,12 @@ MonoBehaviour:
   seedLibrary: {fileID: 11400000, guid: 5be9ba70d300f454e91336ac4e5047e1, type: 2}
   useHumanSeedLibrary: 1
   allowFallbackBruteforce: 0
+  useSequentialFarthestSlotOrderForTests: 1
+  stopAtFirstValidSlotWhenSequential: 1
+  trustHumanSeedsDirectlyInSequentialMode: 1
+  enableRightSideSeedMirroring: 1
   logSeedMatchingDebug: 1
+  logSequentialRejections: 1
   simulationDuration: 2.25
   slotBoundsPadding: 0.01
   blockingBoundsPadding: 0.02
@@ -4212,6 +4220,8 @@ MonoBehaviour:
   lastChosenSeedStartPosition: {x: 0, y: 0, z: 0}
   lastSimulatedMass: 1
   lastSimulatedFixedDeltaTime: 0.02
+  lastUsedMirroredSeed: 0
+  lastMirroredFromSlotIndex: -1
 --- !u!114 &309990292
 MonoBehaviour:
   m_ObjectHideFlags: 0

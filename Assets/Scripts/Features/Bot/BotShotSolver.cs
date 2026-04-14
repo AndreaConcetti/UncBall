@@ -9,9 +9,10 @@ public sealed class BotShotSolver : MonoBehaviour
     [SerializeField] private bool allowFallbackBruteforce = true;
 
     [Header("Seed Replay Test Mode")]
-    [SerializeField] private bool useSequentialDescendingSlotOrderForTests = true;
+    [SerializeField] private bool useSequentialFarthestSlotOrderForTests = true;
     [SerializeField] private bool stopAtFirstValidSlotWhenSequential = true;
     [SerializeField] private bool trustHumanSeedsDirectlyInSequentialMode = true;
+    [SerializeField] private bool enableRightSideSeedMirroring = true;
 
     [Header("Seed Matching Debug")]
     [SerializeField] private bool logSeedMatchingDebug = true;
@@ -89,8 +90,45 @@ public sealed class BotShotSolver : MonoBehaviour
     [SerializeField] private Vector3 lastChosenSeedStartPosition;
     [SerializeField] private float lastSimulatedMass = 1f;
     [SerializeField] private float lastSimulatedFixedDeltaTime = 0.02f;
+    [SerializeField] private bool lastUsedMirroredSeed;
+    [SerializeField] private int lastMirroredFromSlotIndex = -1;
 
     private readonly List<Vector3> lastBestTrajectoryPoints = new List<Vector3>();
+
+    private struct SeedResolveResult
+    {
+        public bool found;
+        public BotHumanShotSeed seed;
+        public bool isMirrored;
+        public int mirroredFromSlotIndex;
+    }
+
+    private struct PlateInfo
+    {
+        public int index;
+        public string name;
+        public Bounds blockingBounds;
+        public List<SlotInfo> slots;
+    }
+
+    private struct SlotInfo
+    {
+        public int slotIndex;
+        public string name;
+        public Vector3 center;
+        public Bounds bounds;
+        public bool isOccupied;
+    }
+
+    private struct CandidateEval
+    {
+        public BotShotCandidate candidate;
+        public List<Vector3> path;
+        public Vector3 entryPoint;
+        public bool entryPointValid;
+        public float mass;
+        public float fixedDeltaTime;
+    }
 
     public bool TryGetLastChosenSeedStartPosition(out Vector3 startPosition)
     {
@@ -109,7 +147,7 @@ public sealed class BotShotSolver : MonoBehaviour
         return seedLibrary != null && seedLibrary.TryGetSeedById(seedId, out seed);
     }
 
-    public void OnDrawGizmosSelected()
+    private void OnDrawGizmosSelected()
     {
         if (!drawBestTrajectory)
             return;
@@ -162,6 +200,8 @@ public sealed class BotShotSolver : MonoBehaviour
         if (plates.Count == 0)
             return solution;
 
+        bool spawnOnRight = sourceBall.transform.position.x > 0f;
+
         float bestScore = float.NegativeInfinity;
         BotShotCandidate bestCandidate = default;
         List<Vector3> bestPath = null;
@@ -169,12 +209,14 @@ public sealed class BotShotSolver : MonoBehaviour
         string bestSeedId = string.Empty;
         Vector3 bestSeedStartPosition = Vector3.zero;
         bool bestSeedStartPositionValid = false;
+        bool bestSeedWasMirrored = false;
+        int bestMirroredFromSlotIndex = -1;
 
         IEnumerable<PlateInfo> orderedPlates = GetOrderedPlates(plates);
 
         foreach (PlateInfo plate in orderedPlates)
         {
-            List<SlotInfo> orderedSlots = GetOrderedSlots(plate.slots);
+            List<SlotInfo> orderedSlots = GetOrderedSlotsForSpawnSide(plate.slots, spawnOnRight);
 
             foreach (SlotInfo slot in orderedSlots)
             {
@@ -190,14 +232,24 @@ public sealed class BotShotSolver : MonoBehaviour
                             " | SlotName=" + slot.name,
                             this);
                     }
+
                     continue;
                 }
 
-                if (useSequentialDescendingSlotOrderForTests && trustHumanSeedsDirectlyInSequentialMode && useHumanSeedLibrary && seedLibrary != null)
+                // FIX PRINCIPALE:
+                // in modalità direct seed replay NON bisogna matchare sulla currentStartPosition.
+                // Bisogna prendere il seed del target anche se richiede offset, poi il controller
+                // sposterà la ball nella referenceStartPosition.
+                if (useSequentialFarthestSlotOrderForTests &&
+                    trustHumanSeedsDirectlyInSequentialMode &&
+                    useHumanSeedLibrary &&
+                    seedLibrary != null)
                 {
-                    if (seedLibrary.TryGetBestSeed(plate.index, slot.slotIndex, sourceBall.transform.position, out BotHumanShotSeed directSeed))
+                    SeedResolveResult seedResult = ResolveSeedForCurrentSide_IgnoreCurrentStart(plate, slot, spawnOnRight);
+
+                    if (seedResult.found)
                     {
-                        if (!launcher.TryBuildLaunchFromSwipe(directSeed.swipe, out Vector3 directDir, out float directForce))
+                        if (!launcher.TryBuildLaunchFromSwipe(seedResult.seed.swipe, out Vector3 directDir, out float directForce))
                         {
                             if (logSequentialRejections)
                             {
@@ -208,9 +260,11 @@ public sealed class BotShotSolver : MonoBehaviour
                                     " | SlotIndex=" + slot.slotIndex +
                                     " | SlotName=" + slot.name +
                                     " | Reason=SeedSwipeBuildFailed" +
-                                    " | SeedId=" + directSeed.seedId,
+                                    " | SeedId=" + seedResult.seed.seedId +
+                                    " | Mirrored=" + seedResult.isMirrored,
                                     this);
                             }
+
                             continue;
                         }
 
@@ -220,7 +274,7 @@ public sealed class BotShotSolver : MonoBehaviour
                             targetPlateName = plate.name,
                             targetSlotIndex = slot.slotIndex,
                             targetSlotName = slot.name,
-                            swipeDelta = directSeed.swipe,
+                            swipeDelta = seedResult.seed.swipe,
                             launchDirection = directDir,
                             launchForce = directForce,
                             targetSlotCenter = slot.center,
@@ -229,24 +283,18 @@ public sealed class BotShotSolver : MonoBehaviour
                             enteredTargetTrigger = true,
                             descendingAtEntry = true,
                             hitBlockingBoardBeforeEntry = false,
-                            score = 999999f - slot.slotIndex
+                            score = 999999f - GetSequentialOrderBias(slot.slotIndex, plate.slots.Count, spawnOnRight)
                         };
 
                         solution.hasSolution = true;
                         solution.evaluatedCandidates += 1;
                         solution.bestCandidate = directCandidate;
 
-                        bestCandidate = directCandidate;
-                        bestScore = directCandidate.score;
-                        bestSeedId = directSeed.seedId;
-                        bestSeedStartPosition = directSeed.referenceStartPosition;
-                        bestSeedStartPositionValid = true;
-
                         lastBestTrajectoryPoints.Clear();
                         lastBestTrajectoryPoints.Add(sourceBall.transform.position);
                         lastBestTrajectoryPoints.Add(slot.center);
 
-                        StoreDirectSeedDebug(solution, directSeed, slot.center);
+                        StoreDirectSeedDebug(solution, seedResult.seed, slot.center, seedResult.isMirrored, seedResult.mirroredFromSlotIndex);
 
                         if (logSolver)
                         {
@@ -256,33 +304,33 @@ public sealed class BotShotSolver : MonoBehaviour
                                 " | PlateName=" + plate.name +
                                 " | SlotIndex=" + slot.slotIndex +
                                 " | SlotName=" + slot.name +
-                                " | SeedId=" + directSeed.seedId +
-                                " | Swipe=" + directSeed.swipe +
+                                " | SeedId=" + seedResult.seed.seedId +
+                                " | Swipe=" + seedResult.seed.swipe +
                                 " | Direction=" + directDir +
                                 " | Force=" + directForce +
-                                " | SeedStartPos=" + directSeed.referenceStartPosition,
+                                " | SeedStartPos=" + seedResult.seed.referenceStartPosition +
+                                " | Mirrored=" + seedResult.isMirrored +
+                                " | MirroredFromSlot=" + seedResult.mirroredFromSlotIndex,
                                 this);
                         }
 
                         return solution;
                     }
-                    else
-                    {
-                        if (logSequentialRejections)
-                        {
-                            Debug.Log(
-                                "[BotShotSolver] Sequential slot failed -> " +
-                                "PlateIndex=" + plate.index +
-                                " | PlateName=" + plate.name +
-                                " | SlotIndex=" + slot.slotIndex +
-                                " | SlotName=" + slot.name +
-                                " | Reason=NoSeedMatchedFromCurrentStart" +
-                                " | CurrentStart=" + sourceBall.transform.position,
-                                this);
-                        }
 
-                        continue;
+                    if (logSequentialRejections)
+                    {
+                        Debug.Log(
+                            "[BotShotSolver] Sequential slot failed -> " +
+                            "PlateIndex=" + plate.index +
+                            " | PlateName=" + plate.name +
+                            " | SlotIndex=" + slot.slotIndex +
+                            " | SlotName=" + slot.name +
+                            " | Reason=NoSeedForTarget" +
+                            " | SpawnOnRight=" + spawnOnRight,
+                            this);
                     }
+
+                    continue;
                 }
 
                 float previousBestScore = bestScore;
@@ -290,11 +338,30 @@ public sealed class BotShotSolver : MonoBehaviour
 
                 if (useHumanSeedLibrary && seedLibrary != null)
                 {
-                    if (seedLibrary.TryGetBestSeed(plate.index, slot.slotIndex, sourceBall.transform.position, out BotHumanShotSeed seed))
+                    SeedResolveResult seedResult = ResolveSeedForCurrentSide_WithStartMatch(plate, slot, sourceBall.transform.position);
+
+                    if (seedResult.found)
                     {
-                        EvaluateSeedCluster(sourceBall, launcher, plate, slot, plates, seed, missStacks,
-                            ref solution, ref bestScore, ref bestCandidate, ref bestPath, ref bestEval, ref bestSeedId,
-                            ref bestSeedStartPosition, ref bestSeedStartPositionValid);
+                        EvaluateSeedCluster(
+                            sourceBall,
+                            launcher,
+                            plate,
+                            slot,
+                            plates,
+                            seedResult.seed,
+                            missStacks,
+                            ref solution,
+                            ref bestScore,
+                            ref bestCandidate,
+                            ref bestPath,
+                            ref bestEval,
+                            ref bestSeedId,
+                            ref bestSeedStartPosition,
+                            ref bestSeedStartPositionValid,
+                            ref bestSeedWasMirrored,
+                            ref bestMirroredFromSlotIndex,
+                            seedResult.isMirrored,
+                            seedResult.mirroredFromSlotIndex);
                     }
                     else if (logSequentialRejections)
                     {
@@ -305,26 +372,52 @@ public sealed class BotShotSolver : MonoBehaviour
                             " | SlotIndex=" + slot.slotIndex +
                             " | SlotName=" + slot.name +
                             " | Reason=NoSeedMatchedFromCurrentStart" +
-                            " | CurrentStart=" + sourceBall.transform.position,
+                            " | CurrentStart=" + sourceBall.transform.position +
+                            " | SpawnOnRight=" + spawnOnRight,
                             this);
                     }
                 }
 
                 if (allowFallbackBruteforce)
                 {
-                    EvaluateFallbackCluster(sourceBall, launcher, difficulty, plate, slot, plates, missStacks,
-                        ref solution, ref bestScore, ref bestCandidate, ref bestPath, ref bestEval, ref bestSeedId,
-                        ref bestSeedStartPosition, ref bestSeedStartPositionValid);
+                    EvaluateFallbackCluster(
+                        sourceBall,
+                        launcher,
+                        difficulty,
+                        plate,
+                        slot,
+                        plates,
+                        missStacks,
+                        ref solution,
+                        ref bestScore,
+                        ref bestCandidate,
+                        ref bestPath,
+                        ref bestEval,
+                        ref bestSeedId,
+                        ref bestSeedStartPosition,
+                        ref bestSeedStartPositionValid,
+                        ref bestSeedWasMirrored,
+                        ref bestMirroredFromSlotIndex);
                 }
 
                 bool foundValidForThisSlot = solution.hasSolution && (!previousHasSolution || bestScore > previousBestScore);
 
-                if (useSequentialDescendingSlotOrderForTests && stopAtFirstValidSlotWhenSequential && foundValidForThisSlot)
+                if (useSequentialFarthestSlotOrderForTests && stopAtFirstValidSlotWhenSequential && foundValidForThisSlot)
                 {
                     solution.bestCandidate = bestCandidate;
 
                     if (solution.hasSolution)
-                        StoreLastTrajectoryDebug(solution, bestPath, bestEval, bestSeedId, bestSeedStartPosition, bestSeedStartPositionValid);
+                    {
+                        StoreLastTrajectoryDebug(
+                            solution,
+                            bestPath,
+                            bestEval,
+                            bestSeedId,
+                            bestSeedStartPosition,
+                            bestSeedStartPositionValid,
+                            bestSeedWasMirrored,
+                            bestMirroredFromSlotIndex);
+                    }
 
                     if (logSolver)
                     {
@@ -334,15 +427,18 @@ public sealed class BotShotSolver : MonoBehaviour
                             " | PlateName=" + plate.name +
                             " | SlotIndex=" + slot.slotIndex +
                             " | SlotName=" + slot.name +
-                            " | Candidate={" + bestCandidate + "} | Seed=" + bestSeedId +
-                            " | SeedStartPos=" + bestSeedStartPosition,
+                            " | Candidate={" + bestCandidate + "}" +
+                            " | Seed=" + bestSeedId +
+                            " | SeedStartPos=" + bestSeedStartPosition +
+                            " | Mirrored=" + bestSeedWasMirrored +
+                            " | MirroredFromSlot=" + bestMirroredFromSlotIndex,
                             this);
                     }
 
                     return solution;
                 }
 
-                if (useSequentialDescendingSlotOrderForTests && logSequentialRejections && !foundValidForThisSlot)
+                if (useSequentialFarthestSlotOrderForTests && logSequentialRejections && !foundValidForThisSlot)
                 {
                     Debug.Log(
                         "[BotShotSolver] Sequential slot failed -> " +
@@ -359,15 +455,138 @@ public sealed class BotShotSolver : MonoBehaviour
         solution.bestCandidate = bestCandidate;
 
         if (solution.hasSolution)
-            StoreLastTrajectoryDebug(solution, bestPath, bestEval, bestSeedId, bestSeedStartPosition, bestSeedStartPositionValid);
+        {
+            StoreLastTrajectoryDebug(
+                solution,
+                bestPath,
+                bestEval,
+                bestSeedId,
+                bestSeedStartPosition,
+                bestSeedStartPositionValid,
+                bestSeedWasMirrored,
+                bestMirroredFromSlotIndex);
+        }
 
         if (logSolver)
-            Debug.Log("[BotShotSolver] " + solution + " | Seed=" + bestSeedId + " | SeedStartPos=" + bestSeedStartPosition, this);
+        {
+            Debug.Log(
+                "[BotShotSolver] " + solution +
+                " | Seed=" + bestSeedId +
+                " | SeedStartPos=" + bestSeedStartPosition +
+                " | Mirrored=" + bestSeedWasMirrored +
+                " | MirroredFromSlot=" + bestMirroredFromSlotIndex,
+                this);
+        }
 
         return solution;
     }
 
-    private void StoreDirectSeedDebug(BotShotSolution solution, BotHumanShotSeed seed, Vector3 targetSlotCenter)
+    private SeedResolveResult ResolveSeedForCurrentSide_IgnoreCurrentStart(PlateInfo plate, SlotInfo slot, bool spawnOnRight)
+    {
+        SeedResolveResult result = default;
+
+        if (seedLibrary == null)
+            return result;
+
+        if (!spawnOnRight || !enableRightSideSeedMirroring)
+        {
+            if (seedLibrary.TryGetAnySeedForTarget(plate.index, slot.slotIndex, out BotHumanShotSeed directSeed))
+            {
+                result.found = true;
+                result.seed = directSeed;
+                result.isMirrored = false;
+                result.mirroredFromSlotIndex = slot.slotIndex;
+            }
+
+            return result;
+        }
+
+        int mirroredSourceSlotIndex = GetMirroredSlotIndex(slot.slotIndex, plate.slots.Count);
+
+        if (!seedLibrary.TryGetAnySeedForTarget(plate.index, mirroredSourceSlotIndex, out BotHumanShotSeed leftSeed))
+            return result;
+
+        BotHumanShotSeed mirroredSeed = MirrorSeedForRightSide(leftSeed, slot.slotIndex);
+
+        result.found = true;
+        result.seed = mirroredSeed;
+        result.isMirrored = true;
+        result.mirroredFromSlotIndex = mirroredSourceSlotIndex;
+        return result;
+    }
+
+    private SeedResolveResult ResolveSeedForCurrentSide_WithStartMatch(PlateInfo plate, SlotInfo slot, Vector3 currentStartPos)
+    {
+        SeedResolveResult result = default;
+
+        if (seedLibrary == null)
+            return result;
+
+        bool spawnOnRight = currentStartPos.x > 0f;
+
+        if (!spawnOnRight || !enableRightSideSeedMirroring)
+        {
+            if (seedLibrary.TryGetBestSeed(plate.index, slot.slotIndex, currentStartPos, out BotHumanShotSeed directSeed))
+            {
+                result.found = true;
+                result.seed = directSeed;
+                result.isMirrored = false;
+                result.mirroredFromSlotIndex = slot.slotIndex;
+            }
+
+            return result;
+        }
+
+        int mirroredSourceSlotIndex = GetMirroredSlotIndex(slot.slotIndex, plate.slots.Count);
+        Vector3 mirroredLookupStart = new Vector3(-currentStartPos.x, currentStartPos.y, currentStartPos.z);
+
+        if (!seedLibrary.TryGetBestSeed(plate.index, mirroredSourceSlotIndex, mirroredLookupStart, out BotHumanShotSeed leftSeed))
+            return result;
+
+        BotHumanShotSeed mirroredSeed = MirrorSeedForRightSide(leftSeed, slot.slotIndex);
+
+        result.found = true;
+        result.seed = mirroredSeed;
+        result.isMirrored = true;
+        result.mirroredFromSlotIndex = mirroredSourceSlotIndex;
+        return result;
+    }
+
+    private BotHumanShotSeed MirrorSeedForRightSide(BotHumanShotSeed seed, int mirroredTargetSlotIndex)
+    {
+        return new BotHumanShotSeed
+        {
+            seedId = seed.seedId + "_mirrored_right",
+            enabled = seed.enabled,
+            targetPlateIndex = seed.targetPlateIndex,
+            targetSlotIndex = mirroredTargetSlotIndex,
+            requiresBallOffset = seed.requiresBallOffset,
+            referenceStartPosition = new Vector3(
+                -seed.referenceStartPosition.x,
+                seed.referenceStartPosition.y,
+                seed.referenceStartPosition.z),
+            allowedStartPositionTolerance = seed.allowedStartPositionTolerance,
+            swipe = new Vector2(-seed.swipe.x, seed.swipe.y),
+            launchDirection = new Vector3(-seed.launchDirection.x, seed.launchDirection.y, seed.launchDirection.z),
+            launchForce = seed.launchForce,
+            swipeXVariation = seed.swipeXVariation,
+            swipeYVariation = seed.swipeYVariation,
+            lateralSamples = seed.lateralSamples,
+            verticalSamples = seed.verticalSamples
+        };
+    }
+
+    private int GetMirroredSlotIndex(int currentSlotIndex, int slotCount)
+    {
+        return (slotCount - 1) - currentSlotIndex;
+    }
+
+    private int GetSequentialOrderBias(int slotIndex, int slotCount, bool spawnOnRight)
+    {
+        return spawnOnRight ? slotIndex : (slotCount - 1 - slotIndex);
+    }
+
+    private void StoreDirectSeedDebug(BotShotSolution solution, BotHumanShotSeed seed, Vector3 targetSlotCenter, bool isMirrored, int mirroredFromSlotIndex)
     {
         lastSolveHasSolution = solution.hasSolution;
         lastEvaluatedCandidates = solution.evaluatedCandidates;
@@ -383,6 +602,8 @@ public sealed class BotShotSolver : MonoBehaviour
         lastChosenSeedStartPositionValid = true;
         lastSimulatedMass = 1f;
         lastSimulatedFixedDeltaTime = Time.fixedDeltaTime > 0f ? Time.fixedDeltaTime : 0.02f;
+        lastUsedMirroredSeed = isMirrored;
+        lastMirroredFromSlotIndex = mirroredFromSlotIndex;
     }
 
     private void EvaluateSeedCluster(
@@ -400,7 +621,11 @@ public sealed class BotShotSolver : MonoBehaviour
         ref CandidateEval bestEval,
         ref string bestSeedId,
         ref Vector3 bestSeedStartPosition,
-        ref bool bestSeedStartPositionValid)
+        ref bool bestSeedStartPositionValid,
+        ref bool bestSeedWasMirrored,
+        ref int bestMirroredFromSlotIndex,
+        bool isMirroredSeed,
+        int mirroredFromSlotIndex)
     {
         int appliedMissStacks = Mathf.Clamp(missStacks, 0, Mathf.Max(0, maxMissStacksApplied));
         float extraY = appliedMissStacks * 8f;
@@ -410,8 +635,8 @@ public sealed class BotShotSolver : MonoBehaviour
         float minY = seed.swipe.y - seed.swipeYVariation;
         float maxY = seed.swipe.y + seed.swipeYVariation + extraY;
 
-        int lateralSamples = Mathf.Max(3, seed.lateralSamples);
-        int verticalSamples = Mathf.Max(3, seed.verticalSamples);
+        int lateralSamples = Mathf.Max(1, seed.lateralSamples);
+        int verticalSamples = Mathf.Max(1, seed.verticalSamples);
 
         for (int yIndex = 0; yIndex < verticalSamples; yIndex++)
         {
@@ -446,6 +671,8 @@ public sealed class BotShotSolver : MonoBehaviour
                     bestSeedId = seed.seedId;
                     bestSeedStartPosition = seed.referenceStartPosition;
                     bestSeedStartPositionValid = true;
+                    bestSeedWasMirrored = isMirroredSeed;
+                    bestMirroredFromSlotIndex = mirroredFromSlotIndex;
                     solution.hasSolution = true;
                 }
             }
@@ -467,7 +694,9 @@ public sealed class BotShotSolver : MonoBehaviour
         ref CandidateEval bestEval,
         ref string bestSeedId,
         ref Vector3 bestSeedStartPosition,
-        ref bool bestSeedStartPositionValid)
+        ref bool bestSeedStartPositionValid,
+        ref bool bestSeedWasMirrored,
+        ref int bestMirroredFromSlotIndex)
     {
         int appliedMissStacks = Mathf.Clamp(missStacks, 0, Mathf.Max(0, maxMissStacksApplied));
         float swipeYMin = GetFallbackSwipeYMin(difficulty) + appliedMissStacks * extraSwipeYPerMiss;
@@ -483,7 +712,6 @@ public sealed class BotShotSolver : MonoBehaviour
         {
             float yT = verticalSamples <= 1 ? 0.5f : (float)yIndex / (verticalSamples - 1);
             float swipeY = Mathf.Lerp(swipeYMin, swipeYMax, yT);
-
             float estimatedSwipeX = (targetDx / targetDz) * swipeY;
 
             for (int xIndex = 0; xIndex < lateralSamples; xIndex++)
@@ -514,6 +742,8 @@ public sealed class BotShotSolver : MonoBehaviour
                     bestSeedId = "fallback_bruteforce";
                     bestSeedStartPosition = Vector3.zero;
                     bestSeedStartPositionValid = false;
+                    bestSeedWasMirrored = false;
+                    bestMirroredFromSlotIndex = -1;
                     solution.hasSolution = true;
                 }
             }
@@ -673,10 +903,8 @@ public sealed class BotShotSolver : MonoBehaviour
                 continue;
 
             BallPhysics ball = hit.GetComponentInParent<BallPhysics>();
-            if (ball == null)
-                continue;
-
-            return true;
+            if (ball != null)
+                return true;
         }
 
         return false;
@@ -765,14 +993,21 @@ public sealed class BotShotSolver : MonoBehaviour
         return sorted;
     }
 
-    private List<SlotInfo> GetOrderedSlots(List<SlotInfo> slots)
+    private List<SlotInfo> GetOrderedSlotsForSpawnSide(List<SlotInfo> slots, bool spawnOnRight)
     {
         List<SlotInfo> ordered = new List<SlotInfo>(slots);
 
-        if (useSequentialDescendingSlotOrderForTests)
-            ordered.Sort((a, b) => b.slotIndex.CompareTo(a.slotIndex));
+        if (useSequentialFarthestSlotOrderForTests)
+        {
+            if (spawnOnRight)
+                ordered.Sort((a, b) => a.slotIndex.CompareTo(b.slotIndex));
+            else
+                ordered.Sort((a, b) => b.slotIndex.CompareTo(a.slotIndex));
+        }
         else
+        {
             ordered.Sort((a, b) => a.slotIndex.CompareTo(b.slotIndex));
+        }
 
         return ordered;
     }
@@ -793,10 +1028,20 @@ public sealed class BotShotSolver : MonoBehaviour
         lastChosenSeedStartPosition = Vector3.zero;
         lastSimulatedMass = 1f;
         lastSimulatedFixedDeltaTime = 0.02f;
+        lastUsedMirroredSeed = false;
+        lastMirroredFromSlotIndex = -1;
         lastBestTrajectoryPoints.Clear();
     }
 
-    private void StoreLastTrajectoryDebug(BotShotSolution solution, List<Vector3> bestPath, CandidateEval bestEval, string seedId, Vector3 seedStartPosition, bool seedStartPositionValid)
+    private void StoreLastTrajectoryDebug(
+        BotShotSolution solution,
+        List<Vector3> bestPath,
+        CandidateEval bestEval,
+        string seedId,
+        Vector3 seedStartPosition,
+        bool seedStartPositionValid,
+        bool usedMirroredSeed,
+        int mirroredFromSlotIndex)
     {
         lastSolveHasSolution = solution.hasSolution;
         lastEvaluatedCandidates = solution.evaluatedCandidates;
@@ -812,6 +1057,8 @@ public sealed class BotShotSolver : MonoBehaviour
         lastChosenSeedStartPositionValid = seedStartPositionValid;
         lastSimulatedMass = bestEval.mass;
         lastSimulatedFixedDeltaTime = bestEval.fixedDeltaTime;
+        lastUsedMirroredSeed = usedMirroredSeed;
+        lastMirroredFromSlotIndex = mirroredFromSlotIndex;
 
         lastBestTrajectoryPoints.Clear();
         if (bestPath != null)
@@ -871,32 +1118,5 @@ public sealed class BotShotSolver : MonoBehaviour
             case BotDifficulty.Hard: return fallbackHardLateralSamples;
             default: return fallbackMediumLateralSamples;
         }
-    }
-
-    private struct PlateInfo
-    {
-        public int index;
-        public string name;
-        public Bounds blockingBounds;
-        public List<SlotInfo> slots;
-    }
-
-    private struct SlotInfo
-    {
-        public int slotIndex;
-        public string name;
-        public Vector3 center;
-        public Bounds bounds;
-        public bool isOccupied;
-    }
-
-    private struct CandidateEval
-    {
-        public BotShotCandidate candidate;
-        public List<Vector3> path;
-        public Vector3 entryPoint;
-        public bool entryPointValid;
-        public float mass;
-        public float fixedDeltaTime;
     }
 }
