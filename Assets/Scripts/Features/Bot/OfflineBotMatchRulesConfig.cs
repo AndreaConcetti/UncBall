@@ -9,6 +9,7 @@ public sealed class OfflineBotMatchRulesConfig : ScriptableObject
     [SerializeField] private OfflineBotRuleSet easy = OfflineBotRuleSet.CreateDefaultEasy();
     [SerializeField] private OfflineBotRuleSet medium = OfflineBotRuleSet.CreateDefaultMedium();
     [SerializeField] private OfflineBotRuleSet hard = OfflineBotRuleSet.CreateDefaultHard();
+    [SerializeField] private OfflineBotRuleSet unbeatable = OfflineBotRuleSet.CreateDefaultUnbeatable();
 
     public OfflineBotRuleSet GetRules(BotDifficulty difficulty)
     {
@@ -16,10 +17,16 @@ public sealed class OfflineBotMatchRulesConfig : ScriptableObject
         {
             case BotDifficulty.Easy:
                 return easy;
+
             case BotDifficulty.Medium:
                 return medium;
+
             case BotDifficulty.Hard:
                 return hard;
+
+            case BotDifficulty.Unbeatable:
+                return unbeatable;
+
             default:
                 return medium;
         }
@@ -30,6 +37,7 @@ public sealed class OfflineBotMatchRulesConfig : ScriptableObject
         easy?.Validate();
         medium?.Validate();
         hard?.Validate();
+        unbeatable?.Validate();
     }
 }
 
@@ -78,6 +86,17 @@ public sealed class OfflineBotRuleSet
             pointsToWin = 1,
             matchDurationSeconds = 180f,
             turnDurationSeconds = 10f
+        };
+    }
+
+    public static OfflineBotRuleSet CreateDefaultUnbeatable()
+    {
+        return new OfflineBotRuleSet
+        {
+            matchMode = MatchMode.TimeLimit,
+            pointsToWin = 1,
+            matchDurationSeconds = 180f,
+            turnDurationSeconds = 8f
         };
     }
 }

@@ -27,3 +27,8 @@ MonoBehaviour:
     pointsToWin: 200
     matchDurationSeconds: 360
     turnDurationSeconds: 5
+  unbeatable:
+    matchMode: 1
+    pointsToWin: 200
+    matchDurationSeconds: 180
+    turnDurationSeconds: 8

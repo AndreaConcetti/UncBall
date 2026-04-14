@@ -21,6 +21,7 @@ public sealed class BotMatchSetupController : MonoBehaviour
     [SerializeField] private string easyOfflineLabel = "BOT [EASY]";
     [SerializeField] private string mediumOfflineLabel = "BOT [MEDIUM]";
     [SerializeField] private string hardOfflineLabel = "BOT [HARD]";
+    [SerializeField] private string unbeatableOfflineLabel = "BOT [UNBEATABLE]";
 
     [Header("Optional Runtime Skin Id Pool")]
     [SerializeField] private List<string> runtimeAvailableSkinIds = new List<string>();
@@ -195,10 +196,16 @@ public sealed class BotMatchSetupController : MonoBehaviour
         {
             case BotDifficulty.Easy:
                 return string.IsNullOrWhiteSpace(easyOfflineLabel) ? "BOT [EASY]" : easyOfflineLabel.Trim();
+
             case BotDifficulty.Medium:
                 return string.IsNullOrWhiteSpace(mediumOfflineLabel) ? "BOT [MEDIUM]" : mediumOfflineLabel.Trim();
+
             case BotDifficulty.Hard:
                 return string.IsNullOrWhiteSpace(hardOfflineLabel) ? "BOT [HARD]" : hardOfflineLabel.Trim();
+
+            case BotDifficulty.Unbeatable:
+                return string.IsNullOrWhiteSpace(unbeatableOfflineLabel) ? "BOT [UNBEATABLE]" : unbeatableOfflineLabel.Trim();
+
             default:
                 return $"BOT [{difficulty.ToString().ToUpperInvariant()}]";
         }
@@ -304,10 +311,16 @@ public sealed class BotMatchSetupController : MonoBehaviour
         {
             case BotDifficulty.Easy:
                 return ballSkinRandomGenerator.GenerateGuaranteedCommonSkin();
+
             case BotDifficulty.Medium:
                 return ballSkinRandomGenerator.GenerateGuaranteedRareSkin();
+
             case BotDifficulty.Hard:
                 return ballSkinRandomGenerator.GenerateGuaranteedEpicSkin();
+
+            case BotDifficulty.Unbeatable:
+                return ballSkinRandomGenerator.GenerateGuaranteedEpicSkin();
+
             default:
                 return ballSkinRandomGenerator.GenerateRandomSkin();
         }
@@ -366,6 +379,12 @@ public sealed class BotMatchSetupController : MonoBehaviour
     private void DebugCreateHard()
     {
         CreateBotMatch(BotDifficulty.Hard);
+    }
+
+    [ContextMenu("Create Unbeatable Bot Match")]
+    private void DebugCreateUnbeatable()
+    {
+        CreateBotMatch(BotDifficulty.Unbeatable);
     }
 #endif
 }

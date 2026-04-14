@@ -23,6 +23,11 @@ public sealed class BotMenuSelectionBridge : MonoBehaviour
         StartBotMatch(BotDifficulty.Hard);
     }
 
+    public void StartInsaneBotMatch()
+    {
+        StartBotMatch(BotDifficulty.Unbeatable);
+    }
+
     public void StartBotMatch(int difficultyIndex)
     {
         BotDifficulty parsedDifficulty = ConvertToDifficulty(difficultyIndex);
@@ -51,10 +56,16 @@ public sealed class BotMenuSelectionBridge : MonoBehaviour
         {
             case 0:
                 return BotDifficulty.Easy;
+
             case 1:
                 return BotDifficulty.Medium;
+
             case 2:
                 return BotDifficulty.Hard;
+
+            case 3:
+                return BotDifficulty.Unbeatable;
+
             default:
                 Debug.LogWarning($"[BotMenuSelectionBridge] Unsupported difficultyIndex={difficultyIndex}. Fallback=Medium.", this);
                 return BotDifficulty.Medium;

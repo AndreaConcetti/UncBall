@@ -26,6 +26,7 @@ public sealed class BotProfileGeneratorConfig : ScriptableObject
     [SerializeField] private DifficultyGenerationSettings easySettings = DifficultyGenerationSettings.CreateDefaultEasy();
     [SerializeField] private DifficultyGenerationSettings mediumSettings = DifficultyGenerationSettings.CreateDefaultMedium();
     [SerializeField] private DifficultyGenerationSettings hardSettings = DifficultyGenerationSettings.CreateDefaultHard();
+    [SerializeField] private DifficultyGenerationSettings unbeatableSettings = DifficultyGenerationSettings.CreateDefaultUnbeatable();
 
     public string BotIdPrefix => string.IsNullOrWhiteSpace(botIdPrefix) ? "bot" : botIdPrefix.Trim();
     public bool EnableDebugLogs => enableDebugLogs;
@@ -43,10 +44,16 @@ public sealed class BotProfileGeneratorConfig : ScriptableObject
         {
             case BotDifficulty.Easy:
                 return easySettings;
+
             case BotDifficulty.Medium:
                 return mediumSettings;
+
             case BotDifficulty.Hard:
                 return hardSettings;
+
+            case BotDifficulty.Unbeatable:
+                return unbeatableSettings;
+
             default:
                 return mediumSettings;
         }
@@ -57,6 +64,7 @@ public sealed class BotProfileGeneratorConfig : ScriptableObject
         easySettings?.Validate();
         mediumSettings?.Validate();
         hardSettings?.Validate();
+        unbeatableSettings?.Validate();
     }
 }
 
@@ -164,6 +172,27 @@ public sealed class DifficultyGenerationSettings
                 new ArchetypeWeight(BotArchetype.Balanced, 2f),
                 new ArchetypeWeight(BotArchetype.Defensive, 1.5f),
                 new ArchetypeWeight(BotArchetype.Trickster, 1f)
+            }
+        };
+    }
+
+    public static DifficultyGenerationSettings CreateDefaultUnbeatable()
+    {
+        return new DifficultyGenerationSettings
+        {
+            prefixChance = 0.14f,
+            suffixChance = 0.20f,
+            fakeLevelRange = new IntRange(22, 50),
+            fakeRankedLpRange = new IntRange(1700, 2600),
+            fakeWinRateRange = new IntRange(72, 92),
+            fakeMatchesPlayedRange = new IntRange(500, 3000),
+            archetypeWeights = new List<ArchetypeWeight>
+            {
+                new ArchetypeWeight(BotArchetype.Precision, 4f),
+                new ArchetypeWeight(BotArchetype.Aggressive, 2.5f),
+                new ArchetypeWeight(BotArchetype.Balanced, 1.5f),
+                new ArchetypeWeight(BotArchetype.Defensive, 1f),
+                new ArchetypeWeight(BotArchetype.Trickster, 0.5f)
             }
         };
     }

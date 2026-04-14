@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class OfflineBotMatchController : MonoBehaviour
@@ -16,6 +17,66 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         WaitingPreLaunchDelay = 2
     }
 
+    private struct LocalBotTargetChoice
+    {
+        public bool hasTarget;
+        public int targetPlateIndex;
+        public int targetSlotIndex;
+        public string reason;
+    }
+
+    private struct LocalBoardSlotState
+    {
+        public int slotIndex;
+        public string slotName;
+        public Vector3 center;
+        public bool isOccupied;
+        public PlayerID occupiedOwner;
+    }
+
+    private sealed class LocalBoardState
+    {
+        public int plateIndex;
+        public string plateName;
+        public List<LocalBoardSlotState> slots = new List<LocalBoardSlotState>();
+
+        public int EnemyCount(PlayerID enemyOwner)
+        {
+            int count = 0;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (slots[i].isOccupied && slots[i].occupiedOwner == enemyOwner)
+                    count++;
+            }
+
+            return count;
+        }
+
+        public int FriendlyCount(PlayerID friendlyOwner)
+        {
+            int count = 0;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (slots[i].isOccupied && slots[i].occupiedOwner == friendlyOwner)
+                    count++;
+            }
+
+            return count;
+        }
+
+        public int FreeCount()
+        {
+            int count = 0;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (!slots[i].isOccupied)
+                    count++;
+            }
+
+            return count;
+        }
+    }
+
     [Header("Scene References")]
     [SerializeField] private BallTurnSpawner ballTurnSpawner;
     [SerializeField] private FusionOnlineMatchHUD hud;
@@ -23,6 +84,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private BottomBarOrderSwapper bottomBarOrderSwapper;
     [SerializeField] private BotShotSolver botShotSolver;
     [SerializeField] private PlayerShotDebugRecorder playerShotDebugRecorder;
+    [SerializeField] private BotTargetDecisionService botTargetDecisionService;
 
     [Header("Seed Test Override")]
     [SerializeField] private SeedTestSideMode seedTestSideMode = SeedTestSideMode.Disabled;
@@ -59,7 +121,10 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private float mediumThinkDelayMax = 1.15f;
     [SerializeField] private float hardThinkDelayMin = 0.35f;
     [SerializeField] private float hardThinkDelayMax = 0.85f;
+    [SerializeField] private float unbeatableThinkDelayMin = 0.20f;
+    [SerializeField] private float unbeatableThinkDelayMax = 0.45f;
     [SerializeField] private int maxAdaptiveMissStacks = 5;
+    [SerializeField] private bool forceBrainSelectedTarget = true;
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
@@ -96,6 +161,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private bool pendingBotSeedStartPositionValid;
     [SerializeField] private int pendingBotTargetPlateIndex = -1;
     [SerializeField] private int pendingBotTargetSlotIndex = -1;
+    [SerializeField] private string pendingBotDecisionReason = "";
 
     [Header("Last Bot Debug")]
     [SerializeField] private int lastTargetPlateIndex = -1;
@@ -112,6 +178,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private bool lastDescendingAtEntry;
     [SerializeField] private bool lastHitBlockingBoardBeforeEntry;
     [SerializeField] private float lastCandidateScore;
+    [SerializeField] private string lastDecisionReason = "";
 
     private BallPhysics currentBall;
     private Rigidbody currentBallRb;
@@ -460,17 +527,73 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (launcher == null || botShotSolver == null)
             return;
 
-        BotShotSolution solution = botShotSolver.SolveBestShot(
-            currentBall,
-            launcher,
-            scoreManager,
-            activeRequest.Difficulty,
-            Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)));
+        BotShotSolution solution;
+        LocalBotTargetChoice localChoice = default;
+        BotTargetDecisionService.BotTargetDecision serviceDecision = default;
+        bool useForcedTarget = false;
+
+        if (ShouldUseInternalStrategicFallback(activeRequest.Difficulty))
+            localChoice = TryBuildInternalStrategicTarget();
+
+        if (localChoice.hasTarget)
+        {
+            useForcedTarget = forceBrainSelectedTarget;
+        }
+        else if (botTargetDecisionService != null)
+        {
+            serviceDecision = botTargetDecisionService.DecideBestTarget(botPlayerId, localPlayerId, activeRequest.Difficulty);
+            useForcedTarget = serviceDecision.hasTarget && forceBrainSelectedTarget;
+        }
+
+        if (useForcedTarget)
+        {
+            int targetPlate = localChoice.hasTarget ? localChoice.targetPlateIndex : serviceDecision.targetPlateIndex;
+            int targetSlot = localChoice.hasTarget ? localChoice.targetSlotIndex : serviceDecision.targetSlotIndex;
+
+            solution = botShotSolver.SolveBestShotForTarget(
+                currentBall,
+                launcher,
+                scoreManager,
+                activeRequest.Difficulty,
+                Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)),
+                targetPlate,
+                targetSlot);
+        }
+        else
+        {
+            solution = botShotSolver.SolveBestShot(
+                currentBall,
+                launcher,
+                scoreManager,
+                activeRequest.Difficulty,
+                Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)));
+        }
 
         if (!solution.hasSolution)
         {
             if (logDebug)
-                Debug.LogWarning("[OfflineBotMatchController] BotShotSolver returned no solution.", this);
+            {
+                string targetInfo = string.Empty;
+
+                if (localChoice.hasTarget)
+                {
+                    targetInfo =
+                        " | BrainTargetPlate=" + localChoice.targetPlateIndex +
+                        " | BrainTargetSlot=" + localChoice.targetSlotIndex +
+                        " | Reason=" + localChoice.reason;
+                }
+                else if (serviceDecision.hasTarget)
+                {
+                    targetInfo =
+                        " | BrainTargetPlate=" + serviceDecision.targetPlateIndex +
+                        " | BrainTargetSlot=" + serviceDecision.targetSlotIndex +
+                        " | Reason=" + serviceDecision.reason;
+                }
+
+                Debug.LogWarning(
+                    "[OfflineBotMatchController] BotShotSolver returned no solution." + targetInfo,
+                    this);
+            }
 
             return;
         }
@@ -482,6 +605,13 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         pendingBotTargetPlateIndex = solution.bestCandidate.targetPlateIndex;
         pendingBotTargetSlotIndex = solution.bestCandidate.targetSlotIndex;
         pendingBotSeedStartPositionValid = botShotSolver.TryGetLastChosenSeedStartPosition(out pendingBotSeedStartPosition);
+
+        if (localChoice.hasTarget)
+            pendingBotDecisionReason = localChoice.reason;
+        else if (serviceDecision.hasTarget)
+            pendingBotDecisionReason = serviceDecision.reason;
+        else
+            pendingBotDecisionReason = string.Empty;
 
         lastTargetPlateIndex = solution.bestCandidate.targetPlateIndex;
         lastTargetPlateName = solution.bestCandidate.targetPlateName;
@@ -497,6 +627,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         lastDescendingAtEntry = solution.bestCandidate.descendingAtEntry;
         lastHitBlockingBoardBeforeEntry = solution.bestCandidate.hitBlockingBoardBeforeEntry;
         lastCandidateScore = solution.bestCandidate.score;
+        lastDecisionReason = pendingBotDecisionReason;
 
         pendingBotLaunchDelayRemaining = GetBotPostSpawnDelaySeconds();
         pendingBotLaunchState = PendingBotLaunchState.WaitingPostSpawnDelay;
@@ -508,9 +639,359 @@ public sealed class OfflineBotMatchController : MonoBehaviour
                 "SeedId=" + pendingBotSeedId +
                 " | TargetPlate=" + pendingBotTargetPlateIndex +
                 " | TargetSlot=" + pendingBotTargetSlotIndex +
+                " | DecisionReason=" + pendingBotDecisionReason +
                 " | PostSpawnDelay=" + pendingBotLaunchDelayRemaining,
                 this);
         }
+    }
+
+    private LocalBotTargetChoice TryBuildInternalStrategicTarget()
+    {
+        LocalBotTargetChoice choice = default;
+
+        if (scoreManager == null || scoreManager.starPlates == null || scoreManager.starPlates.Length == 0)
+            return choice;
+
+        List<LocalBoardState> boards = BuildLocalBoardStates();
+        if (boards.Count == 0)
+            return choice;
+
+        if (TrySelectContestEnemyBoardTarget(boards, out choice))
+            return choice;
+
+        if (TrySelectAdjacentFriendlyComboTarget(boards, out choice))
+            return choice;
+
+        if (TrySelectOpeningHighBoardTarget(boards, out choice))
+            return choice;
+
+        return choice;
+    }
+
+    private bool ShouldUseInternalStrategicFallback(BotDifficulty difficulty)
+    {
+        return difficulty == BotDifficulty.Hard || difficulty == BotDifficulty.Unbeatable;
+    }
+
+    private List<LocalBoardState> BuildLocalBoardStates()
+    {
+        List<LocalBoardState> result = new List<LocalBoardState>();
+
+        for (int plateIndex = 0; plateIndex < scoreManager.starPlates.Length; plateIndex++)
+        {
+            StarPlate plate = scoreManager.starPlates[plateIndex];
+            if (plate == null)
+                continue;
+
+            SlotScorer[] slotScorers = plate.GetComponentsInChildren<SlotScorer>(true);
+            if (slotScorers == null || slotScorers.Length == 0)
+                continue;
+
+            LocalBoardState board = new LocalBoardState
+            {
+                plateIndex = plateIndex,
+                plateName = plate.name
+            };
+
+            for (int i = 0; i < slotScorers.Length; i++)
+            {
+                SlotScorer slot = slotScorers[i];
+                if (slot == null)
+                    continue;
+
+                Collider slotCollider = slot.GetComponent<Collider>();
+                if (slotCollider == null)
+                    continue;
+
+                PlayerID occupiedOwner;
+                bool isOccupied = TryDetectOccupiedOwner(slotCollider, out occupiedOwner);
+
+                board.slots.Add(new LocalBoardSlotState
+                {
+                    slotIndex = slot.slotIndex,
+                    slotName = slot.name,
+                    center = slotCollider.bounds.center,
+                    isOccupied = isOccupied,
+                    occupiedOwner = occupiedOwner
+                });
+            }
+
+            board.slots.Sort((a, b) => a.slotIndex.CompareTo(b.slotIndex));
+
+            if (board.slots.Count > 0)
+                result.Add(board);
+        }
+
+        return result;
+    }
+
+    private bool TryDetectOccupiedOwner(Collider slotCollider, out PlayerID occupiedOwner)
+    {
+        occupiedOwner = PlayerID.None;
+
+        if (slotCollider == null)
+            return false;
+
+        Bounds bounds = slotCollider.bounds;
+        Vector3 halfExtents = bounds.extents;
+        if (halfExtents.x <= 0f) halfExtents.x = 0.01f;
+        if (halfExtents.y <= 0f) halfExtents.y = 0.01f;
+        if (halfExtents.z <= 0f) halfExtents.z = 0.01f;
+
+        Collider[] hits = Physics.OverlapBox(
+            bounds.center,
+            halfExtents * 0.9f,
+            slotCollider.transform.rotation,
+            ~0,
+            QueryTriggerInteraction.Collide);
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hit = hits[i];
+            if (hit == null || hit == slotCollider)
+                continue;
+
+            BallPhysics ball = hit.GetComponentInParent<BallPhysics>();
+            if (ball == null)
+                continue;
+
+            BallOwnership ownership = ball.GetComponent<BallOwnership>();
+            if (ownership != null)
+            {
+                occupiedOwner = ownership.Owner;
+                return true;
+            }
+
+            occupiedOwner = PlayerID.None;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TrySelectContestEnemyBoardTarget(List<LocalBoardState> boards, out LocalBotTargetChoice choice)
+    {
+        choice = default;
+
+        int bestBoardPriority = int.MinValue;
+        int bestPlateIndex = -1;
+        int bestSlotIndex = -1;
+
+        for (int i = 0; i < boards.Count; i++)
+        {
+            LocalBoardState board = boards[i];
+            int enemyCount = board.EnemyCount(localPlayerId);
+            int freeCount = board.FreeCount();
+
+            if (enemyCount <= 0 || freeCount <= 0)
+                continue;
+
+            int boardPriority = enemyCount * 1000 + board.plateIndex * 100;
+
+            int candidateSlotIndex = FindBestFreeSlotForContest(board);
+            if (candidateSlotIndex < 0)
+                continue;
+
+            if (boardPriority > bestBoardPriority)
+            {
+                bestBoardPriority = boardPriority;
+                bestPlateIndex = board.plateIndex;
+                bestSlotIndex = candidateSlotIndex;
+            }
+        }
+
+        if (bestPlateIndex < 0 || bestSlotIndex < 0)
+            return false;
+
+        choice = new LocalBotTargetChoice
+        {
+            hasTarget = true,
+            targetPlateIndex = bestPlateIndex,
+            targetSlotIndex = bestSlotIndex,
+            reason = "LocalContestEnemyBoard"
+        };
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OfflineBotMatchController] Internal tactical target selected -> " +
+                "PlateIndex=" + bestPlateIndex +
+                " | SlotIndex=" + bestSlotIndex +
+                " | Reason=" + choice.reason,
+                this);
+        }
+
+        return true;
+    }
+
+    private int FindBestFreeSlotForContest(LocalBoardState board)
+    {
+        int bestSlotIndex = -1;
+        int bestScore = int.MinValue;
+
+        for (int i = 0; i < board.slots.Count; i++)
+        {
+            LocalBoardSlotState slot = board.slots[i];
+            if (slot.isOccupied)
+                continue;
+
+            int score = 0;
+
+            bool leftEnemy = IsAdjacentOwnedBy(board, i - 1, localPlayerId);
+            bool rightEnemy = IsAdjacentOwnedBy(board, i + 1, localPlayerId);
+            bool leftFriendly = IsAdjacentOwnedBy(board, i - 1, botPlayerId);
+            bool rightFriendly = IsAdjacentOwnedBy(board, i + 1, botPlayerId);
+
+            if (leftEnemy) score += 1000;
+            if (rightEnemy) score += 1000;
+            if (leftFriendly) score += 400;
+            if (rightFriendly) score += 400;
+
+            int centerIndex = board.slots.Count / 2;
+            score -= Mathf.Abs(slot.slotIndex - centerIndex) * 10;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestSlotIndex = slot.slotIndex;
+            }
+        }
+
+        return bestSlotIndex;
+    }
+
+    private bool TrySelectAdjacentFriendlyComboTarget(List<LocalBoardState> boards, out LocalBotTargetChoice choice)
+    {
+        choice = default;
+
+        int bestScore = int.MinValue;
+        int bestPlateIndex = -1;
+        int bestSlotIndex = -1;
+
+        for (int i = 0; i < boards.Count; i++)
+        {
+            LocalBoardState board = boards[i];
+            if (board.FreeCount() <= 0)
+                continue;
+
+            for (int s = 0; s < board.slots.Count; s++)
+            {
+                LocalBoardSlotState slot = board.slots[s];
+                if (slot.isOccupied)
+                    continue;
+
+                int score = 0;
+
+                bool leftFriendly = IsAdjacentOwnedBy(board, s - 1, botPlayerId);
+                bool rightFriendly = IsAdjacentOwnedBy(board, s + 1, botPlayerId);
+                bool leftEnemy = IsAdjacentOwnedBy(board, s - 1, localPlayerId);
+                bool rightEnemy = IsAdjacentOwnedBy(board, s + 1, localPlayerId);
+
+                if (leftFriendly) score += 1000;
+                if (rightFriendly) score += 1000;
+                if (leftEnemy) score += 350;
+                if (rightEnemy) score += 350;
+
+                score += board.plateIndex * 100;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestPlateIndex = board.plateIndex;
+                    bestSlotIndex = slot.slotIndex;
+                }
+            }
+        }
+
+        if (bestPlateIndex < 0 || bestSlotIndex < 0 || bestScore <= 0)
+            return false;
+
+        choice = new LocalBotTargetChoice
+        {
+            hasTarget = true,
+            targetPlateIndex = bestPlateIndex,
+            targetSlotIndex = bestSlotIndex,
+            reason = "LocalAdjacentFriendlyCombo"
+        };
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OfflineBotMatchController] Internal tactical target selected -> " +
+                "PlateIndex=" + bestPlateIndex +
+                " | SlotIndex=" + bestSlotIndex +
+                " | Reason=" + choice.reason,
+                this);
+        }
+
+        return true;
+    }
+
+    private bool TrySelectOpeningHighBoardTarget(List<LocalBoardState> boards, out LocalBotTargetChoice choice)
+    {
+        choice = default;
+
+        int bestPlateIndex = -1;
+        int bestSlotIndex = -1;
+        int bestScore = int.MinValue;
+
+        for (int i = 0; i < boards.Count; i++)
+        {
+            LocalBoardState board = boards[i];
+            if (board.FreeCount() <= 0)
+                continue;
+
+            for (int s = 0; s < board.slots.Count; s++)
+            {
+                LocalBoardSlotState slot = board.slots[s];
+                if (slot.isOccupied)
+                    continue;
+
+                int centerIndex = board.slots.Count / 2;
+                int score = board.plateIndex * 1000 - Mathf.Abs(slot.slotIndex - centerIndex) * 25;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestPlateIndex = board.plateIndex;
+                    bestSlotIndex = slot.slotIndex;
+                }
+            }
+        }
+
+        if (bestPlateIndex < 0 || bestSlotIndex < 0)
+            return false;
+
+        choice = new LocalBotTargetChoice
+        {
+            hasTarget = true,
+            targetPlateIndex = bestPlateIndex,
+            targetSlotIndex = bestSlotIndex,
+            reason = "LocalOpeningHighBoard"
+        };
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OfflineBotMatchController] Internal tactical target selected -> " +
+                "PlateIndex=" + bestPlateIndex +
+                " | SlotIndex=" + bestSlotIndex +
+                " | Reason=" + choice.reason,
+                this);
+        }
+
+        return true;
+    }
+
+    private bool IsAdjacentOwnedBy(LocalBoardState board, int listIndex, PlayerID owner)
+    {
+        if (board == null)
+            return false;
+
+        if (listIndex < 0 || listIndex >= board.slots.Count)
+            return false;
+
+        return board.slots[listIndex].isOccupied && board.slots[listIndex].occupiedOwner == owner;
     }
 
     private void ExecutePendingBotLaunch()
@@ -532,12 +1013,27 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
         if (reSolveRightBeforeBotLaunch)
         {
-            BotShotSolution refreshed = botShotSolver.SolveBestShot(
-                currentBall,
-                launcher,
-                scoreManager,
-                activeRequest.Difficulty,
-                Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)));
+            BotShotSolution refreshed;
+            if (pendingBotTargetPlateIndex >= 0 && pendingBotTargetSlotIndex >= 0 && forceBrainSelectedTarget)
+            {
+                refreshed = botShotSolver.SolveBestShotForTarget(
+                    currentBall,
+                    launcher,
+                    scoreManager,
+                    activeRequest.Difficulty,
+                    Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)),
+                    pendingBotTargetPlateIndex,
+                    pendingBotTargetSlotIndex);
+            }
+            else
+            {
+                refreshed = botShotSolver.SolveBestShot(
+                    currentBall,
+                    launcher,
+                    scoreManager,
+                    activeRequest.Difficulty,
+                    Mathf.Clamp(consecutiveBotMisses, 0, Mathf.Max(0, maxAdaptiveMissStacks)));
+            }
 
             if (!refreshed.hasSolution)
             {
@@ -576,6 +1072,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
                 " | SeedId=" + pendingBotSeedId +
                 " | TargetPlate=" + pendingBotTargetPlateIndex +
                 " | TargetSlot=" + pendingBotTargetSlotIndex +
+                " | DecisionReason=" + pendingBotDecisionReason +
                 " | Swipe=" + pendingBotSwipe +
                 " | Direction=" + pendingBotDirection +
                 " | Force=" + pendingBotForce,
@@ -651,10 +1148,20 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
         switch (activeRequest != null ? activeRequest.Difficulty : BotDifficulty.Medium)
         {
-            case BotDifficulty.Easy: return Random.Range(easyThinkDelayMin, easyThinkDelayMax);
-            case BotDifficulty.Medium: return Random.Range(mediumThinkDelayMin, mediumThinkDelayMax);
-            case BotDifficulty.Hard: return Random.Range(hardThinkDelayMin, hardThinkDelayMax);
-            default: return Random.Range(mediumThinkDelayMin, mediumThinkDelayMax);
+            case BotDifficulty.Easy:
+                return Random.Range(easyThinkDelayMin, easyThinkDelayMax);
+
+            case BotDifficulty.Medium:
+                return Random.Range(mediumThinkDelayMin, mediumThinkDelayMax);
+
+            case BotDifficulty.Hard:
+                return Random.Range(hardThinkDelayMin, hardThinkDelayMax);
+
+            case BotDifficulty.Unbeatable:
+                return Random.Range(unbeatableThinkDelayMin, unbeatableThinkDelayMax);
+
+            default:
+                return Random.Range(mediumThinkDelayMin, mediumThinkDelayMax);
         }
     }
 
@@ -815,6 +1322,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         pendingBotSeedStartPositionValid = false;
         pendingBotTargetPlateIndex = -1;
         pendingBotTargetSlotIndex = -1;
+        pendingBotDecisionReason = string.Empty;
     }
 
     private void DestroyTrackedBallIfNeeded()
@@ -928,6 +1436,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (bottomBarOrderSwapper == null) bottomBarOrderSwapper = FindFirstObjectByType<BottomBarOrderSwapper>();
         if (botShotSolver == null) botShotSolver = FindFirstObjectByType<BotShotSolver>();
         if (playerShotDebugRecorder == null) playerShotDebugRecorder = FindFirstObjectByType<PlayerShotDebugRecorder>();
+        if (botTargetDecisionService == null) botTargetDecisionService = FindFirstObjectByType<BotTargetDecisionService>();
 #else
         if (ballTurnSpawner == null) ballTurnSpawner = FindObjectOfType<BallTurnSpawner>();
         if (hud == null) hud = FindObjectOfType<FusionOnlineMatchHUD>();
@@ -935,6 +1444,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (bottomBarOrderSwapper == null) bottomBarOrderSwapper = FindObjectOfType<BottomBarOrderSwapper>();
         if (botShotSolver == null) botShotSolver = FindObjectOfType<BotShotSolver>();
         if (playerShotDebugRecorder == null) playerShotDebugRecorder = FindObjectOfType<PlayerShotDebugRecorder>();
+        if (botTargetDecisionService == null) botTargetDecisionService = FindObjectOfType<BotTargetDecisionService>();
 #endif
     }
 
@@ -991,5 +1501,6 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         lastDescendingAtEntry = false;
         lastHitBlockingBoardBeforeEntry = false;
         lastCandidateScore = 0f;
+        lastDecisionReason = string.Empty;
     }
 }

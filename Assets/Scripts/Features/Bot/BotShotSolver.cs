@@ -184,6 +184,47 @@ public sealed class BotShotSolver : MonoBehaviour
         BotDifficulty difficulty,
         int missStacks)
     {
+        return SolveBestShotInternal(
+            sourceBall,
+            launcher,
+            scoreManager,
+            difficulty,
+            missStacks,
+            false,
+            -1,
+            -1);
+    }
+
+    public BotShotSolution SolveBestShotForTarget(
+        BallPhysics sourceBall,
+        BallLauncher launcher,
+        ScoreManager scoreManager,
+        BotDifficulty difficulty,
+        int missStacks,
+        int forcedPlateIndex,
+        int forcedSlotIndex)
+    {
+        return SolveBestShotInternal(
+            sourceBall,
+            launcher,
+            scoreManager,
+            difficulty,
+            missStacks,
+            true,
+            forcedPlateIndex,
+            forcedSlotIndex);
+    }
+
+    private BotShotSolution SolveBestShotInternal(
+        BallPhysics sourceBall,
+        BallLauncher launcher,
+        ScoreManager scoreManager,
+        BotDifficulty difficulty,
+        int missStacks,
+        bool restrictToSingleTarget,
+        int forcedPlateIndex,
+        int forcedSlotIndex)
+    {
         ClearLastTrajectoryDebug();
 
         BotShotSolution solution = new BotShotSolution
@@ -214,12 +255,28 @@ public sealed class BotShotSolver : MonoBehaviour
 
         IEnumerable<PlateInfo> orderedPlates = GetOrderedPlates(plates);
 
+        if (logSolver && restrictToSingleTarget)
+        {
+            Debug.Log(
+                "[BotShotSolver] Forced target solve requested -> " +
+                "ForcedPlate=" + forcedPlateIndex +
+                " | ForcedSlot=" + forcedSlotIndex +
+                " | SpawnOnRight=" + spawnOnRight,
+                this);
+        }
+
         foreach (PlateInfo plate in orderedPlates)
         {
+            if (restrictToSingleTarget && plate.index != forcedPlateIndex)
+                continue;
+
             List<SlotInfo> orderedSlots = GetOrderedSlotsForSpawnSide(plate.slots, spawnOnRight);
 
             foreach (SlotInfo slot in orderedSlots)
             {
+                if (restrictToSingleTarget && slot.slotIndex != forcedSlotIndex)
+                    continue;
+
                 if (slot.isOccupied)
                 {
                     if (logSeedMatchingDebug)
@@ -236,10 +293,6 @@ public sealed class BotShotSolver : MonoBehaviour
                     continue;
                 }
 
-                // FIX PRINCIPALE:
-                // in modalità direct seed replay NON bisogna matchare sulla currentStartPosition.
-                // Bisogna prendere il seed del target anche se richiede offset, poi il controller
-                // sposterà la ball nella referenceStartPosition.
                 if (useSequentialFarthestSlotOrderForTests &&
                     trustHumanSeedsDirectlyInSequentialMode &&
                     useHumanSeedLibrary &&
@@ -465,6 +518,15 @@ public sealed class BotShotSolver : MonoBehaviour
                 bestSeedStartPositionValid,
                 bestSeedWasMirrored,
                 bestMirroredFromSlotIndex);
+        }
+        else if (logSolver && restrictToSingleTarget)
+        {
+            Debug.LogWarning(
+                "[BotShotSolver] Forced target solve failed -> " +
+                "ForcedPlate=" + forcedPlateIndex +
+                " | ForcedSlot=" + forcedSlotIndex +
+                " | Evaluated=" + solution.evaluatedCandidates,
+                this);
         }
 
         if (logSolver)
@@ -1071,8 +1133,11 @@ public sealed class BotShotSolver : MonoBehaviour
         {
             case BotDifficulty.Easy: return fallbackEasySwipeYMin;
             case BotDifficulty.Medium: return fallbackMediumSwipeYMin;
-            case BotDifficulty.Hard: return fallbackHardSwipeYMin;
-            default: return fallbackMediumSwipeYMin;
+            case BotDifficulty.Hard:
+            case BotDifficulty.Unbeatable:
+                return fallbackHardSwipeYMin;
+            default:
+                return fallbackMediumSwipeYMin;
         }
     }
 
@@ -1082,8 +1147,11 @@ public sealed class BotShotSolver : MonoBehaviour
         {
             case BotDifficulty.Easy: return fallbackEasySwipeYMax;
             case BotDifficulty.Medium: return fallbackMediumSwipeYMax;
-            case BotDifficulty.Hard: return fallbackHardSwipeYMax;
-            default: return fallbackMediumSwipeYMax;
+            case BotDifficulty.Hard:
+            case BotDifficulty.Unbeatable:
+                return fallbackHardSwipeYMax;
+            default:
+                return fallbackMediumSwipeYMax;
         }
     }
 
@@ -1093,8 +1161,11 @@ public sealed class BotShotSolver : MonoBehaviour
         {
             case BotDifficulty.Easy: return fallbackEasyVerticalSamples;
             case BotDifficulty.Medium: return fallbackMediumVerticalSamples;
-            case BotDifficulty.Hard: return fallbackHardVerticalSamples;
-            default: return fallbackMediumVerticalSamples;
+            case BotDifficulty.Hard:
+            case BotDifficulty.Unbeatable:
+                return fallbackHardVerticalSamples;
+            default:
+                return fallbackMediumVerticalSamples;
         }
     }
 
@@ -1104,8 +1175,11 @@ public sealed class BotShotSolver : MonoBehaviour
         {
             case BotDifficulty.Easy: return fallbackEasyLateralWindow;
             case BotDifficulty.Medium: return fallbackMediumLateralWindow;
-            case BotDifficulty.Hard: return fallbackHardLateralWindow;
-            default: return fallbackMediumLateralWindow;
+            case BotDifficulty.Hard:
+            case BotDifficulty.Unbeatable:
+                return fallbackHardLateralWindow;
+            default:
+                return fallbackMediumLateralWindow;
         }
     }
 
@@ -1115,8 +1189,11 @@ public sealed class BotShotSolver : MonoBehaviour
         {
             case BotDifficulty.Easy: return fallbackEasyLateralSamples;
             case BotDifficulty.Medium: return fallbackMediumLateralSamples;
-            case BotDifficulty.Hard: return fallbackHardLateralSamples;
-            default: return fallbackMediumLateralSamples;
+            case BotDifficulty.Hard:
+            case BotDifficulty.Unbeatable:
+                return fallbackHardLateralSamples;
+            default:
+                return fallbackMediumLateralSamples;
         }
     }
 }
