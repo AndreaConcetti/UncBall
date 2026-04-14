@@ -8,8 +8,14 @@ public sealed class BotShotSolver : MonoBehaviour
     [SerializeField] private bool useHumanSeedLibrary = true;
     [SerializeField] private bool allowFallbackBruteforce = true;
 
+    [Header("Seed Replay Test Mode")]
+    [SerializeField] private bool useSequentialDescendingSlotOrderForTests = true;
+    [SerializeField] private bool stopAtFirstValidSlotWhenSequential = true;
+    [SerializeField] private bool trustHumanSeedsDirectlyInSequentialMode = true;
+
     [Header("Seed Matching Debug")]
-    [SerializeField] private bool logSeedMatchingDebug = false;
+    [SerializeField] private bool logSeedMatchingDebug = true;
+    [SerializeField] private bool logSequentialRejections = true;
 
     [Header("Simulation")]
     [SerializeField] private float simulationDuration = 3.0f;
@@ -168,10 +174,10 @@ public sealed class BotShotSolver : MonoBehaviour
 
         foreach (PlateInfo plate in orderedPlates)
         {
-            for (int slotIdx = 0; slotIdx < plate.slots.Count; slotIdx++)
-            {
-                SlotInfo slot = plate.slots[slotIdx];
+            List<SlotInfo> orderedSlots = GetOrderedSlots(plate.slots);
 
+            foreach (SlotInfo slot in orderedSlots)
+            {
                 if (slot.isOccupied)
                 {
                     if (logSeedMatchingDebug)
@@ -184,9 +190,103 @@ public sealed class BotShotSolver : MonoBehaviour
                             " | SlotName=" + slot.name,
                             this);
                     }
-
                     continue;
                 }
+
+                if (useSequentialDescendingSlotOrderForTests && trustHumanSeedsDirectlyInSequentialMode && useHumanSeedLibrary && seedLibrary != null)
+                {
+                    if (seedLibrary.TryGetBestSeed(plate.index, slot.slotIndex, sourceBall.transform.position, out BotHumanShotSeed directSeed))
+                    {
+                        if (!launcher.TryBuildLaunchFromSwipe(directSeed.swipe, out Vector3 directDir, out float directForce))
+                        {
+                            if (logSequentialRejections)
+                            {
+                                Debug.Log(
+                                    "[BotShotSolver] Sequential slot failed -> " +
+                                    "PlateIndex=" + plate.index +
+                                    " | PlateName=" + plate.name +
+                                    " | SlotIndex=" + slot.slotIndex +
+                                    " | SlotName=" + slot.name +
+                                    " | Reason=SeedSwipeBuildFailed" +
+                                    " | SeedId=" + directSeed.seedId,
+                                    this);
+                            }
+                            continue;
+                        }
+
+                        BotShotCandidate directCandidate = new BotShotCandidate
+                        {
+                            targetPlateIndex = plate.index,
+                            targetPlateName = plate.name,
+                            targetSlotIndex = slot.slotIndex,
+                            targetSlotName = slot.name,
+                            swipeDelta = directSeed.swipe,
+                            launchDirection = directDir,
+                            launchForce = directForce,
+                            targetSlotCenter = slot.center,
+                            bestSamplePosition = slot.center,
+                            bestDistanceToTarget = 0f,
+                            enteredTargetTrigger = true,
+                            descendingAtEntry = true,
+                            hitBlockingBoardBeforeEntry = false,
+                            score = 999999f - slot.slotIndex
+                        };
+
+                        solution.hasSolution = true;
+                        solution.evaluatedCandidates += 1;
+                        solution.bestCandidate = directCandidate;
+
+                        bestCandidate = directCandidate;
+                        bestScore = directCandidate.score;
+                        bestSeedId = directSeed.seedId;
+                        bestSeedStartPosition = directSeed.referenceStartPosition;
+                        bestSeedStartPositionValid = true;
+
+                        lastBestTrajectoryPoints.Clear();
+                        lastBestTrajectoryPoints.Add(sourceBall.transform.position);
+                        lastBestTrajectoryPoints.Add(slot.center);
+
+                        StoreDirectSeedDebug(solution, directSeed, slot.center);
+
+                        if (logSolver)
+                        {
+                            Debug.Log(
+                                "[BotShotSolver] Sequential direct seed lock -> " +
+                                "PlateIndex=" + plate.index +
+                                " | PlateName=" + plate.name +
+                                " | SlotIndex=" + slot.slotIndex +
+                                " | SlotName=" + slot.name +
+                                " | SeedId=" + directSeed.seedId +
+                                " | Swipe=" + directSeed.swipe +
+                                " | Direction=" + directDir +
+                                " | Force=" + directForce +
+                                " | SeedStartPos=" + directSeed.referenceStartPosition,
+                                this);
+                        }
+
+                        return solution;
+                    }
+                    else
+                    {
+                        if (logSequentialRejections)
+                        {
+                            Debug.Log(
+                                "[BotShotSolver] Sequential slot failed -> " +
+                                "PlateIndex=" + plate.index +
+                                " | PlateName=" + plate.name +
+                                " | SlotIndex=" + slot.slotIndex +
+                                " | SlotName=" + slot.name +
+                                " | Reason=NoSeedMatchedFromCurrentStart" +
+                                " | CurrentStart=" + sourceBall.transform.position,
+                                this);
+                        }
+
+                        continue;
+                    }
+                }
+
+                float previousBestScore = bestScore;
+                bool previousHasSolution = solution.hasSolution;
 
                 if (useHumanSeedLibrary && seedLibrary != null)
                 {
@@ -196,14 +296,63 @@ public sealed class BotShotSolver : MonoBehaviour
                             ref solution, ref bestScore, ref bestCandidate, ref bestPath, ref bestEval, ref bestSeedId,
                             ref bestSeedStartPosition, ref bestSeedStartPositionValid);
                     }
+                    else if (logSequentialRejections)
+                    {
+                        Debug.Log(
+                            "[BotShotSolver] Sequential slot failed -> " +
+                            "PlateIndex=" + plate.index +
+                            " | PlateName=" + plate.name +
+                            " | SlotIndex=" + slot.slotIndex +
+                            " | SlotName=" + slot.name +
+                            " | Reason=NoSeedMatchedFromCurrentStart" +
+                            " | CurrentStart=" + sourceBall.transform.position,
+                            this);
+                    }
                 }
 
-                if (!allowFallbackBruteforce)
-                    continue;
+                if (allowFallbackBruteforce)
+                {
+                    EvaluateFallbackCluster(sourceBall, launcher, difficulty, plate, slot, plates, missStacks,
+                        ref solution, ref bestScore, ref bestCandidate, ref bestPath, ref bestEval, ref bestSeedId,
+                        ref bestSeedStartPosition, ref bestSeedStartPositionValid);
+                }
 
-                EvaluateFallbackCluster(sourceBall, launcher, difficulty, plate, slot, plates, missStacks,
-                    ref solution, ref bestScore, ref bestCandidate, ref bestPath, ref bestEval, ref bestSeedId,
-                    ref bestSeedStartPosition, ref bestSeedStartPositionValid);
+                bool foundValidForThisSlot = solution.hasSolution && (!previousHasSolution || bestScore > previousBestScore);
+
+                if (useSequentialDescendingSlotOrderForTests && stopAtFirstValidSlotWhenSequential && foundValidForThisSlot)
+                {
+                    solution.bestCandidate = bestCandidate;
+
+                    if (solution.hasSolution)
+                        StoreLastTrajectoryDebug(solution, bestPath, bestEval, bestSeedId, bestSeedStartPosition, bestSeedStartPositionValid);
+
+                    if (logSolver)
+                    {
+                        Debug.Log(
+                            "[BotShotSolver] Sequential slot lock -> " +
+                            "PlateIndex=" + plate.index +
+                            " | PlateName=" + plate.name +
+                            " | SlotIndex=" + slot.slotIndex +
+                            " | SlotName=" + slot.name +
+                            " | Candidate={" + bestCandidate + "} | Seed=" + bestSeedId +
+                            " | SeedStartPos=" + bestSeedStartPosition,
+                            this);
+                    }
+
+                    return solution;
+                }
+
+                if (useSequentialDescendingSlotOrderForTests && logSequentialRejections && !foundValidForThisSlot)
+                {
+                    Debug.Log(
+                        "[BotShotSolver] Sequential slot failed -> " +
+                        "PlateIndex=" + plate.index +
+                        " | PlateName=" + plate.name +
+                        " | SlotIndex=" + slot.slotIndex +
+                        " | SlotName=" + slot.name +
+                        " | Reason=NoValidCandidateAfterEvaluation",
+                        this);
+                }
             }
         }
 
@@ -216,6 +365,24 @@ public sealed class BotShotSolver : MonoBehaviour
             Debug.Log("[BotShotSolver] " + solution + " | Seed=" + bestSeedId + " | SeedStartPos=" + bestSeedStartPosition, this);
 
         return solution;
+    }
+
+    private void StoreDirectSeedDebug(BotShotSolution solution, BotHumanShotSeed seed, Vector3 targetSlotCenter)
+    {
+        lastSolveHasSolution = solution.hasSolution;
+        lastEvaluatedCandidates = solution.evaluatedCandidates;
+        lastTargetSlotCenter = targetSlotCenter;
+        lastBestSamplePosition = targetSlotCenter;
+        lastEntryPoint = targetSlotCenter;
+        lastEntryPointValid = true;
+        lastDescendingAtEntry = true;
+        lastHitBlockingBoardBeforeEntry = false;
+        lastCandidateScore = solution.bestCandidate.score;
+        lastSeedIdUsed = seed.seedId;
+        lastChosenSeedStartPosition = seed.referenceStartPosition;
+        lastChosenSeedStartPositionValid = true;
+        lastSimulatedMass = 1f;
+        lastSimulatedFixedDeltaTime = Time.fixedDeltaTime > 0f ? Time.fixedDeltaTime : 0.02f;
     }
 
     private void EvaluateSeedCluster(
@@ -481,7 +648,6 @@ public sealed class BotShotSolver : MonoBehaviour
         return false;
     }
 
-
     private bool IsSlotOccupied(Collider slotCollider)
     {
         if (slotCollider == null)
@@ -597,6 +763,18 @@ public sealed class BotShotSolver : MonoBehaviour
         List<PlateInfo> sorted = new List<PlateInfo>(plates);
         sorted.Sort((a, b) => preferHigherPlatesFirst ? b.index.CompareTo(a.index) : a.index.CompareTo(b.index));
         return sorted;
+    }
+
+    private List<SlotInfo> GetOrderedSlots(List<SlotInfo> slots)
+    {
+        List<SlotInfo> ordered = new List<SlotInfo>(slots);
+
+        if (useSequentialDescendingSlotOrderForTests)
+            ordered.Sort((a, b) => b.slotIndex.CompareTo(a.slotIndex));
+        else
+            ordered.Sort((a, b) => a.slotIndex.CompareTo(b.slotIndex));
+
+        return ordered;
     }
 
     private void ClearLastTrajectoryDebug()

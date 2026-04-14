@@ -12,7 +12,8 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     private enum PendingBotLaunchState
     {
         None = 0,
-        WaitingDelay = 1
+        WaitingPostSpawnDelay = 1,
+        WaitingPreLaunchDelay = 2
     }
 
     [Header("Scene References")]
@@ -31,9 +32,15 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private bool deterministicBotTestMode = true;
     [SerializeField] private bool applySeedStartPositionBeforeBotLaunch = true;
     [SerializeField] private bool reSolveRightBeforeBotLaunch = false;
+
+    [Header("Bot Humanization Delays")]
+    [SerializeField] private float deterministicPostSpawnDelaySeconds = 0.50f;
+    [SerializeField] private float postSpawnDelayMinSeconds = 0.35f;
+    [SerializeField] private float postSpawnDelayMaxSeconds = 1.00f;
     [SerializeField] private float deterministicPreLaunchDelaySeconds = 1.00f;
     [SerializeField] private float preLaunchDelayMinSeconds = 0.50f;
     [SerializeField] private float preLaunchDelayMaxSeconds = 3.00f;
+
     [SerializeField] private bool logBotPlacementAdjustment = true;
 
     [Header("Shot Completion")]
@@ -402,15 +409,40 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (shotInFlight || currentTurnOwner != botPlayerId || currentBall == null)
             return;
 
-        if (pendingBotLaunchState == PendingBotLaunchState.WaitingDelay)
+        switch (pendingBotLaunchState)
         {
-            pendingBotLaunchDelayRemaining -= Time.deltaTime;
+            case PendingBotLaunchState.WaitingPostSpawnDelay:
+                pendingBotLaunchDelayRemaining -= Time.deltaTime;
+                if (pendingBotLaunchDelayRemaining > 0f)
+                    return;
 
-            if (pendingBotLaunchDelayRemaining > 0f)
+                pendingBotLaunchState = PendingBotLaunchState.None;
+
+                if (applySeedStartPositionBeforeBotLaunch)
+                    TryApplyBotSeedStartPosition(pendingBotSeedId, pendingBotSeedStartPosition, pendingBotSeedStartPositionValid);
+
+                pendingBotLaunchDelayRemaining = GetBotPreLaunchDelaySeconds();
+                pendingBotLaunchState = PendingBotLaunchState.WaitingPreLaunchDelay;
+
+                if (logDebug)
+                {
+                    Debug.Log(
+                        "[OfflineBotMatchController] Bot post-spawn delay completed -> " +
+                        "SeedId=" + pendingBotSeedId +
+                        " | TargetPlate=" + pendingBotTargetPlateIndex +
+                        " | TargetSlot=" + pendingBotTargetSlotIndex +
+                        " | PreLaunchDelay=" + pendingBotLaunchDelayRemaining,
+                        this);
+                }
                 return;
 
-            ExecutePendingBotLaunch();
-            return;
+            case PendingBotLaunchState.WaitingPreLaunchDelay:
+                pendingBotLaunchDelayRemaining -= Time.deltaTime;
+                if (pendingBotLaunchDelayRemaining > 0f)
+                    return;
+
+                ExecutePendingBotLaunch();
+                return;
         }
 
         if (botThinkTimeRemaining > 0f)
@@ -466,11 +498,8 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         lastHitBlockingBoardBeforeEntry = solution.bestCandidate.hitBlockingBoardBeforeEntry;
         lastCandidateScore = solution.bestCandidate.score;
 
-        if (applySeedStartPositionBeforeBotLaunch)
-            TryApplyBotSeedStartPosition(pendingBotSeedId, pendingBotSeedStartPosition, pendingBotSeedStartPositionValid);
-
-        pendingBotLaunchDelayRemaining = GetBotPreLaunchDelaySeconds();
-        pendingBotLaunchState = PendingBotLaunchState.WaitingDelay;
+        pendingBotLaunchDelayRemaining = GetBotPostSpawnDelaySeconds();
+        pendingBotLaunchState = PendingBotLaunchState.WaitingPostSpawnDelay;
 
         if (logDebug)
         {
@@ -479,7 +508,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
                 "SeedId=" + pendingBotSeedId +
                 " | TargetPlate=" + pendingBotTargetPlateIndex +
                 " | TargetSlot=" + pendingBotTargetSlotIndex +
-                " | DelaySeconds=" + pendingBotLaunchDelayRemaining,
+                " | PostSpawnDelay=" + pendingBotLaunchDelayRemaining,
                 this);
         }
     }
@@ -527,9 +556,6 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             pendingBotTargetPlateIndex = refreshed.bestCandidate.targetPlateIndex;
             pendingBotTargetSlotIndex = refreshed.bestCandidate.targetSlotIndex;
             pendingBotSeedStartPositionValid = botShotSolver.TryGetLastChosenSeedStartPosition(out pendingBotSeedStartPosition);
-
-            if (applySeedStartPositionBeforeBotLaunch)
-                TryApplyBotSeedStartPosition(pendingBotSeedId, pendingBotSeedStartPosition, pendingBotSeedStartPositionValid);
 
             if (logDebug)
             {
@@ -594,6 +620,17 @@ public sealed class OfflineBotMatchController : MonoBehaviour
                 " | To=" + adjusted,
                 this);
         }
+    }
+
+    private float GetBotPostSpawnDelaySeconds()
+    {
+        float minDelay = Mathf.Max(0.10f, postSpawnDelayMinSeconds);
+        float maxDelay = Mathf.Max(minDelay, postSpawnDelayMaxSeconds);
+
+        if (deterministicBotTestMode)
+            return Mathf.Clamp(deterministicPostSpawnDelaySeconds, minDelay, maxDelay);
+
+        return Random.Range(minDelay, maxDelay);
     }
 
     private float GetBotPreLaunchDelaySeconds()
@@ -705,6 +742,15 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         botThinkTimeRemaining = owner == botPlayerId ? GetRandomThinkDelay() : 0f;
 
         ClearPendingBotLaunch();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OfflineBotMatchController] SpawnNewActiveBall -> " +
+                "Owner=" + owner +
+                " | Pos=" + currentBall.transform.position,
+                this);
+        }
 
         ballTurnSpawner.TryBindCurrentOfflineBallForLocalControl(currentBall, owner, localPlayerId);
         ballTurnSpawner.ClearOfflineLauncherBindingIfNeeded(currentTurnOwner, localPlayerId);
