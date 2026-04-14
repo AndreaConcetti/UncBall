@@ -1,0 +1,127 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 73e4f9150a25cb5498cae92d802e3f18, type: 3}
+  m_Name: BotHumanShotSeedLibrary
+  m_EditorClassIdentifier: Assembly-CSharp::BotHumanShotSeedLibrary
+  seeds:
+  - seedId: board1_slot0_standard
+    enabled: 1
+    targetPlateIndex: 0
+    targetSlotIndex: 0
+    requiresBallOffset: 0
+    referenceStartPosition: {x: -1.95, y: 1.44, z: -2.96}
+    allowedStartPositionTolerance: 0.35
+    swipe: {x: 90.59, y: 403.29}
+    launchDirection: {x: 0.22, y: 0, z: 0.98}
+    launchForce: 23.51901
+    swipeXVariation: 26
+    swipeYVariation: 40
+    lateralSamples: 9
+    verticalSamples: 9
+  - seedId: board1_slot1_standard
+    enabled: 1
+    targetPlateIndex: 0
+    targetSlotIndex: 1
+    requiresBallOffset: 0
+    referenceStartPosition: {x: -1.95, y: 1.44, z: -2.96}
+    allowedStartPositionTolerance: 0.35
+    swipe: {x: 105.21, y: 394.52}
+    launchDirection: {x: 0.26, y: 0, z: 0.97}
+    launchForce: 23.25179
+    swipeXVariation: 24
+    swipeYVariation: 38
+    lateralSamples: 9
+    verticalSamples: 9
+  - seedId: board1_slot2_offset_left
+    enabled: 1
+    targetPlateIndex: 0
+    targetSlotIndex: 2
+    requiresBallOffset: 1
+    referenceStartPosition: {x: -2.13, y: 1.44, z: -2.96}
+    allowedStartPositionTolerance: 0.4
+    swipe: {x: 137.35, y: 385.75}
+    launchDirection: {x: 0.34, y: 0, z: 0.94}
+    launchForce: 22.98723
+    swipeXVariation: 24
+    swipeYVariation: 36
+    lateralSamples: 9
+    verticalSamples: 9
+  - seedId: board1_slot3_standard
+    enabled: 1
+    targetPlateIndex: 0
+    targetSlotIndex: 3
+    requiresBallOffset: 0
+    referenceStartPosition: {x: -1.95, y: 1.44, z: -2.96}
+    allowedStartPositionTolerance: 0.35
+    swipe: {x: 131.51, y: 391.6}
+    launchDirection: {x: 0.32, y: 0, z: 0.95}
+    launchForce: 23.16331
+    swipeXVariation: 24
+    swipeYVariation: 38
+    lateralSamples: 9
+    verticalSamples: 9
+  - seedId: board1_slot4_standard
+    enabled: 1
+    targetPlateIndex: 0
+    targetSlotIndex: 4
+    requiresBallOffset: 0
+    referenceStartPosition: {x: -1.95, y: 1.44, z: -2.96}
+    allowedStartPositionTolerance: 0.35
+    swipe: {x: 146.12, y: 400.37}
+    launchDirection: {x: 0.34, y: 0, z: 0.94}
+    launchForce: 23.42964
+    swipeXVariation: 24
+    swipeYVariation: 38
+    lateralSamples: 9
+    verticalSamples: 9
+  - seedId: board1_slot5_offset_left
+    enabled: 1
+    targetPlateIndex: 0
+    targetSlotIndex: 5
+    requiresBallOffset: 1
+    referenceStartPosition: {x: -2.16, y: 1.44, z: -2.96}
+    allowedStartPositionTolerance: 0.42
+    swipe: {x: 166.58, y: 409.13}
+    launchDirection: {x: 0.38, y: 0, z: 0.93}
+    launchForce: 23.69861
+    swipeXVariation: 26
+    swipeYVariation: 40
+    lateralSamples: 9
+    verticalSamples: 9
+  - seedId: board1_slot6_standard
+    enabled: 1
+    targetPlateIndex: 0
+    targetSlotIndex: 6
+    requiresBallOffset: 0
+    referenceStartPosition: {x: -1.95, y: 1.44, z: -2.96}
+    allowedStartPositionTolerance: 0.35
+    swipe: {x: 160.73, y: 426.67}
+    launchDirection: {x: 0.35, y: 0, z: 0.94}
+    launchForce: 24.24434
+    swipeXVariation: 26
+    swipeYVariation: 42
+    lateralSamples: 9
+    verticalSamples: 9
+  - seedId: board2_slot2_standard
+    enabled: 1
+    targetPlateIndex: 1
+    targetSlotIndex: 2
+    requiresBallOffset: 0
+    referenceStartPosition: {x: -1.95, y: 1.44, z: -2.96}
+    allowedStartPositionTolerance: 0.35
+    swipe: {x: 128.58, y: 602.01}
+    launchDirection: {x: 0.21, y: 0, z: 0.98}
+    launchForce: 30.22902
+    swipeXVariation: 28
+    swipeYVariation: 45
+    lateralSamples: 9
+    verticalSamples: 9

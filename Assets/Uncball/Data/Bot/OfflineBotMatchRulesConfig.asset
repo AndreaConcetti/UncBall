@@ -23,7 +23,7 @@ MonoBehaviour:
     matchDurationSeconds: 60
     turnDurationSeconds: 8
   hard:
-    matchMode: 1
-    pointsToWin: 1
+    matchMode: 0
+    pointsToWin: 30
     matchDurationSeconds: 360
     turnDurationSeconds: 8

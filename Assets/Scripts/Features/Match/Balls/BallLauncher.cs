@@ -23,6 +23,9 @@ public class BallLauncher : MonoBehaviour
     [Header("Offline Bot")]
     [SerializeField] private OfflineBotMatchController offlineBotMatchController;
 
+    [Header("Shot Debug")]
+    [SerializeField] private PlayerShotDebugRecorder playerShotDebugRecorder;
+
     [Header("Optional UI Lock")]
     [SerializeField] private SettingsPanelUI settingsPanelUI;
 
@@ -62,6 +65,7 @@ public class BallLauncher : MonoBehaviour
 
     [Header("Debug")]
     public bool debugLogs = true;
+    [SerializeField] private bool logPlayerLaunchDebug = true;
 
     public float ChargeRatio { get; private set; }
     public Vector3 LaunchDirection { get; private set; }
@@ -103,6 +107,9 @@ public class BallLauncher : MonoBehaviour
         if (offlineBotMatchController == null)
             offlineBotMatchController = FindFirstObjectByType<OfflineBotMatchController>();
 
+        if (playerShotDebugRecorder == null)
+            playerShotDebugRecorder = FindFirstObjectByType<PlayerShotDebugRecorder>();
+
         cachedSpawner = FindFirstObjectByType<BallTurnSpawner>();
 
         if (settingsPanelUI == null)
@@ -113,6 +120,9 @@ public class BallLauncher : MonoBehaviour
 
         if (offlineBotMatchController == null)
             offlineBotMatchController = FindObjectOfType<OfflineBotMatchController>();
+
+        if (playerShotDebugRecorder == null)
+            playerShotDebugRecorder = FindObjectOfType<PlayerShotDebugRecorder>();
 
         cachedSpawner = FindObjectOfType<BallTurnSpawner>();
 
@@ -147,6 +157,7 @@ public class BallLauncher : MonoBehaviour
     {
         ResolveOnlineController();
         ResolveOfflineController();
+        ResolveShotDebugRecorder();
         ResolveSpawner();
         ResolveSettingsPanel();
         SyncOnlineCurrentBallBinding();
@@ -165,6 +176,80 @@ public class BallLauncher : MonoBehaviour
         HandleKeyboardConfirm();
         HandleTouchInput();
         HandleMouseInput();
+    }
+
+    public bool TryBuildLaunchFromSwipe(Vector2 swipeDelta, out Vector3 launchDirection, out float launchForce)
+    {
+        return EvaluateSwipeToLaunch(swipeDelta, out launchDirection, out launchForce, true);
+    }
+
+    public bool SimulateOfflineBotSwipe(BallPhysics sourceBall, Vector2 swipeDelta)
+    {
+        if (!IsOfflineBotSessionActive())
+            return false;
+
+        if (offlineBotMatchController == null || sourceBall == null)
+            return false;
+
+        if (!EvaluateSwipeToLaunch(swipeDelta, out Vector3 launchDirection, out float launchForce, true))
+            return false;
+
+        hasLaunched = true;
+        CurrentPhase = LaunchPhase.Launched;
+        ballVisualRoll = sourceBall.GetComponent<BallVisualRoll>();
+
+        offlineBotMatchController.RequestBotLaunchCurrentBall(launchDirection, launchForce);
+        cameraController?.OnBallLaunched();
+        return true;
+    }
+
+    private bool EvaluateSwipeToLaunch(Vector2 swipeDelta, out Vector3 launchDirection, out float launchForce, bool validateMinimumSwipe)
+    {
+        launchDirection = Vector3.zero;
+        launchForce = 0f;
+
+        Vector3 worldSwipe = new Vector3(swipeDelta.x, 0f, swipeDelta.y);
+        if (worldSwipe.sqrMagnitude < 0.001f)
+            return false;
+
+        if (validateMinimumSwipe && !IsSwipeValidForLaunch(swipeDelta))
+            return false;
+
+        Vector3 dir = worldSwipe.normalized;
+        Vector3 forward = GetSafeForward();
+
+        if (constrainAngle)
+        {
+            float signedAngle = Vector3.SignedAngle(forward, dir, Vector3.up);
+            float clampedAngle = Mathf.Clamp(signedAngle, -angleLimit, angleLimit);
+            dir = Quaternion.AngleAxis(clampedAngle, Vector3.up) * forward;
+        }
+
+        dir.y = 0f;
+        dir.Normalize();
+
+        float rawCharge = useForwardOnlyForPower
+            ? Mathf.Clamp01(Mathf.Max(0f, swipeDelta.y) / Mathf.Max(1f, maxSwipePixels))
+            : Mathf.Clamp01(swipeDelta.magnitude / Mathf.Max(1f, maxSwipePixels));
+
+        float chargeRatio = Mathf.Pow(rawCharge, Mathf.Max(0.01f, chargeCurveExponent));
+        float force = Mathf.Lerp(minForce, maxForce, chargeRatio);
+
+        launchDirection = dir;
+        launchForce = force;
+        return true;
+    }
+
+    private void ResolveShotDebugRecorder()
+    {
+        if (playerShotDebugRecorder != null)
+            return;
+
+#if UNITY_2023_1_OR_NEWER
+        playerShotDebugRecorder = FindFirstObjectByType<PlayerShotDebugRecorder>();
+#else
+        playerShotDebugRecorder = FindObjectOfType<PlayerShotDebugRecorder>();
+#endif
     }
 
     private void ResolveSpawner()
@@ -289,14 +374,6 @@ public class BallLauncher : MonoBehaviour
                 activePlacementArea = null;
 
             ResetLaunch();
-
-            if (debugLogs)
-            {
-                Debug.Log(
-                    "[BallLauncher] SyncOnlineCurrentBallBinding -> bound local ball for owner " + owner,
-                    this
-                );
-            }
         }
     }
 
@@ -345,14 +422,6 @@ public class BallLauncher : MonoBehaviour
                 activePlacementArea = null;
 
             ResetLaunch();
-
-            if (debugLogs)
-            {
-                Debug.Log(
-                    "[BallLauncher] SyncOfflineCurrentBallBinding -> bound local offline ball for owner " + currentOwner,
-                    this
-                );
-            }
         }
     }
 
@@ -370,7 +439,6 @@ public class BallLauncher : MonoBehaviour
         activeFinger = null;
         isPlacementDragging = false;
         isAimTracking = false;
-
         mousePlacementDragging = false;
         mouseAimDragging = false;
 
@@ -474,11 +542,7 @@ public class BallLauncher : MonoBehaviour
         LaunchDirection = Vector3.zero;
         hasLaunched = false;
 
-        if (keepBoundBall && ball != null)
-            CurrentPhase = LaunchPhase.Placement;
-        else
-            CurrentPhase = LaunchPhase.None;
-
+        CurrentPhase = keepBoundBall && ball != null ? LaunchPhase.Placement : LaunchPhase.None;
         cameraController?.SetAiming(false);
     }
 
@@ -642,7 +706,13 @@ public class BallLauncher : MonoBehaviour
                 mouseAimDragging = false;
 
                 if (IsSwipeValidForLaunch(swipe))
-                    DoLaunch();
+                {
+                    Vector3 previewDir = LaunchDirection.normalized;
+                    previewDir.y = 0f;
+                    float previewForce = Mathf.Lerp(minForce, maxForce, ChargeRatio);
+                    LogLaunchDebug("MouseLaunchPreview", swipe, previewDir, previewForce);
+                    DoLaunch(swipe);
+                }
                 else
                     CancelAimState();
             }
@@ -861,7 +931,13 @@ public class BallLauncher : MonoBehaviour
         ClearActiveFinger();
 
         if (IsSwipeValidForLaunch(swipe))
-            DoLaunch();
+        {
+            Vector3 previewDir = LaunchDirection.normalized;
+            previewDir.y = 0f;
+            float previewForce = Mathf.Lerp(minForce, maxForce, ChargeRatio);
+            LogLaunchDebug("TouchLaunchPreview", swipe, previewDir, previewForce);
+            DoLaunch(swipe);
+        }
         else
             CancelAimState();
     }
@@ -872,10 +948,7 @@ public class BallLauncher : MonoBehaviour
         LaunchDirection = Vector3.zero;
         cameraController?.SetAiming(false);
 
-        if (ball != null)
-            CurrentPhase = LaunchPhase.Placement;
-        else
-            CurrentPhase = LaunchPhase.None;
+        CurrentPhase = ball != null ? LaunchPhase.Placement : LaunchPhase.None;
     }
 
     bool IsSwipeValidForLaunch(Vector2 swipe)
@@ -888,7 +961,7 @@ public class BallLauncher : MonoBehaviour
         return swipe.magnitude >= minLaunchSwipePixels;
     }
 
-    void DoLaunch()
+    void DoLaunch(Vector2 swipeUsed)
     {
         if (hasLaunched || ball == null)
             return;
@@ -899,16 +972,24 @@ public class BallLauncher : MonoBehaviour
         Vector3 impulseDir = LaunchDirection.normalized;
         impulseDir.y = 0f;
         float force = Mathf.Lerp(minForce, maxForce, ChargeRatio);
+        PlayerID owner = GetOwnerFromBall(ball);
+        Vector3 startPos = ball.transform.position;
+
+        if (playerShotDebugRecorder != null)
+            playerShotDebugRecorder.RegisterLocalLaunch(owner, startPos, swipeUsed, impulseDir, force);
 
         if (IsOfflineBotSessionActive())
         {
             if (offlineBotMatchController == null || offlineBotMatchController.MatchEnded || offlineBotMatchController.MidMatchBreakActive)
                 return;
 
+            LogLaunchDebug("OfflineLocalDoLaunch", swipeUsed, impulseDir, force);
+
             hasLaunched = true;
             CurrentPhase = LaunchPhase.Launched;
 
             RefreshBallVisualRollReference();
+
             offlineBotMatchController.RequestLaunchCurrentBall(impulseDir, force);
             cameraController?.OnBallLaunched();
             return;
@@ -924,6 +1005,8 @@ public class BallLauncher : MonoBehaviour
             return;
         }
 
+        LogLaunchDebug("OnlineLocalDoLaunch", swipeUsed, impulseDir, force);
+
         hasLaunched = true;
         CurrentPhase = LaunchPhase.Launched;
 
@@ -935,31 +1018,11 @@ public class BallLauncher : MonoBehaviour
 
     void ApplySwipe(Vector2 swipe)
     {
-        Vector3 worldSwipe = new Vector3(swipe.x, 0f, swipe.y);
-
-        if (worldSwipe.sqrMagnitude < 0.001f)
-            return;
-
-        Vector3 dir = worldSwipe.normalized;
-        Vector3 forward = GetSafeForward();
-
-        if (constrainAngle)
+        if (EvaluateSwipeToLaunch(swipe, out Vector3 launchDirection, out float launchForce, false))
         {
-            float signedAngle = Vector3.SignedAngle(forward, dir, Vector3.up);
-            float clampedAngle = Mathf.Clamp(signedAngle, -angleLimit, angleLimit);
-            dir = Quaternion.AngleAxis(clampedAngle, Vector3.up) * forward;
+            LaunchDirection = launchDirection;
+            ChargeRatio = Mathf.InverseLerp(minForce, maxForce, launchForce);
         }
-
-        dir.y = 0f;
-        dir.Normalize();
-
-        LaunchDirection = dir;
-
-        float rawCharge = useForwardOnlyForPower
-            ? Mathf.Clamp01(Mathf.Max(0f, swipe.y) / Mathf.Max(1f, maxSwipePixels))
-            : Mathf.Clamp01(swipe.magnitude / Mathf.Max(1f, maxSwipePixels));
-
-        ChargeRatio = Mathf.Pow(rawCharge, Mathf.Max(0.01f, chargeCurveExponent));
     }
 
     bool TryGetPlacementWorldPoint(Vector2 screenPos, out Vector3 worldPoint)
@@ -1114,6 +1177,26 @@ public class BallLauncher : MonoBehaviour
             return ownership.Owner;
 
         return PlayerID.None;
+    }
+
+    private void LogLaunchDebug(string source, Vector2 swipe, Vector3 impulseDir, float force)
+    {
+        if (!logPlayerLaunchDebug)
+            return;
+
+        PlayerID owner = ball != null ? GetOwnerFromBall(ball) : PlayerID.None;
+        Vector3 startPos = ball != null ? ball.transform.position : Vector3.zero;
+
+        Debug.Log(
+            "[BallLauncher] " + source +
+            " -> Owner=" + owner +
+            " | StartPos=" + startPos +
+            " | Swipe=" + swipe +
+            " | ChargeRatio=" + ChargeRatio +
+            " | LaunchDirection=" + impulseDir +
+            " | Force=" + force +
+            " | Phase=" + CurrentPhase,
+            this);
     }
 
     void RefreshBallVisualRollReference()

@@ -9,6 +9,7 @@ public class BallCameraController : MonoBehaviour
     [SerializeField] private CameraViewportFitter viewportFitter;
     [SerializeField] private BallLauncher ballLauncher;
     [SerializeField] private OnlineGameplayAuthority onlineAuthority;
+    [SerializeField] private OfflineBotMatchController offlineBotMatchController;
 
     [Header("Strategic Camera")]
     [SerializeField] private Transform overviewAnchor;
@@ -264,15 +265,26 @@ public class BallCameraController : MonoBehaviour
     {
         localAimSideIsLeft = true;
 
-        if (ballTurnSpawner == null || onlineAuthority == null)
+        if (ballTurnSpawner == null)
             return overviewAnchor;
 
-        PlayerID playerToFrame = onlineAuthority.LocalPlayerId;
-        localAimSideIsLeft = ballTurnSpawner.IsPlayerIdOnLeft(playerToFrame);
+        PlayerID localPlayerId = ResolveLocalPlayerId();
+        localAimSideIsLeft = ballTurnSpawner.IsPlayerIdOnLeft(localPlayerId);
 
         return localAimSideIsLeft
             ? (leftSideAimAnchor != null ? leftSideAimAnchor : overviewAnchor)
             : (rightSideAimAnchor != null ? rightSideAimAnchor : overviewAnchor);
+    }
+
+    private PlayerID ResolveLocalPlayerId()
+    {
+        if (offlineBotMatchController != null && offlineBotMatchController.IsOfflineBotSessionActive)
+            return offlineBotMatchController.LocalPlayerId;
+
+        if (onlineAuthority != null)
+            return onlineAuthority.LocalPlayerId;
+
+        return PlayerID.Player1;
     }
 
     private void ResolveDependencies()
@@ -292,6 +304,9 @@ public class BallCameraController : MonoBehaviour
 
         if (ballLauncher == null)
             ballLauncher = FindFirstObjectByType<BallLauncher>();
+
+        if (offlineBotMatchController == null)
+            offlineBotMatchController = FindFirstObjectByType<OfflineBotMatchController>();
 #else
         if (ballTurnSpawner == null)
             ballTurnSpawner = FindObjectOfType<BallTurnSpawner>();
@@ -304,6 +319,9 @@ public class BallCameraController : MonoBehaviour
 
         if (ballLauncher == null)
             ballLauncher = FindObjectOfType<BallLauncher>();
+
+        if (offlineBotMatchController == null)
+            offlineBotMatchController = FindObjectOfType<OfflineBotMatchController>();
 #endif
     }
 }

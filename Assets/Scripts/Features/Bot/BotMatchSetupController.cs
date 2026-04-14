@@ -28,7 +28,7 @@ public sealed class BotMatchSetupController : MonoBehaviour
     [Header("Gameplay Skin Integration")]
     [SerializeField] private PlayerSkinLoadout playerSkinLoadout;
     [SerializeField] private BallSkinRandomGenerator ballSkinRandomGenerator;
-    [SerializeField] private bool assignGeneratedBotSkinToPlayer2 = true;
+    [SerializeField] private bool assignGeneratedBotSkin = true;
 
     [Header("Offline Side Policy")]
     [SerializeField] private bool randomizeSidesForOfflineBot = true;
@@ -100,27 +100,26 @@ public sealed class BotMatchSetupController : MonoBehaviour
             ? generatedBot
             : CreateOfflineVisibleBot(generatedBot, difficulty);
 
-        BallSkinData botSkin = null;
-        if (assignGeneratedBotSkinToPlayer2)
+        BallSkinData generatedBotSkin = null;
+        if (assignGeneratedBotSkin)
+            generatedBotSkin = GenerateBotSkinForDifficulty(difficulty);
+
+        BotOfflineMatchRequest request = BuildOfflineMatchRequest(finalBot, generatedBotSkin, difficulty);
+        if (request == null)
         {
-            botSkin = GenerateBotSkinForDifficulty(difficulty);
-            AssignBotSkinToPlayer2(finalBot, botSkin);
+            Debug.LogError("[BotMatchSetupController] Failed to build offline request.", this);
+            return;
         }
 
+        ApplyOfflineSkinOwnershipSnapshot(request, generatedBotSkin);
         botSessionRuntime.SetCurrentBot(finalBot);
-
-        BotOfflineMatchRequest request = BuildOfflineMatchRequest(finalBot, botSkin, difficulty);
         botOfflineMatchRuntime.SetRequest(request);
 
         if (enableDebugLogs)
-        {
             Debug.Log("[BotMatchSetupController] Offline bot match request created -> " + request, this);
-        }
 
         if (autoLoadGameplayScene && !string.IsNullOrWhiteSpace(gameplaySceneName))
-        {
             SceneManager.LoadScene(gameplaySceneName);
-        }
     }
 
     public void InjectRuntimeSkinIds(IEnumerable<string> skinIds)
@@ -128,13 +127,7 @@ public sealed class BotMatchSetupController : MonoBehaviour
         runtimeAvailableSkinIds.Clear();
 
         if (skinIds == null)
-        {
-            if (enableDebugLogs)
-            {
-                Debug.Log("[BotMatchSetupController] InjectRuntimeSkinIds called with null. Runtime skin pool cleared.", this);
-            }
             return;
-        }
 
         foreach (string skinId in skinIds)
         {
@@ -147,9 +140,7 @@ public sealed class BotMatchSetupController : MonoBehaviour
         }
 
         if (enableDebugLogs)
-        {
             Debug.Log($"[BotMatchSetupController] Injected runtime skin id pool. Count={runtimeAvailableSkinIds.Count}", this);
-        }
     }
 
     public void ClearBotSession()
@@ -161,9 +152,7 @@ public sealed class BotMatchSetupController : MonoBehaviour
             botOfflineMatchRuntime.ClearRequest();
 
         if (enableDebugLogs)
-        {
             Debug.Log("[BotMatchSetupController] Cleared bot session and offline request.", this);
-        }
     }
 
     private void ResolveOptionalDependencies()
@@ -232,9 +221,6 @@ public sealed class BotMatchSetupController : MonoBehaviour
         bool localPlayerIsPlayer1 = randomizeSidesForOfflineBot ? UnityEngine.Random.value >= 0.5f : true;
         bool player1StartsOnLeft = UnityEngine.Random.value >= 0.5f;
 
-        // Offline bot rule:
-        // - player or bot can be on the left randomly
-        // - the LEFT side always starts
         PlayerID initialTurnOwner = player1StartsOnLeft ? PlayerID.Player1 : PlayerID.Player2;
 
         string localSkinId = ResolveLocalEquippedSkinId();
@@ -266,29 +252,43 @@ public sealed class BotMatchSetupController : MonoBehaviour
             randomSeed: UnityEngine.Random.Range(int.MinValue, int.MaxValue));
     }
 
-    private void AssignBotSkinToPlayer2(BotProfileRuntimeData bot, BallSkinData generatedSkin)
+    private void ApplyOfflineSkinOwnershipSnapshot(BotOfflineMatchRequest request, BallSkinData generatedBotSkin)
     {
-        if (playerSkinLoadout == null)
+        if (playerSkinLoadout == null || request == null)
         {
-            Debug.LogWarning("[BotMatchSetupController] PlayerSkinLoadout not found. Bot skin will not be assigned.", this);
+            Debug.LogWarning("[BotMatchSetupController] Cannot apply offline skin snapshot. Missing loadout or request.", this);
             return;
         }
 
-        if (generatedSkin == null)
-        {
-            Debug.LogWarning("[BotMatchSetupController] Generated bot skin is null.", this);
-            return;
-        }
+        BallSkinData localSkin = playerSkinLoadout.GetEquippedSkinForProfile(request.LocalProfileId);
+        if (localSkin == null)
+            localSkin = playerSkinLoadout.GetEquippedSkinForPlayer1();
 
-        playerSkinLoadout.SetPlayer2ProfileId(bot != null ? bot.BotId : "bot_player_2");
-        playerSkinLoadout.EquipSkinForPlayer2(generatedSkin);
+        BallSkinData botSkin = generatedBotSkin;
+
+        string player1ProfileId = request.LocalPlayerIsPlayer1 ? request.LocalProfileId : request.BotProfileId;
+        string player2ProfileId = request.LocalPlayerIsPlayer1 ? request.BotProfileId : request.LocalProfileId;
+
+        BallSkinData player1Skin = request.LocalPlayerIsPlayer1 ? localSkin : botSkin;
+        BallSkinData player2Skin = request.LocalPlayerIsPlayer1 ? botSkin : localSkin;
+
+        playerSkinLoadout.ApplyMatchSnapshot(
+            player1ProfileId,
+            player1Skin,
+            player2ProfileId,
+            player2Skin
+        );
 
         if (enableDebugLogs)
         {
             Debug.Log(
-                "[BotMatchSetupController] Assigned generated bot skin to Player2 -> " +
-                generatedSkin.skinUniqueId,
-                this);
+                "[BotMatchSetupController] ApplyOfflineSkinOwnershipSnapshot -> " +
+                "P1Profile=" + player1ProfileId +
+                " | P1Skin=" + GetSafeSkinId(player1Skin) +
+                " | P2Profile=" + player2ProfileId +
+                " | P2Skin=" + GetSafeSkinId(player2Skin),
+                this
+            );
         }
     }
 
@@ -334,11 +334,19 @@ public sealed class BotMatchSetupController : MonoBehaviour
         if (playerSkinLoadout == null)
             return string.Empty;
 
-        BallSkinData localSkin = playerSkinLoadout.GetEquippedSkinForPlayer1();
+        BallSkinData localSkin = playerSkinLoadout.GetEquippedSkinForProfile(ResolveLocalProfileId());
+        if (localSkin == null)
+            localSkin = playerSkinLoadout.GetEquippedSkinForPlayer1();
+
         if (localSkin == null || string.IsNullOrWhiteSpace(localSkin.skinUniqueId))
             return string.Empty;
 
         return localSkin.skinUniqueId.Trim();
+    }
+
+    private string GetSafeSkinId(BallSkinData skin)
+    {
+        return skin != null ? skin.skinUniqueId : "none";
     }
 
 #if UNITY_EDITOR

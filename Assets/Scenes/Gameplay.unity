@@ -4017,6 +4017,8 @@ GameObject:
   m_Component:
   - component: {fileID: 309990289}
   - component: {fileID: 309990290}
+  - component: {fileID: 309990291}
+  - component: {fileID: 309990292}
   m_Layer: 0
   m_Name: ManagerBot
   m_TagString: Untagged
@@ -4055,10 +4057,32 @@ MonoBehaviour:
   hud: {fileID: 596191368}
   scoreManager: {fileID: 880244600}
   bottomBarOrderSwapper: {fileID: 265633326}
+  botShotSolver: {fileID: 309990291}
+  playerShotDebugRecorder: {fileID: 309990292}
+  seedTestSideMode: 2
+  forceBotStartsFirst: 1
+  deterministicBotTestMode: 1
+  applySeedStartPositionBeforeBotLaunch: 1
+  reSolveRightBeforeBotLaunch: 0
+  deterministicPreLaunchDelaySeconds: 1
+  preLaunchDelayMinSeconds: 0.5
+  preLaunchDelayMaxSeconds: 3
+  logBotPlacementAdjustment: 1
   enableStuckBallCheck: 1
   stuckTimeout: 2.5
   stuckVelocityThreshold: 0.05
+  continueBootstrapIfScoreManagerThrows: 1
+  enableBotBrain: 1
+  easyThinkDelayMin: 0.75
+  easyThinkDelayMax: 1.55
+  mediumThinkDelayMin: 0.55
+  mediumThinkDelayMax: 1.15
+  hardThinkDelayMin: 0.35
+  hardThinkDelayMax: 0.85
+  maxAdaptiveMissStacks: 5
   logDebug: 1
+  drawBotTargetGizmos: 1
+  gizmoSphereRadius: 0.08
   isOfflineBotSessionActive: 0
   activeRequest:
     requestId: 
@@ -4092,6 +4116,131 @@ MonoBehaviour:
   scoreP2: 0
   shotInFlight: 0
   currentPlayerScoredThisTurn: 0
+  botThinkTimeRemaining: 0
+  consecutiveBotMisses: 0
+  pendingBotLaunchState: 0
+  pendingBotLaunchDelayRemaining: 0
+  pendingBotSwipe: {x: 0, y: 0}
+  pendingBotDirection: {x: 0, y: 0, z: 0}
+  pendingBotForce: 0
+  pendingBotSeedId: 
+  pendingBotSeedStartPosition: {x: 0, y: 0, z: 0}
+  pendingBotSeedStartPositionValid: 0
+  pendingBotTargetPlateIndex: -1
+  pendingBotTargetSlotIndex: -1
+  lastTargetPlateIndex: -1
+  lastTargetPlateName: 
+  lastTargetSlotIndex: -1
+  lastTargetSlotName: 
+  lastTargetSlotCenter: {x: 0, y: 0, z: 0}
+  lastBestSamplePosition: {x: 0, y: 0, z: 0}
+  lastSwipeDelta: {x: 0, y: 0}
+  lastLaunchDirection: {x: 0, y: 0, z: 0}
+  lastLaunchForce: 0
+  lastTargetDistance: 0
+  lastEnteredTargetTrigger: 0
+  lastDescendingAtEntry: 0
+  lastHitBlockingBoardBeforeEntry: 0
+  lastCandidateScore: 0
+--- !u!114 &309990291
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309990288}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a453d553c6a8fc43bd1faf50dd2849c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BotShotSolver
+  seedLibrary: {fileID: 11400000, guid: 5be9ba70d300f454e91336ac4e5047e1, type: 2}
+  useHumanSeedLibrary: 1
+  allowFallbackBruteforce: 0
+  logSeedMatchingDebug: 1
+  simulationDuration: 2.25
+  slotBoundsPadding: 0.01
+  blockingBoundsPadding: 0.02
+  descendingDotThreshold: 0.12
+  fallbackEasySwipeYMin: 280
+  fallbackEasySwipeYMax: 420
+  fallbackMediumSwipeYMin: 380
+  fallbackMediumSwipeYMax: 620
+  fallbackHardSwipeYMin: 520
+  fallbackHardSwipeYMax: 900
+  fallbackEasyVerticalSamples: 10
+  fallbackMediumVerticalSamples: 14
+  fallbackHardVerticalSamples: 18
+  fallbackEasyLateralWindow: 100
+  fallbackMediumLateralWindow: 80
+  fallbackHardLateralWindow: 60
+  fallbackEasyLateralSamples: 9
+  fallbackMediumLateralSamples: 11
+  fallbackHardLateralSamples: 13
+  maxMissStacksApplied: 5
+  extraSwipeYPerMiss: 24
+  extraLateralWindowPerMiss: 6
+  preferHigherPlatesFirst: 1
+  requireDescendingEntry: 1
+  requireTargetTriggerEntry: 1
+  enteredTargetReward: 2000
+  descendingEntryReward: 6000
+  nonDescendingEntryPenalty: 5000
+  blockingPenalty: 4500
+  distancePenaltyMultiplier: 100
+  higherPlateRewardMultiplier: 750
+  noEntryPenalty: 2000
+  drawBestTrajectory: 1
+  drawAllTrajectoryPoints: 1
+  gizmoPointRadius: 0.025
+  trajectoryColor: {r: 1, g: 0.5267917, b: 0, a: 1}
+  targetColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  bestSampleColor: {r: 0, g: 1, b: 1, a: 1}
+  entryColor: {r: 1, g: 0, b: 1, a: 1}
+  logSolver: 1
+  lastSolveHasSolution: 0
+  lastEvaluatedCandidates: 0
+  lastTargetSlotCenter: {x: 0, y: 0, z: 0}
+  lastBestSamplePosition: {x: 0, y: 0, z: 0}
+  lastEntryPoint: {x: 0, y: 0, z: 0}
+  lastEntryPointValid: 0
+  lastDescendingAtEntry: 0
+  lastHitBlockingBoardBeforeEntry: 0
+  lastCandidateScore: 0
+  lastSeedIdUsed: 
+  lastChosenSeedStartPositionValid: 0
+  lastChosenSeedStartPosition: {x: 0, y: 0, z: 0}
+  lastSimulatedMass: 1
+  lastSimulatedFixedDeltaTime: 0.02
+--- !u!114 &309990292
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309990288}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c5b2a83d6a870142a2fa5f9177594ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerShotDebugRecorder
+  scoreManager: {fileID: 880244600}
+  logDebug: 1
+  currentMatchShotIndex: 0
+  hasPendingLocalShot: 0
+  pendingShotIndex: -1
+  pendingOwner: 0
+  pendingStartPosition: {x: 0, y: 0, z: 0}
+  pendingSwipe: {x: 0, y: 0}
+  pendingDirection: {x: 0, y: 0, z: 0}
+  pendingForce: 0
+  pendingScored: 0
+  pendingScoredPlateIndex: -1
+  pendingScoredSlotIndex: -1
+  lastResolvedShotIndex: -1
+  lastResolvedScored: 0
+  lastResolvedPlateIndex: -1
+  lastResolvedSlotIndex: -1
 --- !u!1 &324931215
 GameObject:
   m_ObjectHideFlags: 0
@@ -6717,7 +6866,8 @@ MonoBehaviour:
   gameplayCamera: {fileID: 2130389375}
   ballVisualRoll: {fileID: 0}
   onlineAuthority: {fileID: 1394314180}
-  offlineBotMatchController: {fileID: 0}
+  offlineBotMatchController: {fileID: 309990290}
+  playerShotDebugRecorder: {fileID: 309990292}
   settingsPanelUI: {fileID: 596191374}
   activePlacementArea: {fileID: 0}
   placementYOffset: 0
@@ -6738,7 +6888,8 @@ MonoBehaviour:
   forwardAxis: {x: 0, y: 0, z: 1}
   enableTouchSimulationInEditor: 1
   allowMouseInputInEditor: 1
-  debugLogs: 0
+  debugLogs: 1
+  logPlayerLaunchDebug: 1
 --- !u!114 &472537354
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6762,7 +6913,7 @@ MonoBehaviour:
   leftPlacementArea: {fileID: 2132896912}
   rightPlacementArea: {fileID: 1904214544}
   player1IsOnLeft: 1
-  logDebug: 0
+  logDebug: 1
 --- !u!1 &475852020
 GameObject:
   m_ObjectHideFlags: 0
@@ -11811,7 +11962,7 @@ MonoBehaviour:
   onOvertimeStart:
     m_PersistentCalls:
       m_Calls: []
-  logDebug: 0
+  logDebug: 1
 --- !u!1 &891123374
 GameObject:
   m_ObjectHideFlags: 0
@@ -25227,6 +25378,7 @@ MonoBehaviour:
   viewportFitter: {fileID: 2130389380}
   ballLauncher: {fileID: 472537353}
   onlineAuthority: {fileID: 1394314180}
+  offlineBotMatchController: {fileID: 0}
   overviewAnchor: {fileID: 973354175}
   overviewOrthoSizeFallback: 4
   leftSideAimAnchor: {fileID: 435041597}

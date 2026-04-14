@@ -10,19 +10,37 @@ public class DeathZone : MonoBehaviour
             return;
 
 #if UNITY_2023_1_OR_NEWER
-        FusionOnlineMatchController controller = FindFirstObjectByType<FusionOnlineMatchController>();
+        FusionOnlineMatchController onlineController = FindFirstObjectByType<FusionOnlineMatchController>();
+        OfflineBotMatchController offlineController = FindFirstObjectByType<OfflineBotMatchController>();
 #else
-        FusionOnlineMatchController controller = FindObjectOfType<FusionOnlineMatchController>();
+        FusionOnlineMatchController onlineController = FindObjectOfType<FusionOnlineMatchController>();
+        OfflineBotMatchController offlineController = FindObjectOfType<OfflineBotMatchController>();
 #endif
 
         NetworkObject netObj = other.GetComponent<NetworkObject>();
 
-        if (controller != null && netObj != null)
+        // Online path stays unchanged.
+        if (onlineController != null && netObj != null && netObj.enabled)
         {
-            if (controller.HasStateAuthority)
-                controller.NotifyAuthoritativeBallLost(ball);
+            if (onlineController.HasStateAuthority)
+                onlineController.NotifyAuthoritativeBallLost(ball);
 
             return;
         }
+
+        // Offline bot path.
+        if (offlineController != null && offlineController.IsOfflineBotSessionActive)
+        {
+            offlineController.NotifyOfflineBallLost(ball);
+
+            if (ball != null)
+                Destroy(ball.gameObject);
+
+            return;
+        }
+
+        // Fallback local cleanup.
+        if (ball != null)
+            Destroy(ball.gameObject);
     }
 }
