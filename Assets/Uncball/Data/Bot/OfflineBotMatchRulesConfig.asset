@@ -16,19 +16,19 @@ MonoBehaviour:
     matchMode: 1
     pointsToWin: 200
     matchDurationSeconds: 360
-    turnDurationSeconds: 12
+    turnDurationSeconds: 8
   medium:
     matchMode: 1
-    pointsToWin: 200
+    pointsToWin: 1
     matchDurationSeconds: 360
-    turnDurationSeconds: 12
+    turnDurationSeconds: 8
   hard:
     matchMode: 1
     pointsToWin: 200
-    matchDurationSeconds: 360
-    turnDurationSeconds: 12
+    matchDurationSeconds: 720
+    turnDurationSeconds: 8
   unbeatable:
     matchMode: 1
     pointsToWin: 200
-    matchDurationSeconds: 360
-    turnDurationSeconds: 12
+    matchDurationSeconds: 720
+    turnDurationSeconds: 8

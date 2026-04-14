@@ -561,6 +561,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
         {
             OnlineMatchPresentationResult result = BuildPresentationResult(
                 category,
+                queueType,
                 effectiveStartLevel,
                 effectiveEndLevel,
                 startTotalXp,
@@ -647,6 +648,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
 
     private OnlineMatchPresentationResult BuildPresentationResult(
         OnlineRewardCategory category,
+        QueueType queueType,
         int startLevel,
         int endLevel,
         int startTotalXp,
@@ -670,6 +672,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
                 category == OnlineRewardCategory.DisconnectLoss ||
                 category == OnlineRewardCategory.SurrenderLoss ||
                 category == OnlineRewardCategory.ReconnectTimeoutLoss,
+            isRanked = queueType == QueueType.Ranked,
             playerName = profileManager != null ? profileManager.ActiveDisplayName : "PLAYER",
             startLevel = Mathf.Max(1, startLevel),
             endLevel = Mathf.Max(1, endLevel),
@@ -701,7 +704,7 @@ public class OnlineMatchEndFlow : MonoBehaviour
     {
         string summary = string.Empty;
 
-        if (result.rankedLpDelta != 0)
+        if (result.isRanked && result.rankedLpDelta != 0)
             summary += "LP: " + (result.rankedLpDelta > 0 ? "+" : string.Empty) + result.rankedLpDelta;
 
         if (result.grantedXp > 0)
@@ -721,7 +724,14 @@ public class OnlineMatchEndFlow : MonoBehaviour
         }
 
         if (string.IsNullOrWhiteSpace(summary))
-            summary = "TOTAL LP: " + startRankedLp + " -> " + result.newRankedLpTotal;
+        {
+            if (result.isRanked)
+                summary = "TOTAL LP: " + startRankedLp + " -> " + result.newRankedLpTotal;
+            else if (result.totalSoftCurrencyGained > 0)
+                summary = "REWARDS OBTAINED";
+            else
+                summary = string.Empty;
+        }
 
         return summary;
     }

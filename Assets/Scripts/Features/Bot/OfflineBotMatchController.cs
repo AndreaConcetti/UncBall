@@ -17,24 +17,27 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         WaitingPreLaunchDelay = 2
     }
 
+    private enum MidMatchBreakReason
+    {
+        None = 0,
+        TimeHalftime = 1,
+        ScoreHalfPoint = 2
+    }
+
     private struct BotShotErrorSettings
     {
         public float majorMissChanceBoard1;
         public float majorMissChanceBoard2;
         public float majorMissChanceBoard3;
-
         public float minorSwipeXBoard1;
         public float minorSwipeXBoard2;
         public float minorSwipeXBoard3;
-
         public float minorSwipeYBoard1;
         public float minorSwipeYBoard2;
         public float minorSwipeYBoard3;
-
         public float majorSwipeXBoard1;
         public float majorSwipeXBoard2;
         public float majorSwipeXBoard3;
-
         public float majorSwipeYBoard1;
         public float majorSwipeYBoard2;
         public float majorSwipeYBoard3;
@@ -65,8 +68,11 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private float deterministicPreLaunchDelaySeconds = 1.00f;
     [SerializeField] private float preLaunchDelayMinSeconds = 0.50f;
     [SerializeField] private float preLaunchDelayMaxSeconds = 3.00f;
-
     [SerializeField] private bool logBotPlacementAdjustment = true;
+
+    [Header("Mid Match Break")]
+    [SerializeField] private float defaultBreakDuration = 8f;
+    [SerializeField] private float postShotPanelDelay = 1.5f;
 
     [Header("Shot Completion")]
     [SerializeField] private bool enableStuckBallCheck = true;
@@ -95,21 +101,21 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private bool logShotError = true;
 
     [Header("Easy Error Tuning")]
-    [SerializeField] private float easyMajorMissChanceBoard1 = 0.18f;
-    [SerializeField] private float easyMajorMissChanceBoard2 = 0.35f;
-    [SerializeField] private float easyMajorMissChanceBoard3 = 0.55f;
-    [SerializeField] private float easyMinorSwipeXBoard1 = 28f;
-    [SerializeField] private float easyMinorSwipeXBoard2 = 52f;
-    [SerializeField] private float easyMinorSwipeXBoard3 = 86f;
-    [SerializeField] private float easyMinorSwipeYBoard1 = 22f;
-    [SerializeField] private float easyMinorSwipeYBoard2 = 46f;
-    [SerializeField] private float easyMinorSwipeYBoard3 = 82f;
-    [SerializeField] private float easyMajorSwipeXBoard1 = 90f;
-    [SerializeField] private float easyMajorSwipeXBoard2 = 155f;
-    [SerializeField] private float easyMajorSwipeXBoard3 = 240f;
-    [SerializeField] private float easyMajorSwipeYBoard1 = 70f;
-    [SerializeField] private float easyMajorSwipeYBoard2 = 130f;
-    [SerializeField] private float easyMajorSwipeYBoard3 = 210f;
+    [SerializeField] private float easyMajorMissChanceBoard1 = 0.20f;
+    [SerializeField] private float easyMajorMissChanceBoard2 = 0.40f;
+    [SerializeField] private float easyMajorMissChanceBoard3 = 0.60f;
+    [SerializeField] private float easyMinorSwipeXBoard1 = 32f;
+    [SerializeField] private float easyMinorSwipeXBoard2 = 58f;
+    [SerializeField] private float easyMinorSwipeXBoard3 = 94f;
+    [SerializeField] private float easyMinorSwipeYBoard1 = 24f;
+    [SerializeField] private float easyMinorSwipeYBoard2 = 50f;
+    [SerializeField] private float easyMinorSwipeYBoard3 = 88f;
+    [SerializeField] private float easyMajorSwipeXBoard1 = 100f;
+    [SerializeField] private float easyMajorSwipeXBoard2 = 170f;
+    [SerializeField] private float easyMajorSwipeXBoard3 = 255f;
+    [SerializeField] private float easyMajorSwipeYBoard1 = 78f;
+    [SerializeField] private float easyMajorSwipeYBoard2 = 140f;
+    [SerializeField] private float easyMajorSwipeYBoard3 = 220f;
 
     [Header("Medium Error Tuning")]
     [SerializeField] private float mediumMajorMissChanceBoard1 = 0.08f;
@@ -156,10 +162,13 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private PlayerID localPlayerId = PlayerID.Player1;
     [SerializeField] private PlayerID botPlayerId = PlayerID.Player2;
     [SerializeField] private PlayerID currentTurnOwner = PlayerID.Player1;
+    [SerializeField] private PlayerID initialMatchStartingOwner = PlayerID.Player1;
     [SerializeField] private bool player1OnLeft = true;
+    [SerializeField] private bool initialPlayer1OnLeft = true;
     [SerializeField] private bool matchStarted;
     [SerializeField] private bool matchEnded;
     [SerializeField] private PlayerID winner = PlayerID.None;
+    [SerializeField] private OnlineMatchEndReason matchEndReason = OnlineMatchEndReason.NormalCompletion;
     [SerializeField] private float turnTimeRemaining;
     [SerializeField] private float matchTimeRemaining;
     [SerializeField] private int scoreP1;
@@ -168,6 +177,15 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     [SerializeField] private bool currentPlayerScoredThisTurn;
     [SerializeField] private float botThinkTimeRemaining;
     [SerializeField] private int consecutiveBotMisses;
+
+    [Header("Mid Match Break Runtime")]
+    [SerializeField] private bool midMatchBreakTriggered;
+    [SerializeField] private bool midMatchBreakActive;
+    [SerializeField] private bool pendingBreakAfterShot;
+    [SerializeField] private bool pendingEndAfterShot;
+    [SerializeField] private float breakTimeRemaining;
+    [SerializeField] private float postShotDelayRemaining;
+    [SerializeField] private MidMatchBreakReason midMatchBreakReason = MidMatchBreakReason.None;
 
     [Header("Pending Bot Launch")]
     [SerializeField] private PendingBotLaunchState pendingBotLaunchState = PendingBotLaunchState.None;
@@ -211,8 +229,13 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     public PlayerID CurrentTurnOwner => currentTurnOwner;
     public bool MatchStarted => matchStarted;
     public bool MatchEnded => matchEnded;
-    public bool MidMatchBreakActive => false;
+    public bool MidMatchBreakActive => midMatchBreakActive;
+    public bool IsTimeHalftimeActive => midMatchBreakActive && midMatchBreakReason == MidMatchBreakReason.TimeHalftime;
+    public bool IsHalfPointActive => midMatchBreakActive && midMatchBreakReason == MidMatchBreakReason.ScoreHalfPoint;
+    public float CurrentBreakTimeRemaining => breakTimeRemaining;
     public BallPhysics CurrentBall => currentBall;
+    public OnlineMatchEndReason MatchEndReason => matchEndReason;
+    public PlayerID Winner => winner;
 
     private void Awake()
     {
@@ -241,27 +264,6 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         ApplyHudState();
     }
 
-    private void OnDrawGizmosSelected()
-    {
-        if (!drawBotTargetGizmos)
-            return;
-
-        if (lastTargetSlotIndex < 0)
-            return;
-
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawSphere(lastTargetSlotCenter, gizmoSphereRadius);
-
-        Gizmos.color = Color.red;
-        Gizmos.DrawSphere(lastBestSamplePosition, gizmoSphereRadius);
-
-        if (currentBall != null)
-        {
-            Gizmos.color = Color.green;
-            Gizmos.DrawLine(currentBall.transform.position, lastBestSamplePosition);
-        }
-    }
-
     public void ConfigureOfflineMatch(BotOfflineMatchRequest request)
     {
         ResolveReferences();
@@ -277,10 +279,13 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         isOfflineBotSessionActive = true;
 
         ApplySeedTestOrRequestSetup(request);
+        initialMatchStartingOwner = currentTurnOwner;
+        initialPlayer1OnLeft = player1OnLeft;
 
         matchStarted = true;
         matchEnded = false;
         winner = PlayerID.None;
+        matchEndReason = OnlineMatchEndReason.NormalCompletion;
         turnTimeRemaining = Mathf.Max(1f, request.TurnDurationSeconds);
         matchTimeRemaining = Mathf.Max(1f, request.MatchDurationSeconds);
         scoreP1 = 0;
@@ -293,6 +298,14 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         currentBallRb = null;
         stuckTimer = 0f;
 
+        midMatchBreakTriggered = false;
+        midMatchBreakActive = false;
+        pendingBreakAfterShot = false;
+        pendingEndAfterShot = false;
+        breakTimeRemaining = Mathf.Max(0f, defaultBreakDuration);
+        postShotDelayRemaining = 0f;
+        midMatchBreakReason = MidMatchBreakReason.None;
+
         ClearPendingBotLaunch();
         ResetBotDebug();
 
@@ -301,34 +314,47 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             ballTurnSpawner.SetPlayer1Side(player1OnLeft);
             ballTurnSpawner.ClearAllBallsInScene();
         }
-        else
-        {
-            Debug.LogError("[OfflineBotMatchController] BallTurnSpawner missing during ConfigureOfflineMatch.", this);
-            return;
-        }
 
         if (bottomBarOrderSwapper != null)
             bottomBarOrderSwapper.SetOrder(player1OnLeft);
-
-        SpawnNewActiveBall(currentTurnOwner);
 
         bool scoreManagerStartedOk = TryStartScoreManagerSafely();
         if (!scoreManagerStartedOk && !continueBootstrapIfScoreManagerThrows)
             return;
 
+        SpawnNewActiveBall(currentTurnOwner);
         ApplyHudState();
+    }
+
+    public void RequestResumeAfterHalftime()
+    {
+        if (!midMatchBreakActive || matchEnded)
+            return;
+
+        ResumeAfterMidMatchBreak();
+    }
+
+    public void RequestLocalSurrender()
+    {
+        if (!isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded)
+            return;
 
         if (logDebug)
         {
             Debug.Log(
-                "[OfflineBotMatchController] ConfigureOfflineMatch -> " +
+                "[OfflineBotMatchController] RequestLocalSurrender -> " +
                 "LocalPlayer=" + localPlayerId +
-                " | BotPlayer=" + botPlayerId +
-                " | InitialTurn=" + currentTurnOwner +
-                " | Player1OnLeft=" + player1OnLeft +
-                " | SeedTestSideMode=" + seedTestSideMode,
+                " | BotPlayer=" + botPlayerId,
                 this);
         }
+
+        if (playerShotDebugRecorder != null)
+            playerShotDebugRecorder.FinalizePendingShot("LocalSurrender");
+
+        winner = botPlayerId;
+        matchEndReason = OnlineMatchEndReason.SurrenderLoss;
+
+        ForceEndOfflineMatch();
     }
 
     private void ApplySeedTestOrRequestSetup(BotOfflineMatchRequest request)
@@ -360,7 +386,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
     public void RequestLaunchCurrentBall(Vector3 direction, float force)
     {
-        if (!isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded)
+        if (!isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded || midMatchBreakActive)
             return;
 
         if (currentTurnOwner != localPlayerId)
@@ -371,7 +397,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
     public void RequestBotLaunchCurrentBall(Vector3 direction, float force)
     {
-        if (!isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded)
+        if (!isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded || midMatchBreakActive)
             return;
 
         if (currentTurnOwner != botPlayerId)
@@ -398,6 +424,18 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         stuckTimer = 0f;
         ClearPendingBotLaunch();
 
+        if (pendingEndAfterShot)
+        {
+            postShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
+        if (pendingBreakAfterShot)
+        {
+            postShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
         PlayerID nextOwner = currentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
 
         if (ShouldEndMatchNow())
@@ -420,9 +458,8 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             scoreManager.SetReplicatedScores(0, 0);
             return true;
         }
-        catch (System.Exception ex)
+        catch
         {
-            Debug.LogError("[OfflineBotMatchController] ScoreManager.StartMatch threw -> " + ex, this);
             return false;
         }
     }
@@ -432,28 +469,119 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (!matchStarted || matchEnded || activeRequest == null)
             return;
 
+        if (postShotDelayRemaining > 0f)
+        {
+            postShotDelayRemaining -= Time.deltaTime;
+            if (postShotDelayRemaining < 0f)
+                postShotDelayRemaining = 0f;
+
+            if (postShotDelayRemaining <= 0f)
+            {
+                if (pendingBreakAfterShot)
+                {
+                    pendingBreakAfterShot = false;
+                    StartMidMatchBreak();
+                    return;
+                }
+
+                if (pendingEndAfterShot)
+                {
+                    pendingEndAfterShot = false;
+                    EndOfflineMatch();
+                    return;
+                }
+            }
+        }
+
+        if (midMatchBreakActive)
+        {
+            breakTimeRemaining = Mathf.Max(0f, breakTimeRemaining - Time.deltaTime);
+
+            if (breakTimeRemaining <= 0f)
+                ResumeAfterMidMatchBreak();
+
+            return;
+        }
+
         if (activeRequest.MatchMode == MatchMode.TimeLimit)
-            matchTimeRemaining = Mathf.Max(0f, matchTimeRemaining - Time.deltaTime);
+        {
+            float halftimeThreshold = activeRequest.MatchDurationSeconds * 0.5f;
+
+            if (shotInFlight)
+            {
+                if (!midMatchBreakTriggered)
+                {
+                    float nextTime = matchTimeRemaining - Time.deltaTime;
+                    if (nextTime <= halftimeThreshold)
+                    {
+                        matchTimeRemaining = halftimeThreshold;
+                        pendingBreakAfterShot = true;
+                    }
+                    else
+                    {
+                        matchTimeRemaining = nextTime;
+                    }
+                }
+                else
+                {
+                    float nextTime = matchTimeRemaining - Time.deltaTime;
+                    if (nextTime <= 0f)
+                    {
+                        matchTimeRemaining = 0f;
+                        pendingEndAfterShot = true;
+                    }
+                    else
+                    {
+                        matchTimeRemaining = nextTime;
+                    }
+                }
+            }
+            else
+            {
+                matchTimeRemaining = Mathf.Max(0f, matchTimeRemaining - Time.deltaTime);
+            }
+        }
 
         if (!shotInFlight)
             turnTimeRemaining = Mathf.Max(0f, turnTimeRemaining - Time.deltaTime);
 
         RefreshCurrentBallCache();
 
-        if (activeRequest.MatchMode == MatchMode.TimeLimit && matchTimeRemaining <= 0f && !shotInFlight)
-        {
-            EndOfflineMatch();
-            return;
-        }
-
-        if (ShouldEndMatchNow() && !shotInFlight)
-        {
-            EndOfflineMatch();
-            return;
-        }
-
         if (!shotInFlight)
         {
+            if (activeRequest.MatchMode == MatchMode.TimeLimit)
+            {
+                float halftimeThreshold = activeRequest.MatchDurationSeconds * 0.5f;
+
+                if (!midMatchBreakTriggered && matchTimeRemaining <= halftimeThreshold)
+                {
+                    matchTimeRemaining = halftimeThreshold;
+                    StartMidMatchBreak();
+                    return;
+                }
+
+                if (midMatchBreakTriggered && matchTimeRemaining <= 0f)
+                {
+                    matchTimeRemaining = 0f;
+                    EndOfflineMatch();
+                    return;
+                }
+            }
+            else
+            {
+                if (ShouldEndMatchNow())
+                {
+                    EndOfflineMatch();
+                    return;
+                }
+
+                if (!midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
+                {
+                    StartMidMatchBreak();
+                    return;
+                }
+            }
+
             if (turnTimeRemaining <= 0f)
                 ResolveIdleTimeout();
 
@@ -487,9 +615,84 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         }
     }
 
+    private bool ShouldTriggerMidMatchBreak()
+    {
+        if (midMatchBreakTriggered || shotInFlight || activeRequest == null)
+            return false;
+
+        if (activeRequest.MatchMode == MatchMode.TimeLimit)
+        {
+            float threshold = activeRequest.MatchDurationSeconds * 0.5f;
+            return matchTimeRemaining <= threshold;
+        }
+
+        int halfTarget = Mathf.Max(1, Mathf.CeilToInt(activeRequest.PointsToWin * 0.5f));
+        return scoreP1 >= halfTarget || scoreP2 >= halfTarget;
+    }
+
+    private void StartMidMatchBreak()
+    {
+        if (matchEnded || midMatchBreakTriggered || activeRequest == null)
+            return;
+
+        midMatchBreakTriggered = true;
+        midMatchBreakActive = true;
+        breakTimeRemaining = Mathf.Max(0f, defaultBreakDuration);
+        midMatchBreakReason = activeRequest.MatchMode == MatchMode.TimeLimit
+            ? MidMatchBreakReason.TimeHalftime
+            : MidMatchBreakReason.ScoreHalfPoint;
+
+        pendingBreakAfterShot = false;
+        pendingEndAfterShot = false;
+        postShotDelayRemaining = 0f;
+        shotInFlight = false;
+        currentPlayerScoredThisTurn = false;
+        botThinkTimeRemaining = 0f;
+
+        ClearPendingBotLaunch();
+        DestroyTrackedBallIfNeeded();
+
+        if (scoreManager != null)
+            scoreManager.BeginHalftime();
+
+        player1OnLeft = !player1OnLeft;
+
+        if (ballTurnSpawner != null)
+        {
+            ballTurnSpawner.SetPlayer1Side(player1OnLeft);
+            ballTurnSpawner.ClearAllBallsInScene();
+        }
+
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SetOrder(player1OnLeft);
+    }
+
+    private void ResumeAfterMidMatchBreak()
+    {
+        if (!midMatchBreakActive || matchEnded)
+            return;
+
+        midMatchBreakActive = false;
+        breakTimeRemaining = Mathf.Max(0f, defaultBreakDuration);
+        midMatchBreakReason = MidMatchBreakReason.None;
+        turnTimeRemaining = Mathf.Max(1f, activeRequest != null ? activeRequest.TurnDurationSeconds : 1f);
+        shotInFlight = false;
+        currentPlayerScoredThisTurn = false;
+        botThinkTimeRemaining = 0f;
+
+        if (scoreManager != null)
+            scoreManager.EndHalftime();
+
+        PlayerID secondHalfStarter = initialMatchStartingOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
+        SpawnNewActiveBall(secondHalfStarter);
+
+        if (bottomBarOrderSwapper != null)
+            bottomBarOrderSwapper.SetOrder(player1OnLeft);
+    }
+
     private void TickBotBrain()
     {
-        if (!enableBotBrain || !isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded)
+        if (!enableBotBrain || !isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded || midMatchBreakActive)
             return;
 
         if (shotInFlight || currentTurnOwner != botPlayerId || currentBall == null)
@@ -509,17 +712,6 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
                 pendingBotLaunchDelayRemaining = GetBotPreLaunchDelaySeconds();
                 pendingBotLaunchState = PendingBotLaunchState.WaitingPreLaunchDelay;
-
-                if (logDebug)
-                {
-                    Debug.Log(
-                        "[OfflineBotMatchController] Bot post-spawn delay completed -> " +
-                        "SeedId=" + pendingBotSeedId +
-                        " | TargetPlate=" + pendingBotTargetPlateIndex +
-                        " | TargetSlot=" + pendingBotTargetSlotIndex +
-                        " | PreLaunchDelay=" + pendingBotLaunchDelayRemaining,
-                        this);
-                }
                 return;
 
             case PendingBotLaunchState.WaitingPreLaunchDelay:
@@ -583,24 +775,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         }
 
         if (!solution.hasSolution)
-        {
-            if (logDebug)
-            {
-                string targetInfo = hasStrategicTarget
-                    ? " | BrainTargetPlate=" + serviceDecision.targetPlateIndex +
-                      " | BrainTargetSlot=" + serviceDecision.targetSlotIndex +
-                      " | Reason=" + serviceDecision.reason
-                    : string.Empty;
-
-                Debug.LogWarning(
-                    "[OfflineBotMatchController] BotShotSolver returned no solution." +
-                    targetInfo +
-                    " | MissStacks=" + consecutiveBotMisses,
-                    this);
-            }
-
             return;
-        }
 
         Vector2 finalSwipe = solution.bestCandidate.swipeDelta;
         Vector3 finalDirection = solution.bestCandidate.launchDirection;
@@ -622,60 +797,17 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         pendingBotTargetSlotIndex = solution.bestCandidate.targetSlotIndex;
         pendingBotSeedStartPositionValid = botShotSolver.TryGetLastChosenSeedStartPosition(out pendingBotSeedStartPosition);
 
-        if (usedForcedStrategicTarget)
-            pendingBotDecisionReason = serviceDecision.reason;
-        else if (hasStrategicTarget)
-            pendingBotDecisionReason = serviceDecision.reason + " | FallbackGeneralSolve";
-        else
-            pendingBotDecisionReason = "GeneralSolve";
-
-        lastTargetPlateIndex = solution.bestCandidate.targetPlateIndex;
-        lastTargetPlateName = solution.bestCandidate.targetPlateName;
-        lastTargetSlotIndex = solution.bestCandidate.targetSlotIndex;
-        lastTargetSlotName = solution.bestCandidate.targetSlotName;
-        lastTargetSlotCenter = solution.bestCandidate.targetSlotCenter;
-        lastBestSamplePosition = solution.bestCandidate.bestSamplePosition;
-        lastSwipeDelta = finalSwipe;
-        lastLaunchDirection = finalDirection;
-        lastLaunchForce = finalForce;
-        lastTargetDistance = solution.bestCandidate.bestDistanceToTarget;
-        lastEnteredTargetTrigger = solution.bestCandidate.enteredTargetTrigger;
-        lastDescendingAtEntry = solution.bestCandidate.descendingAtEntry;
-        lastHitBlockingBoardBeforeEntry = solution.bestCandidate.hitBlockingBoardBeforeEntry;
-        lastCandidateScore = solution.bestCandidate.score;
-        lastDecisionReason = pendingBotDecisionReason;
+        pendingBotDecisionReason = usedForcedStrategicTarget
+            ? serviceDecision.reason
+            : (hasStrategicTarget ? serviceDecision.reason + " | FallbackGeneralSolve" : "GeneralSolve");
 
         pendingBotLaunchDelayRemaining = GetBotPostSpawnDelaySeconds();
         pendingBotLaunchState = PendingBotLaunchState.WaitingPostSpawnDelay;
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OfflineBotMatchController] Bot launch queued -> " +
-                "SeedId=" + pendingBotSeedId +
-                " | TargetPlate=" + pendingBotTargetPlateIndex +
-                " | TargetSlot=" + pendingBotTargetSlotIndex +
-                " | DecisionReason=" + pendingBotDecisionReason +
-                " | PostSpawnDelay=" + pendingBotLaunchDelayRemaining,
-                this);
-        }
     }
 
-    private void ApplyDifficultyShotError(
-        BallLauncher launcher,
-        BotDifficulty difficulty,
-        int targetPlateIndex,
-        ref Vector2 swipe,
-        ref Vector3 direction,
-        ref float force)
+    private void ApplyDifficultyShotError(BallLauncher launcher, BotDifficulty difficulty, int targetPlateIndex, ref Vector2 swipe, ref Vector3 direction, ref float force)
     {
-        if (!enableDifficultyShotError)
-            return;
-
-        if (launcher == null)
-            return;
-
-        if (difficulty == BotDifficulty.Unbeatable)
+        if (!enableDifficultyShotError || launcher == null || difficulty == BotDifficulty.Unbeatable)
             return;
 
         BotShotErrorSettings settings = GetShotErrorSettings(difficulty);
@@ -686,20 +818,8 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         float majorY = GetMajorSwipeY(settings, targetPlateIndex);
 
         bool majorMiss = Random.value < missChance;
-
-        float deltaX;
-        float deltaY;
-
-        if (majorMiss)
-        {
-            deltaX = RandomSignedMagnitude(majorX * 0.55f, majorX);
-            deltaY = RandomSignedMagnitude(majorY * 0.45f, majorY);
-        }
-        else
-        {
-            deltaX = Random.Range(-minorX, minorX);
-            deltaY = Random.Range(-minorY, minorY);
-        }
+        float deltaX = majorMiss ? RandomSignedMagnitude(majorX * 0.55f, majorX) : Random.Range(-minorX, minorX);
+        float deltaY = majorMiss ? RandomSignedMagnitude(majorY * 0.45f, majorY) : Random.Range(-minorY, minorY);
 
         Vector2 originalSwipe = swipe;
         swipe += new Vector2(deltaX, deltaY);
@@ -712,19 +832,6 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
         direction = rebuiltDirection;
         force = rebuiltForce;
-
-        if (logShotError)
-        {
-            Debug.Log(
-                "[OfflineBotMatchController] ApplyDifficultyShotError -> " +
-                "Difficulty=" + difficulty +
-                " | Plate=" + targetPlateIndex +
-                " | MajorMiss=" + majorMiss +
-                " | SwipeBefore=" + originalSwipe +
-                " | SwipeAfter=" + swipe +
-                " | Delta=(" + deltaX + "," + deltaY + ")",
-                this);
-        }
     }
 
     private BotShotErrorSettings GetShotErrorSettings(BotDifficulty difficulty)
@@ -737,68 +844,53 @@ public sealed class OfflineBotMatchController : MonoBehaviour
                     majorMissChanceBoard1 = easyMajorMissChanceBoard1,
                     majorMissChanceBoard2 = easyMajorMissChanceBoard2,
                     majorMissChanceBoard3 = easyMajorMissChanceBoard3,
-
                     minorSwipeXBoard1 = easyMinorSwipeXBoard1,
                     minorSwipeXBoard2 = easyMinorSwipeXBoard2,
                     minorSwipeXBoard3 = easyMinorSwipeXBoard3,
-
                     minorSwipeYBoard1 = easyMinorSwipeYBoard1,
                     minorSwipeYBoard2 = easyMinorSwipeYBoard2,
                     minorSwipeYBoard3 = easyMinorSwipeYBoard3,
-
                     majorSwipeXBoard1 = easyMajorSwipeXBoard1,
                     majorSwipeXBoard2 = easyMajorSwipeXBoard2,
                     majorSwipeXBoard3 = easyMajorSwipeXBoard3,
-
                     majorSwipeYBoard1 = easyMajorSwipeYBoard1,
                     majorSwipeYBoard2 = easyMajorSwipeYBoard2,
                     majorSwipeYBoard3 = easyMajorSwipeYBoard3
                 };
-
             case BotDifficulty.Medium:
                 return new BotShotErrorSettings
                 {
                     majorMissChanceBoard1 = mediumMajorMissChanceBoard1,
                     majorMissChanceBoard2 = mediumMajorMissChanceBoard2,
                     majorMissChanceBoard3 = mediumMajorMissChanceBoard3,
-
                     minorSwipeXBoard1 = mediumMinorSwipeXBoard1,
                     minorSwipeXBoard2 = mediumMinorSwipeXBoard2,
                     minorSwipeXBoard3 = mediumMinorSwipeXBoard3,
-
                     minorSwipeYBoard1 = mediumMinorSwipeYBoard1,
                     minorSwipeYBoard2 = mediumMinorSwipeYBoard2,
                     minorSwipeYBoard3 = mediumMinorSwipeYBoard3,
-
                     majorSwipeXBoard1 = mediumMajorSwipeXBoard1,
                     majorSwipeXBoard2 = mediumMajorSwipeXBoard2,
                     majorSwipeXBoard3 = mediumMajorSwipeXBoard3,
-
                     majorSwipeYBoard1 = mediumMajorSwipeYBoard1,
                     majorSwipeYBoard2 = mediumMajorSwipeYBoard2,
                     majorSwipeYBoard3 = mediumMajorSwipeYBoard3
                 };
-
-            case BotDifficulty.Hard:
             default:
                 return new BotShotErrorSettings
                 {
                     majorMissChanceBoard1 = hardMajorMissChanceBoard1,
                     majorMissChanceBoard2 = hardMajorMissChanceBoard2,
                     majorMissChanceBoard3 = hardMajorMissChanceBoard3,
-
                     minorSwipeXBoard1 = hardMinorSwipeXBoard1,
                     minorSwipeXBoard2 = hardMinorSwipeXBoard2,
                     minorSwipeXBoard3 = hardMinorSwipeXBoard3,
-
                     minorSwipeYBoard1 = hardMinorSwipeYBoard1,
                     minorSwipeYBoard2 = hardMinorSwipeYBoard2,
                     minorSwipeYBoard3 = hardMinorSwipeYBoard3,
-
                     majorSwipeXBoard1 = hardMajorSwipeXBoard1,
                     majorSwipeXBoard2 = hardMajorSwipeXBoard2,
                     majorSwipeXBoard3 = hardMajorSwipeXBoard3,
-
                     majorSwipeYBoard1 = hardMajorSwipeYBoard1,
                     majorSwipeYBoard2 = hardMajorSwipeYBoard2,
                     majorSwipeYBoard3 = hardMajorSwipeYBoard3
@@ -806,60 +898,30 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         }
     }
 
-    private float GetMajorMissChance(BotShotErrorSettings settings, int targetPlateIndex)
-    {
-        switch (targetPlateIndex)
-        {
-            case 0: return settings.majorMissChanceBoard1;
-            case 1: return settings.majorMissChanceBoard2;
-            case 2: return settings.majorMissChanceBoard3;
-            default: return settings.majorMissChanceBoard3;
-        }
-    }
+    private float GetMajorMissChance(BotShotErrorSettings settings, int targetPlateIndex) =>
+        targetPlateIndex == 0 ? settings.majorMissChanceBoard1 :
+        targetPlateIndex == 1 ? settings.majorMissChanceBoard2 :
+        settings.majorMissChanceBoard3;
 
-    private float GetMinorSwipeX(BotShotErrorSettings settings, int targetPlateIndex)
-    {
-        switch (targetPlateIndex)
-        {
-            case 0: return settings.minorSwipeXBoard1;
-            case 1: return settings.minorSwipeXBoard2;
-            case 2: return settings.minorSwipeXBoard3;
-            default: return settings.minorSwipeXBoard3;
-        }
-    }
+    private float GetMinorSwipeX(BotShotErrorSettings settings, int targetPlateIndex) =>
+        targetPlateIndex == 0 ? settings.minorSwipeXBoard1 :
+        targetPlateIndex == 1 ? settings.minorSwipeXBoard2 :
+        settings.minorSwipeXBoard3;
 
-    private float GetMinorSwipeY(BotShotErrorSettings settings, int targetPlateIndex)
-    {
-        switch (targetPlateIndex)
-        {
-            case 0: return settings.minorSwipeYBoard1;
-            case 1: return settings.minorSwipeYBoard2;
-            case 2: return settings.minorSwipeYBoard3;
-            default: return settings.minorSwipeYBoard3;
-        }
-    }
+    private float GetMinorSwipeY(BotShotErrorSettings settings, int targetPlateIndex) =>
+        targetPlateIndex == 0 ? settings.minorSwipeYBoard1 :
+        targetPlateIndex == 1 ? settings.minorSwipeYBoard2 :
+        settings.minorSwipeYBoard3;
 
-    private float GetMajorSwipeX(BotShotErrorSettings settings, int targetPlateIndex)
-    {
-        switch (targetPlateIndex)
-        {
-            case 0: return settings.majorSwipeXBoard1;
-            case 1: return settings.majorSwipeXBoard2;
-            case 2: return settings.majorSwipeXBoard3;
-            default: return settings.majorSwipeXBoard3;
-        }
-    }
+    private float GetMajorSwipeX(BotShotErrorSettings settings, int targetPlateIndex) =>
+        targetPlateIndex == 0 ? settings.majorSwipeXBoard1 :
+        targetPlateIndex == 1 ? settings.majorSwipeXBoard2 :
+        settings.majorSwipeXBoard3;
 
-    private float GetMajorSwipeY(BotShotErrorSettings settings, int targetPlateIndex)
-    {
-        switch (targetPlateIndex)
-        {
-            case 0: return settings.majorSwipeYBoard1;
-            case 1: return settings.majorSwipeYBoard2;
-            case 2: return settings.majorSwipeYBoard3;
-            default: return settings.majorSwipeYBoard3;
-        }
-    }
+    private float GetMajorSwipeY(BotShotErrorSettings settings, int targetPlateIndex) =>
+        targetPlateIndex == 0 ? settings.majorSwipeYBoard1 :
+        targetPlateIndex == 1 ? settings.majorSwipeYBoard2 :
+        settings.majorSwipeYBoard3;
 
     private float RandomSignedMagnitude(float minAbs, float maxAbs)
     {
@@ -871,7 +933,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
     {
         pendingBotLaunchState = PendingBotLaunchState.None;
 
-        if (currentBall == null || currentTurnOwner != botPlayerId || shotInFlight || matchEnded)
+        if (currentBall == null || currentTurnOwner != botPlayerId || shotInFlight || matchEnded || midMatchBreakActive)
         {
             ClearPendingBotLaunch();
             return;
@@ -895,9 +957,6 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
             if (!refreshed.hasSolution)
             {
-                if (logDebug)
-                    Debug.LogWarning("[OfflineBotMatchController] Re-solve before launch returned no solution.", this);
-
                 ClearPendingBotLaunch();
                 botThinkTimeRemaining = GetRandomThinkDelay();
                 return;
@@ -924,21 +983,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             pendingBotSeedStartPositionValid = botShotSolver.TryGetLastChosenSeedStartPosition(out pendingBotSeedStartPosition);
         }
 
-        if (launcher.SimulateOfflineBotSwipe(currentBall, pendingBotSwipe) && logDebug)
-        {
-            Debug.Log(
-                "[OfflineBotMatchController] Bot solver launch -> " +
-                "MissStacks=" + consecutiveBotMisses +
-                " | SeedId=" + pendingBotSeedId +
-                " | TargetPlate=" + pendingBotTargetPlateIndex +
-                " | TargetSlot=" + pendingBotTargetSlotIndex +
-                " | DecisionReason=" + pendingBotDecisionReason +
-                " | Swipe=" + pendingBotSwipe +
-                " | Direction=" + pendingBotDirection +
-                " | Force=" + pendingBotForce,
-                this);
-        }
-
+        launcher.SimulateOfflineBotSwipe(currentBall, pendingBotSwipe);
         ClearPendingBotLaunch();
     }
 
@@ -947,16 +992,14 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (currentBall == null || currentTurnOwner != botPlayerId || !isValid)
             return;
 
-        Vector3 original = currentBall.transform.position;
         Vector3 adjusted = desiredSeedStart;
-        adjusted.y = original.y;
+        adjusted.y = currentBall.transform.position.y;
 
         Rigidbody rb = currentBall.GetComponent<Rigidbody>();
         if (rb != null)
         {
             bool previousKinematic = rb.isKinematic;
             RigidbodyConstraints previousConstraints = rb.constraints;
-
             rb.isKinematic = true;
             rb.position = adjusted;
             currentBall.transform.position = adjusted;
@@ -967,38 +1010,20 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         {
             currentBall.transform.position = adjusted;
         }
-
-        if (logBotPlacementAdjustment)
-        {
-            Debug.Log(
-                "[OfflineBotMatchController] Applied bot seed start position -> " +
-                "SeedId=" + seedId +
-                " | From=" + original +
-                " | To=" + adjusted,
-                this);
-        }
     }
 
     private float GetBotPostSpawnDelaySeconds()
     {
         float minDelay = Mathf.Max(0.10f, postSpawnDelayMinSeconds);
         float maxDelay = Mathf.Max(minDelay, postSpawnDelayMaxSeconds);
-
-        if (deterministicBotTestMode)
-            return Mathf.Clamp(deterministicPostSpawnDelaySeconds, minDelay, maxDelay);
-
-        return Random.Range(minDelay, maxDelay);
+        return deterministicBotTestMode ? Mathf.Clamp(deterministicPostSpawnDelaySeconds, minDelay, maxDelay) : Random.Range(minDelay, maxDelay);
     }
 
     private float GetBotPreLaunchDelaySeconds()
     {
         float minDelay = Mathf.Max(0.50f, preLaunchDelayMinSeconds);
         float maxDelay = Mathf.Max(minDelay, preLaunchDelayMaxSeconds);
-
-        if (deterministicBotTestMode)
-            return Mathf.Clamp(deterministicPreLaunchDelaySeconds, minDelay, maxDelay);
-
-        return Random.Range(minDelay, maxDelay);
+        return deterministicBotTestMode ? Mathf.Clamp(deterministicPreLaunchDelaySeconds, minDelay, maxDelay) : Random.Range(minDelay, maxDelay);
     }
 
     private float GetRandomThinkDelay()
@@ -1008,20 +1033,11 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
         switch (activeRequest != null ? activeRequest.Difficulty : BotDifficulty.Medium)
         {
-            case BotDifficulty.Easy:
-                return Random.Range(easyThinkDelayMin, easyThinkDelayMax);
-
-            case BotDifficulty.Medium:
-                return Random.Range(mediumThinkDelayMin, mediumThinkDelayMax);
-
-            case BotDifficulty.Hard:
-                return Random.Range(hardThinkDelayMin, hardThinkDelayMax);
-
-            case BotDifficulty.Unbeatable:
-                return Random.Range(unbeatableThinkDelayMin, unbeatableThinkDelayMax);
-
-            default:
-                return Random.Range(mediumThinkDelayMin, mediumThinkDelayMax);
+            case BotDifficulty.Easy: return Random.Range(easyThinkDelayMin, easyThinkDelayMax);
+            case BotDifficulty.Medium: return Random.Range(mediumThinkDelayMin, mediumThinkDelayMax);
+            case BotDifficulty.Hard: return Random.Range(hardThinkDelayMin, hardThinkDelayMax);
+            case BotDifficulty.Unbeatable: return Random.Range(unbeatableThinkDelayMin, unbeatableThinkDelayMax);
+            default: return Random.Range(mediumThinkDelayMin, mediumThinkDelayMax);
         }
     }
 
@@ -1032,13 +1048,25 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (playerShotDebugRecorder != null && currentTurnOwner == localPlayerId)
             playerShotDebugRecorder.FinalizePendingShot("IdleTimeout");
 
-        PlayerID nextOwner = currentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
         DestroyTrackedBallIfNeeded();
         ReleaseCurrentBallTracking();
 
         if (botMiss)
             consecutiveBotMisses++;
 
+        if (pendingEndAfterShot)
+        {
+            postShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
+        if (pendingBreakAfterShot)
+        {
+            postShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
+        PlayerID nextOwner = currentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
         SpawnNewActiveBall(nextOwner);
     }
 
@@ -1054,9 +1082,27 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         currentBallRb = null;
         ReleaseCurrentBallTracking();
 
+        if (pendingEndAfterShot)
+        {
+            postShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
+        if (pendingBreakAfterShot)
+        {
+            postShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
         if (ShouldEndMatchNow())
         {
             EndOfflineMatch();
+            return;
+        }
+
+        if (activeRequest.MatchMode == MatchMode.ScoreTarget && !midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
+        {
+            StartMidMatchBreak();
             return;
         }
 
@@ -1073,10 +1119,21 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (playerShotDebugRecorder != null && currentTurnOwner == localPlayerId)
             playerShotDebugRecorder.FinalizePendingShot("MissTurnCompleted");
 
-        PlayerID nextOwner = currentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
         currentBall = null;
         currentBallRb = null;
         ReleaseCurrentBallTracking();
+
+        if (pendingEndAfterShot)
+        {
+            postShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
+
+        if (pendingBreakAfterShot)
+        {
+            postShotDelayRemaining = Mathf.Max(0f, postShotPanelDelay);
+            return;
+        }
 
         if (ShouldEndMatchNow())
         {
@@ -1084,15 +1141,22 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             return;
         }
 
+        if (activeRequest.MatchMode == MatchMode.ScoreTarget && !midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
+        {
+            StartMidMatchBreak();
+            return;
+        }
+
         if (botMiss)
             consecutiveBotMisses++;
 
+        PlayerID nextOwner = currentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
         SpawnNewActiveBall(nextOwner);
     }
 
     private void SpawnNewActiveBall(PlayerID owner)
     {
-        if (ballTurnSpawner == null)
+        if (ballTurnSpawner == null || activeRequest == null || midMatchBreakActive || matchEnded)
             return;
 
         BallPhysics spawned = ballTurnSpawner.SpawnOfflineBallForOwner(owner);
@@ -1109,23 +1173,13 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         botThinkTimeRemaining = owner == botPlayerId ? GetRandomThinkDelay() : 0f;
 
         ClearPendingBotLaunch();
-
-        if (logDebug)
-        {
-            Debug.Log(
-                "[OfflineBotMatchController] SpawnNewActiveBall -> " +
-                "Owner=" + owner +
-                " | Pos=" + currentBall.transform.position,
-                this);
-        }
-
         ballTurnSpawner.TryBindCurrentOfflineBallForLocalControl(currentBall, owner, localPlayerId);
         ballTurnSpawner.ClearOfflineLauncherBindingIfNeeded(currentTurnOwner, localPlayerId);
     }
 
     private bool LaunchTrackedBallForOwner(PlayerID owner, Vector3 direction, float force)
     {
-        if (!isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded)
+        if (!isOfflineBotSessionActive || activeRequest == null || !matchStarted || matchEnded || midMatchBreakActive)
             return false;
 
         if (currentTurnOwner != owner || currentBall == null)
@@ -1211,19 +1265,35 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (activeRequest == null)
             return false;
 
-        if (activeRequest.MatchMode == MatchMode.ScoreTarget)
-        {
-            if (scoreP1 >= Mathf.Max(1, activeRequest.PointsToWin) ||
-                scoreP2 >= Mathf.Max(1, activeRequest.PointsToWin))
-            {
-                return true;
-            }
-        }
+        if (activeRequest.MatchMode == MatchMode.TimeLimit)
+            return midMatchBreakTriggered && matchTimeRemaining <= 0f;
 
-        if (scoreManager != null && scoreManager.AreAllBoardsFull())
+        if (scoreP1 >= Mathf.Max(1, activeRequest.PointsToWin) ||
+            scoreP2 >= Mathf.Max(1, activeRequest.PointsToWin))
             return true;
 
-        return false;
+        return scoreManager != null && scoreManager.AreAllBoardsFull();
+    }
+
+    private void ForceEndOfflineMatch()
+    {
+        if (matchEnded)
+            return;
+
+        ClearPendingBotLaunch();
+        DestroyTrackedBallIfNeeded();
+
+        shotInFlight = false;
+        currentPlayerScoredThisTurn = false;
+        midMatchBreakActive = false;
+        pendingBreakAfterShot = false;
+        pendingEndAfterShot = false;
+        breakTimeRemaining = 0f;
+        postShotDelayRemaining = 0f;
+        midMatchBreakReason = MidMatchBreakReason.None;
+        botThinkTimeRemaining = 0f;
+
+        EndOfflineMatch();
     }
 
     private void EndOfflineMatch()
@@ -1237,11 +1307,21 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         matchEnded = true;
         matchStarted = false;
         shotInFlight = false;
+        midMatchBreakActive = false;
         botThinkTimeRemaining = 0f;
-        winner = ResolveWinner();
+        pendingBreakAfterShot = false;
+        pendingEndAfterShot = false;
+        postShotDelayRemaining = 0f;
+        breakTimeRemaining = 0f;
+        midMatchBreakReason = MidMatchBreakReason.None;
+
+        if (winner == PlayerID.None)
+            winner = ResolveWinner();
 
         ClearPendingBotLaunch();
-        ballTurnSpawner.ClearOfflineLauncherBindingIfNeeded(PlayerID.None, localPlayerId);
+
+        if (ballTurnSpawner != null)
+            ballTurnSpawner.ClearOfflineLauncherBindingIfNeeded(PlayerID.None, localPlayerId);
 
         if (scoreManager != null)
             scoreManager.EndMatch(winner);
@@ -1261,6 +1341,10 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (hud == null || activeRequest == null)
             return;
 
+        bool presentationPlayer1OnLeft = (midMatchBreakActive || matchEnded)
+            ? initialPlayer1OnLeft
+            : player1OnLeft;
+
         hud.ApplyState(
             activeRequest.MatchMode,
             activeRequest.PointsToWin,
@@ -1272,18 +1356,18 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             scoreP2,
             matchStarted,
             matchEnded,
-            false,
-            false,
-            false,
-            0f,
+            midMatchBreakActive,
+            IsTimeHalftimeActive,
+            IsHalfPointActive,
+            breakTimeRemaining,
             activeRequest.GetPlayer1DisplayName(),
             activeRequest.GetPlayer2DisplayName(),
             winner,
-            player1OnLeft,
+            presentationPlayer1OnLeft,
             false,
             PlayerID.None,
             0f,
-            OnlineMatchEndReason.NormalCompletion
+            matchEndReason
         );
     }
 

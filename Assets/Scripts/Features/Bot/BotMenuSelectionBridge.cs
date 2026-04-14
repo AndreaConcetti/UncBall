@@ -8,67 +8,65 @@ public sealed class BotMenuSelectionBridge : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
 
-    public void StartEasyBotMatch()
-    {
-        StartBotMatch(BotDifficulty.Easy);
-    }
-
-    public void StartMediumBotMatch()
-    {
-        StartBotMatch(BotDifficulty.Medium);
-    }
-
-    public void StartHardBotMatch()
-    {
-        StartBotMatch(BotDifficulty.Hard);
-    }
-
-    public void StartInsaneBotMatch()
-    {
-        StartBotMatch(BotDifficulty.Unbeatable);
-    }
-
-    public void StartBotMatch(int difficultyIndex)
-    {
-        BotDifficulty parsedDifficulty = ConvertToDifficulty(difficultyIndex);
-        StartBotMatch(parsedDifficulty);
-    }
+    public void StartEasyBotMatch() => StartBotMatch(BotDifficulty.Easy);
+    public void StartMediumBotMatch() => StartBotMatch(BotDifficulty.Medium);
+    public void StartHardBotMatch() => StartBotMatch(BotDifficulty.Hard);
+    public void StartInsaneBotMatch() => StartBotMatch(BotDifficulty.Unbeatable);
 
     public void StartBotMatch(BotDifficulty difficulty)
     {
-        if (botMatchSetupController == null)
+        if (!TryResolveSetupController())
         {
             Debug.LogError("[BotMenuSelectionBridge] Missing BotMatchSetupController reference.", this);
             return;
         }
 
-        if (enableDebugLogs)
-        {
-            Debug.Log($"[BotMenuSelectionBridge] Starting bot match. Difficulty={difficulty}", this);
-        }
-
         botMatchSetupController.CreateBotMatch(difficulty);
+
+        if (enableDebugLogs)
+            Debug.Log("[BotMenuSelectionBridge] StartBotMatch -> Difficulty=" + difficulty, this);
     }
 
-    private BotDifficulty ConvertToDifficulty(int difficultyIndex)
+    private void Awake()
     {
-        switch (difficultyIndex)
+        TryResolveSetupController();
+    }
+
+    private void OnEnable()
+    {
+        TryResolveSetupController();
+    }
+
+    private bool TryResolveSetupController()
+    {
+        if (botMatchSetupController != null)
+            return true;
+
+        BotSessionRuntime runtime = BotSessionRuntime.Instance;
+        if (runtime != null)
         {
-            case 0:
-                return BotDifficulty.Easy;
+            botMatchSetupController = runtime.GetComponent<BotMatchSetupController>();
+            if (botMatchSetupController != null)
+                return true;
 
-            case 1:
-                return BotDifficulty.Medium;
+            botMatchSetupController = runtime.GetComponentInParent<BotMatchSetupController>(true);
+            if (botMatchSetupController != null)
+                return true;
 
-            case 2:
-                return BotDifficulty.Hard;
-
-            case 3:
-                return BotDifficulty.Unbeatable;
-
-            default:
-                Debug.LogWarning($"[BotMenuSelectionBridge] Unsupported difficultyIndex={difficultyIndex}. Fallback=Medium.", this);
-                return BotDifficulty.Medium;
+            botMatchSetupController = runtime.GetComponentInChildren<BotMatchSetupController>(true);
+            if (botMatchSetupController != null)
+                return true;
         }
+
+#if UNITY_2023_1_OR_NEWER
+        botMatchSetupController = FindFirstObjectByType<BotMatchSetupController>(FindObjectsInactive.Include);
+#else
+        botMatchSetupController = FindObjectOfType<BotMatchSetupController>(true);
+#endif
+
+        if (botMatchSetupController != null && enableDebugLogs)
+            Debug.Log("[BotMenuSelectionBridge] Resolved BotMatchSetupController dynamically.", this);
+
+        return botMatchSetupController != null;
     }
 }

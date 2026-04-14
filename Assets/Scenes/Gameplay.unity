@@ -4073,6 +4073,8 @@ MonoBehaviour:
   preLaunchDelayMinSeconds: 0.5
   preLaunchDelayMaxSeconds: 3
   logBotPlacementAdjustment: 1
+  defaultBreakDuration: 8
+  postShotPanelDelay: 1.5
   enableStuckBallCheck: 1
   stuckTimeout: 2.5
   stuckVelocityThreshold: 0.05
@@ -4162,10 +4164,13 @@ MonoBehaviour:
   localPlayerId: 1
   botPlayerId: 2
   currentTurnOwner: 1
+  initialMatchStartingOwner: 1
   player1OnLeft: 1
+  initialPlayer1OnLeft: 1
   matchStarted: 0
   matchEnded: 0
   winner: 0
+  matchEndReason: 1
   turnTimeRemaining: 0
   matchTimeRemaining: 0
   scoreP1: 0
@@ -4174,6 +4179,13 @@ MonoBehaviour:
   currentPlayerScoredThisTurn: 0
   botThinkTimeRemaining: 0
   consecutiveBotMisses: 0
+  midMatchBreakTriggered: 0
+  midMatchBreakActive: 0
+  pendingBreakAfterShot: 0
+  pendingEndAfterShot: 0
+  breakTimeRemaining: 0
+  postShotDelayRemaining: 0
+  midMatchBreakReason: 0
   pendingBotLaunchState: 0
   pendingBotLaunchDelayRemaining: 0
   pendingBotSwipe: {x: 0, y: 0}
@@ -12391,7 +12403,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: decc33e0428e74349941f54fe6299753, type: 3}
+  m_Sprite: {fileID: 21300000, guid: b82f00245acb1284f87e470c709a6cb0, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -16786,6 +16798,7 @@ GameObject:
   - component: {fileID: 1394314185}
   - component: {fileID: 1394314186}
   - component: {fileID: 1394314187}
+  - component: {fileID: 1394314188}
   m_Layer: 0
   m_Name: Gameplay_NetworkRuntime
   m_TagString: Untagged
@@ -16962,6 +16975,30 @@ MonoBehaviour:
   offlineBotMatchController: {fileID: 309990290}
   bootstrapAttempted: 0
   bootstrapCompleted: 0
+  logDebug: 1
+--- !u!114 &1394314188
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1394314177}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a3044ede17beaf45b1976ad2c8fd9b4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OfflineBotMatchEndFlow
+  offlineBotMatchController: {fileID: 309990290}
+  presentationResultStore: {fileID: 0}
+  postMatchPanelsController: {fileID: 596191376}
+  profileManager: {fileID: 0}
+  rewardManager: {fileID: 0}
+  progressionRules: {fileID: 0}
+  levelUpRewardsConfig: {fileID: 11400000, guid: 04d9fb7ebf30e9644b448a2d4a6d92d8, type: 2}
+  offlineBotMatchRewardsConfig: {fileID: 11400000, guid: e96fc2575a0180942bfcc40d122aea04, type: 2}
+  applyRewards: 1
+  applyProfileStats: 1
+  autoOpenRewardsPanel: 1
   logDebug: 1
 --- !u!1 &1404626876
 GameObject:
@@ -18451,7 +18488,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: d3f33adb909e26443914391fba875e4c, type: 3}
+  m_Sprite: {fileID: 21300000, guid: b82f00245acb1284f87e470c709a6cb0, type: 3}
   m_Type: 0
   m_PreserveAspect: 1
   m_FillCenter: 1

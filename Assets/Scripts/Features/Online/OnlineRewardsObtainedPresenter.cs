@@ -126,7 +126,9 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 " | TotalSoft=" + result.totalSoftCurrencyGained +
                 " | LevelUpSoft=" + result.levelUpBonusSoftCurrency +
                 " | TotalChest=" + result.totalChestCount +
-                " | LevelUpChest=" + result.levelUpBonusChestCount,
+                " | LevelUpChest=" + result.levelUpBonusChestCount +
+                " | ResultIsRanked=" + result.isRanked +
+                " | RuntimeShouldShowLp=" + ShouldShowLpForCurrentContext(result),
                 this);
         }
 
@@ -213,9 +215,11 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             playerNameText.text = SafeUpper(result.playerName, "PLAYER");
 
         if (summaryText != null)
-            summaryText.text = string.IsNullOrWhiteSpace(result.rewardSummaryText)
-                ? string.Empty
-                : result.rewardSummaryText.ToUpperInvariant();
+        {
+            bool hasSummary = !string.IsNullOrWhiteSpace(result.rewardSummaryText);
+            summaryText.gameObject.SetActive(hasSummary);
+            summaryText.text = hasSummary ? result.rewardSummaryText.ToUpperInvariant() : string.Empty;
+        }
 
         if (levelUpOverlayPanel != null)
             levelUpOverlayPanel.SetActive(false);
@@ -228,13 +232,31 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         if (playerLevelText != null)
             playerLevelText.text = "LV " + Mathf.Max(1, result.startLevel);
 
+        bool showLpTexts = ShouldShowLpForCurrentContext(result);
+
         if (lpGainedText != null)
-            lpGainedText.text = FormatLpDelta(result.rankedLpDelta);
+        {
+            lpGainedText.gameObject.SetActive(showLpTexts);
+
+            if (showLpTexts)
+                lpGainedText.text = FormatLpDelta(result.rankedLpDelta);
+            else
+                lpGainedText.text = string.Empty;
+        }
 
         if (animatedTotalLpText != null)
         {
-            int startLp = Mathf.Max(0, result.newRankedLpTotal - result.rankedLpDelta);
-            animatedTotalLpText.text = "NEW TOTAL: " + startLp + " LP";
+            animatedTotalLpText.gameObject.SetActive(showLpTexts);
+
+            if (showLpTexts)
+            {
+                int startLp = Mathf.Max(0, result.newRankedLpTotal - result.rankedLpDelta);
+                animatedTotalLpText.text = "NEW TOTAL: " + startLp + " LP";
+            }
+            else
+            {
+                animatedTotalLpText.text = string.Empty;
+            }
         }
     }
 
@@ -410,6 +432,9 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
     private IEnumerator AnimateLp(OnlineMatchPresentationResult result)
     {
+        if (!ShouldShowLpForCurrentContext(result))
+            yield break;
+
         float duration = Mathf.Max(0.01f, lpAnimationDuration);
         float elapsed = 0f;
 
@@ -611,6 +636,15 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
         if (experienceSlider != null)
             experienceSlider.value = clamped;
+    }
+
+    private bool ShouldShowLpForCurrentContext(OnlineMatchPresentationResult result)
+    {
+        OnlineFlowController flowController = OnlineFlowController.Instance;
+        if (flowController == null || flowController.RuntimeContext == null)
+            return false;
+
+        return flowController.RuntimeContext.queueType == QueueType.Ranked;
     }
 
     private string FormatLpDelta(int value)

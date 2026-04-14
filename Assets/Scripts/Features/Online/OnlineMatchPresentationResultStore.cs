@@ -86,6 +86,7 @@ public class OnlineMatchPresentationResultStore : MonoBehaviour
             isVictory = source.isVictory,
             isDefeat = source.isDefeat,
             isDraw = source.isDraw,
+            isRanked = source.isRanked,
             titleText = source.titleText,
             playerName = source.playerName,
             levelText = source.levelText,

@@ -114,6 +114,11 @@ public sealed class BotMatchSetupController : MonoBehaviour
 
         ApplyOfflineSkinOwnershipSnapshot(request, generatedBotSkin);
         botSessionRuntime.SetCurrentBot(finalBot);
+
+        OnlineMatchPresentationResultStore presentationStore = OnlineMatchPresentationResultStore.Instance;
+        if (presentationStore != null)
+            presentationStore.ClearPresentationOnly();
+
         botOfflineMatchRuntime.SetRequest(request);
 
         if (enableDebugLogs)

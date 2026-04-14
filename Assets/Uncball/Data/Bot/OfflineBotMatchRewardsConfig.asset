@@ -1,0 +1,114 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 52187c69ec739174f9887823a587c997, type: 3}
+  m_Name: OfflineBotMatchRewardsConfig
+  m_EditorClassIdentifier: Assembly-CSharp::OfflineBotMatchRewardsConfig
+  easy:
+    win:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 10
+      softCurrencyReward: 12
+      grantChest: 0
+      chestType: 0
+    loss:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 4
+      softCurrencyReward: 4
+      grantChest: 0
+      chestType: 0
+    surrenderLoss:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 0
+      softCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+  medium:
+    win:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 14
+      softCurrencyReward: 18
+      grantChest: 0
+      chestType: 0
+    loss:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 5
+      softCurrencyReward: 5
+      grantChest: 0
+      chestType: 0
+    surrenderLoss:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 0
+      softCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+  hard:
+    win:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 50
+      softCurrencyReward: 50
+      grantChest: 1
+      chestType: 2
+    loss:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 6
+      softCurrencyReward: 6
+      grantChest: 0
+      chestType: 0
+    surrenderLoss:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 0
+      softCurrencyReward: 0
+      grantChest: 0
+      chestType: 0
+  unbeatable:
+    win:
+      countAsMatchPlayed: 1
+      countAsWin: 1
+      countAsLoss: 0
+      xpReward: 200
+      softCurrencyReward: 200
+      grantChest: 1
+      chestType: 3
+    loss:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 8
+      softCurrencyReward: 8
+      grantChest: 0
+      chestType: 0
+    surrenderLoss:
+      countAsMatchPlayed: 1
+      countAsWin: 0
+      countAsLoss: 1
+      xpReward: 0
+      softCurrencyReward: 0
+      grantChest: 0
+      chestType: 0

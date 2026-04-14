@@ -8,6 +8,7 @@ public class OnlineMatchPresentationResult
     public bool isVictory;
     public bool isDefeat;
     public bool isDraw;
+    public bool isRanked;
 
     public string titleText = "VICTORY";
     public string playerName = "PLAYER";

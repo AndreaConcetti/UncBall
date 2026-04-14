@@ -14,14 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::OnlineQueueRulesConfig
   normal:
     matchMode: 0
-    pointsToWin: 5
+    pointsToWin: 16
     matchDurationSeconds: 20
-    turnDurationSeconds: 10
+    turnDurationSeconds: 8
     allowChestRewards: 1
     allowXpRewards: 1
     allowStatsProgression: 1
   ranked:
-    matchMode: 0
+    matchMode: 1
     pointsToWin: 1
     matchDurationSeconds: 360
     turnDurationSeconds: 8
