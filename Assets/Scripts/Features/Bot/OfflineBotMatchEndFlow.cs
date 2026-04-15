@@ -13,6 +13,9 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
     [SerializeField] private LevelUpRewardsConfig levelUpRewardsConfig;
     [SerializeField] private OfflineBotMatchRewardsConfig offlineBotMatchRewardsConfig;
 
+    [Header("Masked Bot Queue Rewards")]
+    [SerializeField] private OnlineMatchRewardsConfig onlineMatchRewardsConfig;
+
     [Header("Policy")]
     [SerializeField] private bool applyRewards = true;
     [SerializeField] private bool applyProfileStats = true;
@@ -89,7 +92,8 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
         bool localLost = !isDraw && winner != localPlayerId;
         bool surrenderLoss = endReason == OnlineMatchEndReason.SurrenderLoss;
 
-        OfflineBotRewardRule rewardRule = ResolveRewardRule(request.Difficulty, localWon, surrenderLoss);
+        bool maskedBotQueueMatch = IsMaskedBotQueueRuntime(request);
+        QueueType rewardQueueType = ResolveRewardQueueType(maskedBotQueueMatch);
 
         int startTotalXp = profileManager != null && profileManager.ActiveProfile != null
             ? Mathf.Max(0, profileManager.ActiveProfile.xp)
@@ -101,44 +105,115 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
         int grantedSoftCurrency = 0;
         int grantedChestCount = 0;
         ChestType grantedChestType = ChestType.Random;
+        int rankedLpDelta = 0;
 
-        if (applyProfileStats && profileManager != null && rewardRule.countAsMatchPlayed)
+        if (applyProfileStats && profileManager != null)
         {
-            profileManager.RegisterMatchResult(
-                PlayerMatchCategory.Bot,
-                request.MatchMode,
-                localWon,
-                false
-            );
+            if (maskedBotQueueMatch)
+            {
+                profileManager.RegisterMatchResult(
+                    PlayerMatchCategory.Bot,
+                    request.MatchMode,
+                    localWon,
+                    false
+                );
+            }
+            else
+            {
+                OfflineBotRewardRule rewardRuleForStats = ResolveOfflineRewardRule(request.Difficulty, localWon, surrenderLoss);
+                if (rewardRuleForStats.countAsMatchPlayed)
+                {
+                    profileManager.RegisterMatchResult(
+                        PlayerMatchCategory.Bot,
+                        request.MatchMode,
+                        localWon,
+                        false
+                    );
+                }
+            }
         }
 
         if (applyRewards && profileManager != null)
         {
-            if (rewardRule.xpReward > 0)
+            if (maskedBotQueueMatch)
             {
-                grantedXp = Mathf.Max(0, rewardRule.xpReward);
-                profileManager.AddXp(grantedXp);
-            }
-
-            if (rewardRule.softCurrencyReward > 0)
-            {
-                grantedSoftCurrency = Mathf.Max(0, rewardRule.softCurrencyReward);
-                profileManager.AddSoftCurrency(grantedSoftCurrency);
-            }
-
-            if (rewardRule.grantChest && rewardManager != null)
-            {
-                bool granted = rewardManager.GrantChestReward(
-                    rewardRule.chestType,
-                    "offline_bot_match_reward",
-                    localWon ? "offline_bot_win" : (surrenderLoss ? "offline_bot_surrender_loss" : "offline_bot_loss"),
-                    winner
-                );
-
-                if (granted)
+                if (onlineMatchRewardsConfig == null)
                 {
-                    grantedChestCount = 1;
-                    grantedChestType = rewardRule.chestType;
+                    Debug.LogError(
+                        "[OfflineBotMatchEndFlow] onlineMatchRewardsConfig is NULL during masked bot queue match. " +
+                        "Assign OnlineMatchRewardsConfig on OnlineFlowController and/or this component.",
+                        this);
+                }
+
+                OnlineRewardCategory category = ResolveOnlineRewardCategory(localWon, localLost, isDraw, endReason);
+                OnlineRewardRule onlineRule = onlineMatchRewardsConfig != null
+                    ? onlineMatchRewardsConfig.GetRule(category, rewardQueueType)
+                    : default;
+
+                if (onlineRule.xpReward > 0)
+                {
+                    grantedXp = Mathf.Max(0, onlineRule.xpReward);
+                    profileManager.AddXp(grantedXp);
+                }
+
+                if (onlineRule.softCurrencyReward > 0)
+                {
+                    grantedSoftCurrency = Mathf.Max(0, onlineRule.softCurrencyReward);
+                    profileManager.AddSoftCurrency(grantedSoftCurrency);
+                }
+
+                if (rewardQueueType == QueueType.Ranked && onlineRule.rankedLpDelta != 0)
+                {
+                    rankedLpDelta = onlineRule.rankedLpDelta;
+                    profileManager.AddRankedLp(rankedLpDelta);
+                }
+
+                if (onlineRule.grantChest && rewardManager != null)
+                {
+                    bool granted = rewardManager.GrantChestReward(
+                        onlineRule.chestType,
+                        rewardQueueType == QueueType.Ranked ? "ranked_masked_bot_match_reward" : "normal_masked_bot_match_reward",
+                        category.ToString(),
+                        winner
+                    );
+
+                    if (granted)
+                    {
+                        grantedChestCount = 1;
+                        grantedChestType = onlineRule.chestType;
+                    }
+                }
+            }
+            else
+            {
+                OfflineBotRewardRule rewardRule = ResolveOfflineRewardRule(request.Difficulty, localWon, surrenderLoss);
+
+                if (rewardRule.xpReward > 0)
+                {
+                    grantedXp = Mathf.Max(0, rewardRule.xpReward);
+                    profileManager.AddXp(grantedXp);
+                }
+
+                if (rewardRule.softCurrencyReward > 0)
+                {
+                    grantedSoftCurrency = Mathf.Max(0, rewardRule.softCurrencyReward);
+                    profileManager.AddSoftCurrency(grantedSoftCurrency);
+                }
+
+                if (rewardRule.grantChest && rewardManager != null)
+                {
+                    bool granted = rewardManager.GrantChestReward(
+                        rewardRule.chestType,
+                        "offline_bot_match_reward",
+                        localWon ? "offline_bot_win" : (surrenderLoss ? "offline_bot_surrender_loss" : "offline_bot_loss"),
+                        winner
+                    );
+
+                    if (granted)
+                    {
+                        grantedChestCount = 1;
+                        grantedChestType = rewardRule.chestType;
+                    }
                 }
             }
         }
@@ -175,7 +250,9 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
                 {
                     bool granted = rewardManager != null && rewardManager.GrantChestReward(
                         entry.chestType,
-                        "offline_bot_level_up_reward",
+                        maskedBotQueueMatch
+                            ? (rewardQueueType == QueueType.Ranked ? "ranked_masked_bot_level_up_reward" : "normal_masked_bot_level_up_reward")
+                            : "offline_bot_level_up_reward",
                         "level_up_reward_level_" + entry.targetLevel,
                         winner
                     );
@@ -198,14 +275,17 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
             : endTotalXpAfterBase;
 
         int endLevel = ComputeLevelFromTotalXp(endTotalXp);
+        int newRankedLpTotal = profileManager != null ? profileManager.ActiveRankedLp : 0;
 
-        OnlineMatchPresentationResult result = BuildOfflinePresentationResult(
+        OnlineMatchPresentationResult result = BuildPresentationResult(
             request,
             winner,
             endReason,
             localWon,
             localLost,
             isDraw,
+            maskedBotQueueMatch,
+            rewardQueueType,
             startLevel,
             endLevel,
             startTotalXp,
@@ -217,7 +297,9 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
             levelUpCount,
             levelUpBonusSoft,
             levelUpBonusChestCount,
-            levelUpBonusChestType
+            levelUpBonusChestType,
+            rankedLpDelta,
+            newRankedLpTotal
         );
 
         if (presentationResultStore != null)
@@ -233,19 +315,21 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
             Debug.Log(
                 "[OfflineBotMatchEndFlow] Result applied -> " +
                 "RequestId=" + requestId +
+                " | MaskedBotQueueMatch=" + maskedBotQueueMatch +
+                " | RewardQueueType=" + rewardQueueType +
                 " | Difficulty=" + request.Difficulty +
                 " | Winner=" + winner +
                 " | EndReason=" + endReason +
                 " | LocalWon=" + localWon +
                 " | XP=" + grantedXp +
                 " | Soft=" + grantedSoftCurrency +
-                " | ChestCount=" + grantedChestCount,
+                " | LPDelta=" + rankedLpDelta +
+                " | ChestCount=" + grantedChestCount +
+                " | RewardsConfigNull=" + (onlineMatchRewardsConfig == null),
                 this
             );
         }
 
-        // Non aprire direttamente RewardsObtainedUI.
-        // Il PostGamePanel resta il punto di ingresso, e il bottone lì dentro aprirà OpenRewardsObtained().
         if (autoOpenRewardsPanel && postMatchPanelsController != null)
         {
             if (logDebug)
@@ -253,13 +337,15 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
         }
     }
 
-    private OnlineMatchPresentationResult BuildOfflinePresentationResult(
+    private OnlineMatchPresentationResult BuildPresentationResult(
         BotOfflineMatchRequest request,
         PlayerID winner,
         OnlineMatchEndReason endReason,
         bool localWon,
         bool localLost,
         bool isDraw,
+        bool maskedBotQueueMatch,
+        QueueType rewardQueueType,
         int startLevel,
         int endLevel,
         int startTotalXp,
@@ -271,7 +357,9 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
         int levelUpCount,
         int levelUpBonusSoft,
         int levelUpBonusChestCount,
-        ChestType levelUpBonusChestType)
+        ChestType levelUpBonusChestType,
+        int rankedLpDelta,
+        int newRankedLpTotal)
     {
         string titleText;
         if (isDraw)
@@ -287,7 +375,7 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
             isVictory = localWon,
             isDefeat = localLost,
             isDraw = isDraw,
-            isRanked = false,
+            isRanked = maskedBotQueueMatch && rewardQueueType == QueueType.Ranked,
 
             titleText = titleText,
             playerName = profileManager != null ? profileManager.ActiveDisplayName : request.LocalDisplayName,
@@ -303,8 +391,10 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
             startLevelProgress01 = CalculateLevelProgress01(startTotalXp),
             endLevelProgress01 = CalculateLevelProgress01(endTotalXp),
 
-            rankedLpDelta = 0,
-            newRankedLpTotal = profileManager != null ? profileManager.ActiveRankedLp : 0,
+            rankedLpDelta = (maskedBotQueueMatch && rewardQueueType == QueueType.Ranked) ? rankedLpDelta : 0,
+            newRankedLpTotal = (maskedBotQueueMatch && rewardQueueType == QueueType.Ranked)
+                ? newRankedLpTotal
+                : (profileManager != null ? profileManager.ActiveRankedLp : 0),
 
             totalSoftCurrencyGained = Mathf.Max(0, grantedSoftCurrency),
             totalChestCount = Mathf.Max(0, grantedChestCount),
@@ -324,7 +414,9 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
             request.Difficulty,
             localWon,
             endReason,
-            result
+            result,
+            maskedBotQueueMatch,
+            rewardQueueType
         );
 
         return result;
@@ -334,7 +426,9 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
         BotDifficulty difficulty,
         bool localWon,
         OnlineMatchEndReason endReason,
-        OnlineMatchPresentationResult result)
+        OnlineMatchPresentationResult result,
+        bool maskedBotQueueMatch,
+        QueueType rewardQueueType)
     {
         string difficultyText = difficulty.ToString().ToUpperInvariant();
         string outcomeText;
@@ -344,12 +438,19 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
         else if (result.isDraw)
             outcomeText = "DRAW";
         else
-            outcomeText = localWon ? "BOT DEFEATED" : "BOT WON";
+            outcomeText = localWon ? "MATCH WON" : "MATCH LOST";
 
-        string summary = difficultyText + " | " + outcomeText;
+        string summary;
+        if (maskedBotQueueMatch)
+            summary = (rewardQueueType == QueueType.Ranked ? "RANKED" : "NORMAL") + " | " + outcomeText;
+        else
+            summary = difficultyText + " | " + outcomeText;
 
         if (result.grantedXp > 0)
             summary += " | XP +" + result.grantedXp;
+
+        if (result.isRanked)
+            summary += " | LP " + (result.rankedLpDelta > 0 ? "+" : "") + result.rankedLpDelta;
 
         if (result.totalSoftCurrencyGained > 0)
             summary += " | COINS +" + result.totalSoftCurrencyGained;
@@ -360,7 +461,63 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
         return summary;
     }
 
-    private OfflineBotRewardRule ResolveRewardRule(BotDifficulty difficulty, bool localWon, bool surrenderLoss)
+    private bool IsMaskedBotQueueRuntime(BotOfflineMatchRequest request)
+    {
+        OnlineFlowController flow = OnlineFlowController.Instance;
+        if (flow != null && flow.RuntimeContext != null)
+        {
+            if (flow.RuntimeContext.currentSession != null)
+            {
+                MatchRuntimeType sessionRuntime = flow.RuntimeContext.currentSession.runtimeType;
+                return sessionRuntime == MatchRuntimeType.RankedMaskedBot ||
+                       sessionRuntime == MatchRuntimeType.NormalMaskedBot;
+            }
+
+            if (flow.RuntimeContext.currentAssignment != null)
+            {
+                MatchRuntimeType assignmentRuntime = flow.RuntimeContext.currentAssignment.runtimeType;
+                return assignmentRuntime == MatchRuntimeType.RankedMaskedBot ||
+                       assignmentRuntime == MatchRuntimeType.NormalMaskedBot;
+            }
+        }
+
+        return request != null && request.UseDisguisedBotIdentity;
+    }
+
+    private QueueType ResolveRewardQueueType(bool maskedBotQueueMatch)
+    {
+        if (!maskedBotQueueMatch)
+            return QueueType.Normal;
+
+        OnlineFlowController flow = OnlineFlowController.Instance;
+        if (flow != null && flow.RuntimeContext != null)
+            return flow.RuntimeContext.queueType;
+
+        return QueueType.Normal;
+    }
+
+    private OnlineRewardCategory ResolveOnlineRewardCategory(
+        bool localWon,
+        bool localLost,
+        bool isDraw,
+        OnlineMatchEndReason endReason)
+    {
+        if (endReason == OnlineMatchEndReason.SurrenderLoss)
+            return localWon ? OnlineRewardCategory.SurrenderWin : OnlineRewardCategory.SurrenderLoss;
+
+        if (isDraw)
+            return OnlineRewardCategory.Draw;
+
+        if (localWon)
+            return OnlineRewardCategory.NormalCompletionWin;
+
+        if (localLost)
+            return OnlineRewardCategory.NormalCompletionLoss;
+
+        return OnlineRewardCategory.Draw;
+    }
+
+    private OfflineBotRewardRule ResolveOfflineRewardRule(BotDifficulty difficulty, bool localWon, bool surrenderLoss)
     {
         if (offlineBotMatchRewardsConfig == null)
             return default;
@@ -468,11 +625,18 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
         if (rewardManager == null)
             rewardManager = RewardManager.Instance;
 
+        if (onlineMatchRewardsConfig == null && OnlineFlowController.Instance != null)
+            onlineMatchRewardsConfig = OnlineFlowController.Instance.RewardsConfig;
+
         if (offlineBotMatchController != null && offlineBotMatchController.ActiveRequest != null)
         {
             string requestId = offlineBotMatchController.ActiveRequest.RequestId ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(requestId) && requestId != lastProcessedOfflineRequestId && !offlineBotMatchController.MatchEnded)
+            if (!string.IsNullOrWhiteSpace(requestId) &&
+                requestId != lastProcessedOfflineRequestId &&
+                !offlineBotMatchController.MatchEnded)
+            {
                 resultApplied = false;
+            }
         }
     }
 }

@@ -90,12 +90,13 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
 
         bool hasLocal = resolver != null && resolver.TryGetLocalSnapshot(out localSnapshot);
         bool hasOpponent = resolver != null && resolver.TryGetOpponentSnapshot(out opponentSnapshot);
-        bool localIsHost = resolver != null && resolver.IsLocalHost();
+
+        bool localOnLeft = resolver == null || resolver.IsLocalOnLeft();
 
         OnlinePlayerMatchStatsSnapshot leftSnapshot = null;
         OnlinePlayerMatchStatsSnapshot rightSnapshot = null;
 
-        if (localIsHost)
+        if (localOnLeft)
         {
             leftSnapshot = hasLocal ? localSnapshot : null;
             rightSnapshot = hasOpponent ? opponentSnapshot : null;
@@ -126,7 +127,7 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
         {
             Debug.Log(
                 "[MatchFoundPlayerStatsPresenter] Layout -> " +
-                "LocalIsHost=" + localIsHost +
+                "LocalOnLeft=" + localOnLeft +
                 " | Left=" + (leftSnapshot != null ? leftSnapshot.displayName : "NULL") +
                 " | Right=" + (rightSnapshot != null ? rightSnapshot.displayName : "NULL"),
                 this
@@ -136,8 +137,13 @@ public sealed class MatchFoundPlayerStatsPresenter : MonoBehaviour
 
     private void ResolveDependencies()
     {
+#if UNITY_2023_1_OR_NEWER
         if (resolver == null)
-            resolver = FindAnyObjectByType<OnlinePlayerPresentationResolver>();
+            resolver = FindFirstObjectByType<OnlinePlayerPresentationResolver>(FindObjectsInactive.Include);
+#else
+        if (resolver == null)
+            resolver = FindObjectOfType<OnlinePlayerPresentationResolver>(true);
+#endif
     }
 
     private void ApplyLeftSnapshot(OnlinePlayerMatchStatsSnapshot snapshot, bool force)

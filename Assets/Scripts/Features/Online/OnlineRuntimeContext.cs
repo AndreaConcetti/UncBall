@@ -22,6 +22,66 @@ public sealed class OnlineRuntimeContext
         ResetToIdle();
     }
 
+    public bool HasAssignment => currentAssignment != null;
+    public bool HasSession => currentSession != null;
+
+    public bool IsOnlineHumanRuntime
+    {
+        get
+        {
+            MatchRuntimeType runtimeType = ResolveRuntimeType();
+            return runtimeType == MatchRuntimeType.OnlineHuman;
+        }
+    }
+
+    public bool IsOfflineBotRuntime
+    {
+        get
+        {
+            MatchRuntimeType runtimeType = ResolveRuntimeType();
+            return runtimeType == MatchRuntimeType.OfflineBot;
+        }
+    }
+
+    public bool IsRankedMaskedBotRuntime
+    {
+        get
+        {
+            MatchRuntimeType runtimeType = ResolveRuntimeType();
+            return runtimeType == MatchRuntimeType.RankedMaskedBot;
+        }
+    }
+
+    public bool IsNormalMaskedBotRuntime
+    {
+        get
+        {
+            MatchRuntimeType runtimeType = ResolveRuntimeType();
+            return runtimeType == MatchRuntimeType.NormalMaskedBot;
+        }
+    }
+
+    public bool IsAnyMaskedBotRuntime
+    {
+        get
+        {
+            MatchRuntimeType runtimeType = ResolveRuntimeType();
+            return runtimeType == MatchRuntimeType.RankedMaskedBot ||
+                   runtimeType == MatchRuntimeType.NormalMaskedBot;
+        }
+    }
+
+    public bool IsAnyBotRuntime
+    {
+        get
+        {
+            MatchRuntimeType runtimeType = ResolveRuntimeType();
+            return runtimeType == MatchRuntimeType.OfflineBot ||
+                   runtimeType == MatchRuntimeType.RankedMaskedBot ||
+                   runtimeType == MatchRuntimeType.NormalMaskedBot;
+        }
+    }
+
     public void ResetToIdle()
     {
         state = OnlineFlowState.Idle;
@@ -58,6 +118,9 @@ public sealed class OnlineRuntimeContext
 
     public bool CanResolvePrematchHostForfeitWin()
     {
+        if (IsAnyBotRuntime)
+            return false;
+
         return !hasGameplayValidation && !prematchHostForfeitWinResolved;
     }
 
@@ -77,5 +140,16 @@ public sealed class OnlineRuntimeContext
     public void MarkPrematchHostForfeitRewardsApplied()
     {
         prematchHostForfeitRewardsApplied = true;
+    }
+
+    private MatchRuntimeType ResolveRuntimeType()
+    {
+        if (currentSession != null)
+            return currentSession.runtimeType;
+
+        if (currentAssignment != null)
+            return currentAssignment.runtimeType;
+
+        return MatchRuntimeType.OnlineHuman;
     }
 }

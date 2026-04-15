@@ -24,6 +24,22 @@ public class FusionGameplayBootstrap : MonoBehaviour
     {
         ResolveDependencies();
 
+        if (IsMaskedBotRuntime())
+        {
+            if (onlineGameplayAuthority != null)
+                onlineGameplayAuthority.ForceOfflineDisabledState();
+
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[FusionGameplayBootstrap] Skipping online bootstrap because runtime is masked bot.",
+                    this
+                );
+            }
+
+            return;
+        }
+
         if (!ShouldRunOnlineBootstrap())
             return;
 
@@ -51,17 +67,35 @@ public class FusionGameplayBootstrap : MonoBehaviour
 
     private bool ShouldRunOnlineBootstrap()
     {
+        MatchSessionContext session = GetCurrentSession();
+        if (session != null)
+            return session.runtimeType == MatchRuntimeType.OnlineHuman;
+
         if (runnerManager != null && runnerManager.IsRunning)
             return true;
 
-        if (onlineFlowController != null &&
-            onlineFlowController.RuntimeContext != null &&
-            onlineFlowController.RuntimeContext.currentSession != null)
+        return false;
+    }
+
+    private bool IsMaskedBotRuntime()
+    {
+        MatchSessionContext session = GetCurrentSession();
+        if (session == null)
+            return false;
+
+        return session.runtimeType == MatchRuntimeType.RankedMaskedBot ||
+               session.runtimeType == MatchRuntimeType.NormalMaskedBot;
+    }
+
+    private MatchSessionContext GetCurrentSession()
+    {
+        if (onlineFlowController == null ||
+            onlineFlowController.RuntimeContext == null)
         {
-            return true;
+            return null;
         }
 
-        return false;
+        return onlineFlowController.RuntimeContext.currentSession;
     }
 
     private IEnumerator BootstrapOnlineRoutine()

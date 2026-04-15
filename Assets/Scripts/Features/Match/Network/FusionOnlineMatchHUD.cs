@@ -206,6 +206,13 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         string safeP1 = string.IsNullOrWhiteSpace(player1Name) ? player1FallbackName : player1Name;
         string safeP2 = string.IsNullOrWhiteSpace(player2Name) ? player2FallbackName : player2Name;
 
+        bool initialPlayer1OnLeft = ResolveInitialPlayer1OnLeft(player1OnLeft);
+
+        string panelLeftName = initialPlayer1OnLeft ? safeP1 : safeP2;
+        string panelRightName = initialPlayer1OnLeft ? safeP2 : safeP1;
+        int panelLeftScore = initialPlayer1OnLeft ? scoreP1 : scoreP2;
+        int panelRightScore = initialPlayer1OnLeft ? scoreP2 : scoreP1;
+
         if (bottomBarOrderSwapper != null)
         {
             if (!hasAppliedInitialLayout || bottomBarOrderSwapper.IsPlayer1OnLeft() != player1OnLeft)
@@ -288,40 +295,40 @@ public class FusionOnlineMatchHUD : MonoBehaviour
             halfPointCountdownText.text = Mathf.CeilToInt(Mathf.Max(0f, breakTimeRemaining)).ToString();
 
         if (halfTimePlayer1NameText != null)
-            halfTimePlayer1NameText.text = safeP1;
+            halfTimePlayer1NameText.text = panelLeftName;
 
         if (halfTimePlayer2NameText != null)
-            halfTimePlayer2NameText.text = safeP2;
+            halfTimePlayer2NameText.text = panelRightName;
 
         if (halfTimePlayer1ScoreText != null)
-            halfTimePlayer1ScoreText.text = FormatScoreForMode(matchMode, scoreP1, pointsToWin);
+            halfTimePlayer1ScoreText.text = FormatScoreForMode(matchMode, panelLeftScore, pointsToWin);
 
         if (halfTimePlayer2ScoreText != null)
-            halfTimePlayer2ScoreText.text = FormatScoreForMode(matchMode, scoreP2, pointsToWin);
+            halfTimePlayer2ScoreText.text = FormatScoreForMode(matchMode, panelRightScore, pointsToWin);
 
         if (halfPointPlayer1NameText != null)
-            halfPointPlayer1NameText.text = safeP1;
+            halfPointPlayer1NameText.text = panelLeftName;
 
         if (halfPointPlayer2NameText != null)
-            halfPointPlayer2NameText.text = safeP2;
+            halfPointPlayer2NameText.text = panelRightName;
 
         if (halfPointPlayer1ScoreText != null)
-            halfPointPlayer1ScoreText.text = FormatScoreForMode(matchMode, scoreP1, pointsToWin);
+            halfPointPlayer1ScoreText.text = FormatScoreForMode(matchMode, panelLeftScore, pointsToWin);
 
         if (halfPointPlayer2ScoreText != null)
-            halfPointPlayer2ScoreText.text = FormatScoreForMode(matchMode, scoreP2, pointsToWin);
+            halfPointPlayer2ScoreText.text = FormatScoreForMode(matchMode, panelRightScore, pointsToWin);
 
         if (endgamePlayer1NameText != null)
-            endgamePlayer1NameText.text = safeP1;
+            endgamePlayer1NameText.text = panelLeftName;
 
         if (endgamePlayer2NameText != null)
-            endgamePlayer2NameText.text = safeP2;
+            endgamePlayer2NameText.text = panelRightName;
 
         if (endgamePlayer1ScoreText != null)
-            endgamePlayer1ScoreText.text = FormatScoreForMode(matchMode, scoreP1, pointsToWin);
+            endgamePlayer1ScoreText.text = FormatScoreForMode(matchMode, panelLeftScore, pointsToWin);
 
         if (endgamePlayer2ScoreText != null)
-            endgamePlayer2ScoreText.text = FormatScoreForMode(matchMode, scoreP2, pointsToWin);
+            endgamePlayer2ScoreText.text = FormatScoreForMode(matchMode, panelRightScore, pointsToWin);
 
         ApplyGameResultTexts(winner, safeP1, safeP2, endReason);
     }
@@ -346,6 +353,13 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         string safeP1 = string.IsNullOrWhiteSpace(player1Name) ? player1FallbackName : player1Name;
         string safeP2 = string.IsNullOrWhiteSpace(player2Name) ? player2FallbackName : player2Name;
 
+        bool initialPlayer1OnLeft = ResolveInitialPlayer1OnLeft(true);
+
+        string panelLeftName = initialPlayer1OnLeft ? safeP1 : safeP2;
+        string panelRightName = initialPlayer1OnLeft ? safeP2 : safeP1;
+        int panelLeftScore = initialPlayer1OnLeft ? scoreP1 : scoreP2;
+        int panelRightScore = initialPlayer1OnLeft ? scoreP2 : scoreP1;
+
         if (hideGameplayUiWhenMatchEnds && gameUIPanel != null)
             gameUIPanel.SetActive(false);
 
@@ -362,16 +376,16 @@ public class FusionOnlineMatchHUD : MonoBehaviour
             reconnectPanel.SetActive(false);
 
         if (endgamePlayer1NameText != null)
-            endgamePlayer1NameText.text = safeP1;
+            endgamePlayer1NameText.text = panelLeftName;
 
         if (endgamePlayer2NameText != null)
-            endgamePlayer2NameText.text = safeP2;
+            endgamePlayer2NameText.text = panelRightName;
 
         if (endgamePlayer1ScoreText != null)
-            endgamePlayer1ScoreText.text = FormatScoreForMode(matchMode, scoreP1, pointsToWin);
+            endgamePlayer1ScoreText.text = FormatScoreForMode(matchMode, panelLeftScore, pointsToWin);
 
         if (endgamePlayer2ScoreText != null)
-            endgamePlayer2ScoreText.text = FormatScoreForMode(matchMode, scoreP2, pointsToWin);
+            endgamePlayer2ScoreText.text = FormatScoreForMode(matchMode, panelRightScore, pointsToWin);
 
         ApplyGameResultTexts(winner, safeP1, safeP2, endReason);
         TriggerPostGamePanelVisibility();
@@ -391,7 +405,7 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         if (!visible)
         {
             reconnectDotsTimer = 0f;
-            reconnectDotsCount = 0f > 1f ? 1 : 0;
+            reconnectDotsCount = 0;
             if (reconnectCountdownText != null)
                 reconnectCountdownText.text = string.Empty;
             reconnectPanelWasVisibleLastFrame = false;
@@ -623,6 +637,11 @@ public class FusionOnlineMatchHUD : MonoBehaviour
         string safeP1 = string.IsNullOrWhiteSpace(session.player1DisplayName) ? player1FallbackName : session.player1DisplayName.Trim();
         string safeP2 = string.IsNullOrWhiteSpace(session.player2DisplayName) ? player2FallbackName : session.player2DisplayName.Trim();
 
+        bool initialPlayer1OnLeft = session.player1StartsOnLeft;
+
+        string panelLeftName = initialPlayer1OnLeft ? safeP1 : safeP2;
+        string panelRightName = initialPlayer1OnLeft ? safeP2 : safeP1;
+
         MatchMode mode = session.matchMode;
         int pointsToWin = Mathf.Max(1, session.pointsToWin);
         float matchDuration = Mathf.Max(1f, session.matchDurationSeconds);
@@ -671,40 +690,40 @@ public class FusionOnlineMatchHUD : MonoBehaviour
             player2NameText.text = safeP2;
 
         if (halfTimePlayer1NameText != null)
-            halfTimePlayer1NameText.text = safeP1;
+            halfTimePlayer1NameText.text = panelLeftName;
 
         if (halfTimePlayer2NameText != null)
-            halfTimePlayer2NameText.text = safeP2;
+            halfTimePlayer2NameText.text = panelRightName;
 
         if (halfTimePlayer1ScoreText != null)
-            halfTimePlayer1ScoreText.text = previewP1Score;
+            halfTimePlayer1ScoreText.text = "0";
 
         if (halfTimePlayer2ScoreText != null)
-            halfTimePlayer2ScoreText.text = previewP2Score;
+            halfTimePlayer2ScoreText.text = "0";
 
         if (halfPointPlayer1NameText != null)
-            halfPointPlayer1NameText.text = safeP1;
+            halfPointPlayer1NameText.text = panelLeftName;
 
         if (halfPointPlayer2NameText != null)
-            halfPointPlayer2NameText.text = safeP2;
+            halfPointPlayer2NameText.text = panelRightName;
 
         if (halfPointPlayer1ScoreText != null)
-            halfPointPlayer1ScoreText.text = previewP1Score;
+            halfPointPlayer1ScoreText.text = "0";
 
         if (halfPointPlayer2ScoreText != null)
-            halfPointPlayer2ScoreText.text = previewP2Score;
+            halfPointPlayer2ScoreText.text = "0";
 
         if (endgamePlayer1NameText != null)
-            endgamePlayer1NameText.text = safeP1;
+            endgamePlayer1NameText.text = panelLeftName;
 
         if (endgamePlayer2NameText != null)
-            endgamePlayer2NameText.text = safeP2;
+            endgamePlayer2NameText.text = panelRightName;
 
         if (endgamePlayer1ScoreText != null)
-            endgamePlayer1ScoreText.text = previewP1Score;
+            endgamePlayer1ScoreText.text = "0";
 
         if (endgamePlayer2ScoreText != null)
-            endgamePlayer2ScoreText.text = previewP2Score;
+            endgamePlayer2ScoreText.text = "0";
 
         SetTextVisible(gameResultWinnerText, false);
         SetTextVisible(gameResultLoserText, false);
@@ -734,11 +753,30 @@ public class FusionOnlineMatchHUD : MonoBehaviour
                 "ForceGameplayUiVisible=" + forceGameplayUiVisibleDuringSessionPreview +
                 " | Player1=" + safeP1 +
                 " | Player2=" + safeP2 +
+                " | InitialPlayer1OnLeft=" + initialPlayer1OnLeft +
                 " | MatchDuration=" + matchDuration +
                 " | TurnDuration=" + turnDuration,
                 this
             );
         }
+    }
+
+    private bool ResolveInitialPlayer1OnLeft(bool fallbackCurrentValue)
+    {
+        ResolveDependencies();
+
+        if (onlineFlowController != null && onlineFlowController.RuntimeContext != null)
+        {
+            MatchSessionContext session = onlineFlowController.RuntimeContext.currentSession;
+            if (session != null)
+                return session.player1StartsOnLeft;
+
+            MatchAssignment assignment = onlineFlowController.RuntimeContext.currentAssignment;
+            if (assignment != null)
+                return assignment.player1StartsOnLeft;
+        }
+
+        return fallbackCurrentValue;
     }
 
     private void ResetPostGameDelayState()

@@ -9,6 +9,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private OnlineFlowController onlineFlowController;
     [SerializeField] private PlayerProfileManager profileManager;
+    [SerializeField] private BotSessionRuntime botSessionRuntime;
 
     [Header("Main Roots")]
     [SerializeField] private GameObject onlinePanelRoot;
@@ -55,9 +56,26 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     [SerializeField] private TMP_Text matchFoundPlayerNamesText;
     [SerializeField] private TMP_Text matchFoundCountdownText;
 
+    [Header("Match Found Detailed Left Slot")]
+    [SerializeField] private TMP_Text matchFoundLeftNameText;
+    [SerializeField] private TMP_Text matchFoundLeftWinLoseText;
+    [SerializeField] private TMP_Text matchFoundLeftWinRateText;
+
+    [Header("Match Found Detailed Right Slot")]
+    [SerializeField] private TMP_Text matchFoundRightNameText;
+    [SerializeField] private TMP_Text matchFoundRightWinLoseText;
+    [SerializeField] private TMP_Text matchFoundRightWinRateText;
+
     [Header("Countdown")]
     [SerializeField] private bool syncCountdownWithOnlineFlowDelay = true;
     [SerializeField] private float fallbackMatchFoundCountdownDuration = 2f;
+
+    [Header("Formatting")]
+    [SerializeField] private bool uppercaseNames = true;
+    [SerializeField] private string fallbackLocalName = "PLAYER";
+    [SerializeField] private string fallbackOpponentName = "OPPONENT";
+    [SerializeField] private string fallbackPlayer1Name = "PLAYER 1";
+    [SerializeField] private string fallbackPlayer2Name = "PLAYER 2";
 
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
@@ -77,6 +95,8 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     private bool subscribedToProfileEvents;
     private bool subscribedToFlowEvents;
     private bool subscribedToSceneEvents;
+
+    private string lastMatchFoundSnapshotKey = string.Empty;
 
     private void Awake()
     {
@@ -201,6 +221,9 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
         if (force || profileManager == null)
             profileManager = PlayerProfileManager.Instance;
+
+        if (force || botSessionRuntime == null)
+            botSessionRuntime = BotSessionRuntime.Instance;
     }
 
     private void SubscribeIfNeeded()
@@ -285,10 +308,12 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     private void HandleProfileChanged(PlayerProfileRuntimeData _)
     {
         RefreshPlayerNameImmediate();
+        RefreshMatchFoundTexts(force: true);
     }
 
     private void ForceRefreshAll()
     {
+        lastMatchFoundSnapshotKey = string.Empty;
         RefreshPlayerNameImmediate();
         RefreshStateUi();
     }
@@ -310,14 +335,14 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     private string ResolveCurrentPlayerName()
     {
         if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.DisplayName))
-            return OnlineLocalPlayerContext.DisplayName.Trim().ToUpperInvariant();
+            return NormalizeName(OnlineLocalPlayerContext.DisplayName);
 
         ResolveDependencies(false);
 
         if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveDisplayName))
-            return profileManager.ActiveDisplayName.Trim().ToUpperInvariant();
+            return NormalizeName(profileManager.ActiveDisplayName);
 
-        return "PLAYER";
+        return NormalizeName(fallbackLocalName);
     }
 
     private void ApplyPlayerName(string value)
@@ -365,13 +390,12 @@ public class MultiplayerMenuPresenter : MonoBehaviour
             state == OnlineFlowState.Error ||
             state == OnlineFlowState.EndingMatch;
 
-        bool isSearching =
-            state == OnlineFlowState.Queueing ||
+        bool isQueueSearching = state == OnlineFlowState.Queueing;
+
+        bool shouldKeepMatchFoundVisible =
+            state == OnlineFlowState.MatchAssigned ||
             state == OnlineFlowState.JoiningSession ||
             state == OnlineFlowState.LoadingGameplay;
-
-        bool isMatchFound =
-            state == OnlineFlowState.MatchAssigned;
 
         if (homeVisualRoot != null)
             homeVisualRoot.SetActive(true);
@@ -418,28 +442,29 @@ public class MultiplayerMenuPresenter : MonoBehaviour
             onlineButtonsRoot.SetActive(isIdle);
 
         if (matchmakingLoadingPanel != null)
-            matchmakingLoadingPanel.SetActive(isSearching);
+            matchmakingLoadingPanel.SetActive(isQueueSearching);
 
         if (matchFoundPanel != null)
-            matchFoundPanel.SetActive(isMatchFound);
+            matchFoundPanel.SetActive(shouldKeepMatchFoundVisible);
 
-        if (isSearching)
+        if (isQueueSearching)
             EnsureQueueTimerRunning();
         else
             StopQueueTimer();
 
-        if (isMatchFound)
+        if (shouldKeepMatchFoundVisible)
         {
             HideQueueTimeoutPanel();
-            RefreshMatchFoundTexts();
+            RefreshMatchFoundTexts(force: false);
             StartMatchFoundCountdownIfNeeded();
         }
         else
         {
             StopMatchFoundCountdown();
+            lastMatchFoundSnapshotKey = string.Empty;
         }
 
-        if (!isSearching && matchmakingProgressText != null)
+        if (!isQueueSearching && matchmakingProgressText != null)
             matchmakingProgressText.text = string.Empty;
     }
 
@@ -543,14 +568,15 @@ public class MultiplayerMenuPresenter : MonoBehaviour
             matchFoundCountdownRunning = true;
             matchFoundCountdownRemaining = configuredDuration;
             hasTriggeredMatchFoundEnd = false;
-            RefreshMatchFoundTexts();
+            RefreshMatchFoundTexts(force: true);
             return;
         }
 
-        if (Mathf.Abs(matchFoundCountdownRemaining - configuredDuration) > 0.01f)
+        if (Mathf.Abs(matchFoundCountdownRemaining - configuredDuration) > 0.01f &&
+            !hasTriggeredMatchFoundEnd)
         {
             matchFoundCountdownRemaining = configuredDuration;
-            RefreshMatchFoundTexts();
+            RefreshMatchFoundTexts(force: true);
         }
     }
 
@@ -577,26 +603,30 @@ public class MultiplayerMenuPresenter : MonoBehaviour
         if (!matchFoundCountdownRunning)
             return;
 
-        matchFoundCountdownRemaining -= Time.unscaledDeltaTime;
-        if (matchFoundCountdownRemaining < 0f)
-            matchFoundCountdownRemaining = 0f;
+        if (!hasTriggeredMatchFoundEnd)
+        {
+            matchFoundCountdownRemaining -= Time.unscaledDeltaTime;
+            if (matchFoundCountdownRemaining < 0f)
+                matchFoundCountdownRemaining = 0f;
 
-        RefreshMatchFoundTexts();
+            RefreshMatchFoundTexts(force: false);
 
-        if (matchFoundCountdownRemaining > 0f)
-            return;
+            if (matchFoundCountdownRemaining <= 0f)
+            {
+                hasTriggeredMatchFoundEnd = true;
 
-        if (hasTriggeredMatchFoundEnd)
-            return;
-
-        hasTriggeredMatchFoundEnd = true;
-        matchFoundCountdownRunning = false;
-
-        if (globalStatusText != null)
-            globalStatusText.text = "MATCH STARTING...";
+                if (globalStatusText != null)
+                    globalStatusText.text = "MATCH STARTING...";
+            }
+        }
+        else
+        {
+            if (matchFoundCountdownText != null)
+                matchFoundCountdownText.text = "0";
+        }
     }
 
-    private void RefreshMatchFoundTexts()
+    private void RefreshMatchFoundTexts(bool force)
     {
         ResolveDependencies(false);
 
@@ -606,42 +636,155 @@ public class MultiplayerMenuPresenter : MonoBehaviour
         MatchSessionContext session = onlineFlowController.RuntimeContext.currentSession;
         MatchAssignment assignment = onlineFlowController.RuntimeContext.currentAssignment;
 
-        string p1 = "PLAYER 1";
-        string p2 = "PLAYER 2";
+        string leftName = NormalizeName(fallbackPlayer1Name);
+        string rightName = NormalizeName(fallbackPlayer2Name);
+
+        string leftWL = string.Empty;
+        string rightWL = string.Empty;
+        string leftWR = string.Empty;
+        string rightWR = string.Empty;
 
         if (session != null)
         {
-            if (!string.IsNullOrWhiteSpace(session.player1DisplayName))
-                p1 = session.player1DisplayName.Trim().ToUpperInvariant();
+            string sessionP1 = NormalizeName(string.IsNullOrWhiteSpace(session.player1DisplayName) ? fallbackPlayer1Name : session.player1DisplayName);
+            string sessionP2 = NormalizeName(string.IsNullOrWhiteSpace(session.player2DisplayName) ? fallbackPlayer2Name : session.player2DisplayName);
 
-            if (!string.IsNullOrWhiteSpace(session.player2DisplayName))
-                p2 = session.player2DisplayName.Trim().ToUpperInvariant();
+            leftName = session.player1StartsOnLeft ? sessionP1 : sessionP2;
+            rightName = session.player1StartsOnLeft ? sessionP2 : sessionP1;
         }
         else if (assignment != null)
         {
-            if (assignment.localIsHost)
-            {
-                if (assignment.localPlayer != null && !string.IsNullOrWhiteSpace(assignment.localPlayer.displayName))
-                    p1 = assignment.localPlayer.displayName.Trim().ToUpperInvariant();
+            string localName =
+                assignment.localPlayer != null && !string.IsNullOrWhiteSpace(assignment.localPlayer.displayName)
+                    ? NormalizeName(assignment.localPlayer.displayName)
+                    : NormalizeName(fallbackLocalName);
 
-                if (assignment.remotePlayer != null && !string.IsNullOrWhiteSpace(assignment.remotePlayer.displayName))
-                    p2 = assignment.remotePlayer.displayName.Trim().ToUpperInvariant();
+            string remoteName =
+                assignment.remotePlayer != null && !string.IsNullOrWhiteSpace(assignment.remotePlayer.displayName)
+                    ? NormalizeName(assignment.remotePlayer.displayName)
+                    : NormalizeName(fallbackOpponentName);
+
+            int localWins = 0;
+            int localLosses = 0;
+            int localWinRate = 0;
+
+            if (assignment.localPlayerStats != null)
+            {
+                localWins = Mathf.Clamp(assignment.localPlayerStats.totalWins, 0, assignment.localPlayerStats.totalMatches);
+                localLosses = Mathf.Max(0, assignment.localPlayerStats.totalMatches - localWins);
+                localWinRate = Mathf.Clamp(assignment.localPlayerStats.winRatePercent, 0, 100);
+            }
+
+            int remoteWins = 0;
+            int remoteLosses = 0;
+            int remoteWinRate = 0;
+
+            bool hasBotPresentation =
+                botSessionRuntime != null &&
+                botSessionRuntime.CurrentOpponentPresentation != null &&
+                (assignment.runtimeType == MatchRuntimeType.RankedMaskedBot ||
+                 assignment.runtimeType == MatchRuntimeType.NormalMaskedBot);
+
+            if (hasBotPresentation)
+            {
+                OpponentPresentationProfile bot = botSessionRuntime.CurrentOpponentPresentation;
+                remoteWins = Mathf.Clamp(bot.TotalWins, 0, bot.TotalMatches);
+                remoteLosses = Mathf.Max(0, bot.TotalMatches - remoteWins);
+                remoteWinRate = Mathf.Clamp(bot.WinRatePercent, 0, 100);
+
+                if (!string.IsNullOrWhiteSpace(bot.DisplayName))
+                    remoteName = NormalizeName(bot.DisplayName);
+            }
+            else if (assignment.remotePlayerStats != null)
+            {
+                remoteWins = Mathf.Clamp(assignment.remotePlayerStats.totalWins, 0, assignment.remotePlayerStats.totalMatches);
+                remoteLosses = Mathf.Max(0, assignment.remotePlayerStats.totalMatches - remoteWins);
+                remoteWinRate = Mathf.Clamp(assignment.remotePlayerStats.winRatePercent, 0, 100);
+            }
+
+            string p1Name = assignment.localPlayerIsPlayer1 ? localName : remoteName;
+            string p2Name = assignment.localPlayerIsPlayer1 ? remoteName : localName;
+
+            string p1WL = assignment.localPlayerIsPlayer1
+                ? FormatWinLose(localWins, localLosses)
+                : FormatWinLose(remoteWins, remoteLosses);
+
+            string p2WL = assignment.localPlayerIsPlayer1
+                ? FormatWinLose(remoteWins, remoteLosses)
+                : FormatWinLose(localWins, localLosses);
+
+            string p1WR = assignment.localPlayerIsPlayer1
+                ? FormatWinRate(localWinRate)
+                : FormatWinRate(remoteWinRate);
+
+            string p2WR = assignment.localPlayerIsPlayer1
+                ? FormatWinRate(remoteWinRate)
+                : FormatWinRate(localWinRate);
+
+            if (assignment.player1StartsOnLeft)
+            {
+                leftName = p1Name;
+                rightName = p2Name;
+                leftWL = p1WL;
+                rightWL = p2WL;
+                leftWR = p1WR;
+                rightWR = p2WR;
             }
             else
             {
-                if (assignment.remotePlayer != null && !string.IsNullOrWhiteSpace(assignment.remotePlayer.displayName))
-                    p1 = assignment.remotePlayer.displayName.Trim().ToUpperInvariant();
-
-                if (assignment.localPlayer != null && !string.IsNullOrWhiteSpace(assignment.localPlayer.displayName))
-                    p2 = assignment.localPlayer.displayName.Trim().ToUpperInvariant();
+                leftName = p2Name;
+                rightName = p1Name;
+                leftWL = p2WL;
+                rightWL = p1WL;
+                leftWR = p2WR;
+                rightWR = p1WR;
             }
         }
 
+        string snapshotKey =
+            leftName + "|" +
+            rightName + "|" +
+            leftWL + "|" +
+            rightWL + "|" +
+            leftWR + "|" +
+            rightWR + "|" +
+            Mathf.CeilToInt(Mathf.Max(0f, matchFoundCountdownRemaining));
+
+        if (!force && snapshotKey == lastMatchFoundSnapshotKey)
+            return;
+
+        lastMatchFoundSnapshotKey = snapshotKey;
+
         if (matchFoundPlayerNamesText != null)
-            matchFoundPlayerNamesText.text = p1 + "\nVS\n" + p2;
+            matchFoundPlayerNamesText.text = leftName + "\nVS\n" + rightName;
+
+        SetText(matchFoundLeftNameText, leftName);
+        SetText(matchFoundLeftWinLoseText, leftWL);
+        SetText(matchFoundLeftWinRateText, leftWR);
+
+        SetText(matchFoundRightNameText, rightName);
+        SetText(matchFoundRightWinLoseText, rightWL);
+        SetText(matchFoundRightWinRateText, rightWR);
 
         if (matchFoundCountdownText != null)
-            matchFoundCountdownText.text = Mathf.CeilToInt(Mathf.Max(0f, matchFoundCountdownRemaining)).ToString();
+        {
+            if (hasTriggeredMatchFoundEnd)
+                matchFoundCountdownText.text = "0";
+            else
+                matchFoundCountdownText.text = Mathf.CeilToInt(Mathf.Max(0f, matchFoundCountdownRemaining)).ToString();
+        }
+
+        if (logDebug && assignment != null)
+        {
+            Debug.Log(
+                "[MultiplayerMenuPresenter] RefreshMatchFoundTexts -> " +
+                "RuntimeType=" + assignment.runtimeType +
+                " | LocalIsP1=" + assignment.localPlayerIsPlayer1 +
+                " | P1StartsOnLeft=" + assignment.player1StartsOnLeft +
+                " | Left=" + leftName +
+                " | Right=" + rightName,
+                this);
+        }
     }
 
     private void ShowQueueTimeoutPanel()
@@ -680,6 +823,33 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
         if (queueTimeoutPanel != null)
             queueTimeoutPanel.SetActive(false);
+    }
+
+    private string NormalizeName(string value)
+    {
+        string resolved = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+        if (uppercaseNames && !string.IsNullOrWhiteSpace(resolved))
+            resolved = resolved.ToUpperInvariant();
+
+        return resolved;
+    }
+
+    private string FormatWinLose(int wins, int losses)
+    {
+        return wins + "W - " + losses + "L";
+    }
+
+    private string FormatWinRate(int winRatePercent)
+    {
+        return Mathf.Clamp(winRatePercent, 0, 100) + "%";
+    }
+
+    private void SetText(TMP_Text target, string value)
+    {
+        if (target == null)
+            return;
+
+        target.text = string.IsNullOrWhiteSpace(value) ? string.Empty : value;
     }
 
     private string SafeUpper(string value, string fallback)

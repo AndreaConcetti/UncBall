@@ -16,16 +16,38 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
     private readonly OnlineQueueRulesConfig queueRulesConfig;
     private readonly bool logDebug;
 
+    private readonly bool allowRankedMaskedBots;
+    private readonly Vector2 rankedBotQueueDelaySeconds;
+    private readonly BotDifficulty rankedBotDifficulty;
+
+    private readonly bool allowNormalMaskedBots;
+    private readonly Vector2 normalBotQueueDelaySeconds;
+    private readonly BotDifficulty normalBotDifficulty;
+
     public bool IsSearching { get; private set; }
 
     public PhotonFusionMatchmakingService(
         PhotonFusionRunnerManager runnerManager,
         OnlineQueueRulesConfig queueRulesConfig,
-        bool logDebug)
+        bool logDebug,
+        bool allowRankedMaskedBots,
+        Vector2 rankedBotQueueDelaySeconds,
+        BotDifficulty rankedBotDifficulty,
+        bool allowNormalMaskedBots,
+        Vector2 normalBotQueueDelaySeconds,
+        BotDifficulty normalBotDifficulty)
     {
         this.runnerManager = runnerManager;
         this.queueRulesConfig = queueRulesConfig;
         this.logDebug = logDebug;
+
+        this.allowRankedMaskedBots = allowRankedMaskedBots;
+        this.rankedBotQueueDelaySeconds = NormalizeDelayRange(rankedBotQueueDelaySeconds, 18f, 35f);
+        this.rankedBotDifficulty = rankedBotDifficulty;
+
+        this.allowNormalMaskedBots = allowNormalMaskedBots;
+        this.normalBotQueueDelaySeconds = NormalizeDelayRange(normalBotQueueDelaySeconds, 8f, 16f);
+        this.normalBotDifficulty = normalBotDifficulty;
     }
 
     public async Task<MatchAssignment> EnqueueAsync(
@@ -59,6 +81,11 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
             float matchDurationSeconds = Mathf.Max(1f, rules.matchDurationSeconds);
             float turnDurationSeconds = Mathf.Max(1f, rules.turnDurationSeconds);
 
+            bool queueAllowsMaskedBot = IsMaskedBotAllowedForQueue(queueType);
+            float maskedBotFallbackDelaySeconds = queueAllowsMaskedBot
+                ? SampleFallbackDelaySeconds(queueType)
+                : -1f;
+
             OnlinePlayerMatchStatsSnapshot localSnapshot =
                 OnlinePlayerStatsSnapshotFactory.BuildFromLocalProfile(localPlayer);
 
@@ -81,7 +108,11 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                     " | Level=" + localSnapshot.level +
                     " | WL=" + localSnapshot.totalWins + "W-" + localSnapshot.totalLosses + "L" +
                     " | WR=" + localSnapshot.winRatePercent + "%" +
-                    " | TokenBytes=" + (OnlinePlayerTokenCodec.Encode(localSnapshot)?.Length ?? 0)
+                    " | TokenBytes=" + (OnlinePlayerTokenCodec.Encode(localSnapshot)?.Length ?? 0) +
+                    " | AllowMaskedBot=" + queueAllowsMaskedBot +
+                    " | MaskedBotDelay=" + maskedBotFallbackDelaySeconds +
+                    " | BotDifficulty=" + GetQueueBotDifficulty(queueType),
+                    runnerManager
                 );
             }
 
@@ -117,6 +148,7 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                 localSnapshot,
                 localIsHost,
                 rules,
+                maskedBotFallbackDelaySeconds,
                 cancellationToken
             );
 
@@ -147,8 +179,11 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
         OnlinePlayerMatchStatsSnapshot localSnapshot,
         bool localIsHost,
         QueueRuleSet rules,
+        float maskedBotFallbackDelaySeconds,
         CancellationToken cancellationToken)
     {
+        DateTime searchStartUtc = DateTime.UtcNow;
+
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -156,6 +191,7 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
             if (runnerManager == null || !runnerManager.IsRunning)
                 throw new Exception("Runner stopped during matchmaking.");
 
+            double elapsedSeconds = (DateTime.UtcNow - searchStartUtc).TotalSeconds;
             int playerCount = runnerManager.GetCurrentPlayerCount();
 
             if (playerCount >= 2)
@@ -187,6 +223,7 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                     sessionName = runnerManager.GetCurrentSessionName(),
                     queueType = queueType,
                     matchMode = rules.matchMode,
+                    runtimeType = MatchRuntimeType.OnlineHuman,
                     pointsToWin = Mathf.Max(1, rules.pointsToWin),
                     matchDurationSeconds = Mathf.Max(1f, rules.matchDurationSeconds),
                     turnDurationSeconds = Mathf.Max(1f, rules.turnDurationSeconds),
@@ -212,8 +249,19 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                     remotePlayerStats = CloneSnapshot(remoteSnapshot),
 
                     localIsHost = localIsHost,
+                    localPlayerIsPlayer1 = localIsHost,
+                    player1StartsOnLeft = true,
+                    initialTurnOwner = PlayerID.Player1,
+
                     player1SkinUniqueId = string.Empty,
-                    player2SkinUniqueId = string.Empty
+                    player2SkinUniqueId = string.Empty,
+
+                    isBotMatch = false,
+                    isMaskedBotMatch = false,
+                    useLocalBotGameplayAuthority = false,
+                    botDifficultyId = string.Empty,
+                    botProfileId = string.Empty,
+                    botFallbackDelaySeconds = -1f
                 };
 
                 if (logDebug)
@@ -221,7 +269,9 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                     Debug.Log(
                         "[PhotonFusionMatchmakingService] Match ready -> " +
                         "Session=" + assignment.sessionName +
+                        " | RuntimeType=" + assignment.runtimeType +
                         " | LocalIsHost=" + assignment.localIsHost +
+                        " | LocalIsP1=" + assignment.localPlayerIsPlayer1 +
                         " | RemoteName=" + remoteName +
                         " | RemoteWL=" + remoteSnapshot.totalWins + "W-" + remoteSnapshot.totalLosses + "L" +
                         " | RemoteWR=" + remoteSnapshot.winRatePercent + "%" +
@@ -233,8 +283,173 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                 return assignment;
             }
 
+            if (ShouldUseMaskedBotFallback(queueType, maskedBotFallbackDelaySeconds, elapsedSeconds, playerCount))
+            {
+                MatchAssignment botAssignment = await CreateMaskedBotAssignmentAsync(
+                    queueType,
+                    localPlayer,
+                    localSnapshot,
+                    rules,
+                    maskedBotFallbackDelaySeconds,
+                    cancellationToken
+                );
+
+                if (logDebug)
+                {
+                    Debug.Log(
+                        "[PhotonFusionMatchmakingService] Masked bot fallback triggered -> " +
+                        "Queue=" + queueType +
+                        " | Delay=" + maskedBotFallbackDelaySeconds +
+                        " | Elapsed=" + elapsedSeconds +
+                        " | MatchId=" + botAssignment.matchId +
+                        " | BotName=" + (botAssignment.remotePlayer != null ? botAssignment.remotePlayer.displayName : "Bot") +
+                        " | BotDifficulty=" + botAssignment.botDifficultyId,
+                        runnerManager
+                    );
+                }
+
+                return botAssignment;
+            }
+
             await Task.Delay(250, cancellationToken);
         }
+    }
+
+    private bool ShouldUseMaskedBotFallback(
+        QueueType queueType,
+        float fallbackDelaySeconds,
+        double elapsedSeconds,
+        int playerCount)
+    {
+        if (!IsMaskedBotAllowedForQueue(queueType))
+            return false;
+
+        if (fallbackDelaySeconds <= 0f)
+            return false;
+
+        if (playerCount >= 2)
+            return false;
+
+        return elapsedSeconds >= fallbackDelaySeconds;
+    }
+
+    private async Task<MatchAssignment> CreateMaskedBotAssignmentAsync(
+        QueueType queueType,
+        OnlinePlayerIdentity localPlayer,
+        OnlinePlayerMatchStatsSnapshot localSnapshot,
+        QueueRuleSet rules,
+        float maskedBotFallbackDelaySeconds,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (runnerManager != null && runnerManager.HasActiveRunner)
+            await runnerManager.ShutdownRunnerAsync();
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        OnlinePlayerIdentity safeLocalPlayer = new OnlinePlayerIdentity(
+            Safe(localPlayer != null ? localPlayer.profileId : null, Safe(localSnapshot != null ? localSnapshot.profileId : null, "local_profile")),
+            Safe(localPlayer != null ? localPlayer.onlinePlayerId : null, Safe(localSnapshot != null ? localSnapshot.onlinePlayerId : null, "local_player")),
+            Safe(localPlayer != null ? localPlayer.displayName : null, Safe(localSnapshot != null ? localSnapshot.displayName : null, "Player"))
+        );
+
+        OnlinePlayerMatchStatsSnapshot safeLocalSnapshot = CloneSnapshot(localSnapshot);
+        if (safeLocalSnapshot == null)
+        {
+            safeLocalSnapshot = OnlinePlayerMatchStatsSnapshot.CreateDefault(
+                safeLocalPlayer.displayName,
+                safeLocalPlayer.onlinePlayerId,
+                safeLocalPlayer.profileId);
+        }
+
+        safeLocalSnapshot.Normalize();
+
+        OnlinePlayerMatchStatsSnapshot botSnapshot = BuildMaskedBotSnapshot(safeLocalSnapshot, queueType);
+        botSnapshot.Normalize();
+
+        string botProfileId = BuildMaskedBotProfileId(queueType);
+        string matchIdPrefix = queueType == QueueType.Ranked ? "ranked_masked_bot_" : "normal_masked_bot_";
+        string matchId = matchIdPrefix + Guid.NewGuid().ToString("N");
+
+        MatchRuntimeType runtimeType =
+            queueType == QueueType.Ranked
+                ? MatchRuntimeType.RankedMaskedBot
+                : MatchRuntimeType.NormalMaskedBot;
+
+        MatchAssignment assignment = new MatchAssignment
+        {
+            matchId = matchId,
+            sessionName = matchId,
+            queueType = queueType,
+            matchMode = rules.matchMode,
+            runtimeType = runtimeType,
+
+            pointsToWin = Mathf.Max(1, rules.pointsToWin),
+            matchDurationSeconds = Mathf.Max(1f, rules.matchDurationSeconds),
+            turnDurationSeconds = Mathf.Max(1f, rules.turnDurationSeconds),
+
+            isRanked = queueType == QueueType.Ranked,
+
+            allowChestRewards = rules.allowChestRewards,
+            allowXpRewards = rules.allowXpRewards,
+            allowStatsProgression = rules.allowStatsProgression,
+
+            localPlayer = safeLocalPlayer,
+            remotePlayer = new OnlinePlayerIdentity(
+                botProfileId,
+                botSnapshot.onlinePlayerId,
+                botSnapshot.displayName
+            ),
+
+            localPlayerStats = safeLocalSnapshot,
+            remotePlayerStats = botSnapshot,
+
+            localIsHost = true,
+            localPlayerIsPlayer1 = true,
+            player1StartsOnLeft = true,
+            initialTurnOwner = PlayerID.Player1,
+
+            player1SkinUniqueId = string.Empty,
+            player2SkinUniqueId = string.Empty,
+
+            isBotMatch = true,
+            isMaskedBotMatch = true,
+            useLocalBotGameplayAuthority = true,
+
+            botDifficultyId = GetQueueBotDifficulty(queueType).ToString(),
+            botProfileId = botProfileId,
+            botFallbackDelaySeconds = maskedBotFallbackDelaySeconds
+        };
+
+        return assignment;
+    }
+
+    private bool IsMaskedBotAllowedForQueue(QueueType queueType)
+    {
+        if (queueType == QueueType.Ranked)
+            return allowRankedMaskedBots;
+
+        return allowNormalMaskedBots;
+    }
+
+    private float SampleFallbackDelaySeconds(QueueType queueType)
+    {
+        Vector2 range = queueType == QueueType.Ranked
+            ? rankedBotQueueDelaySeconds
+            : normalBotQueueDelaySeconds;
+
+        float min = Mathf.Min(range.x, range.y);
+        float max = Mathf.Max(range.x, range.y);
+
+        return UnityEngine.Random.Range(min, max);
+    }
+
+    private BotDifficulty GetQueueBotDifficulty(QueueType queueType)
+    {
+        return queueType == QueueType.Ranked
+            ? rankedBotDifficulty
+            : normalBotDifficulty;
     }
 
     private OnlinePlayerMatchStatsSnapshot ResolveRemoteSnapshot(bool localIsHost)
@@ -283,6 +498,130 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
             { OnlineSessionPropertyKeys.Ranked, isRanked ? 1 : 0 },
             { MatchStatePropertyKey, MatchStateLive }
         };
+    }
+
+    private OnlinePlayerMatchStatsSnapshot BuildMaskedBotSnapshot(
+        OnlinePlayerMatchStatsSnapshot localSnapshot,
+        QueueType queueType)
+    {
+        string[] namePool =
+        {
+            "Kairo",
+            "Riven",
+            "Soren",
+            "Mavik",
+            "Tazen",
+            "Nyro",
+            "Velk",
+            "Darian",
+            "Kael",
+            "Jett"
+        };
+
+        string botName = namePool[UnityEngine.Random.Range(0, namePool.Length)];
+
+        int localLevel = localSnapshot != null ? Mathf.Max(1, localSnapshot.level) : 1;
+        int localMatches = localSnapshot != null ? Mathf.Max(0, localSnapshot.totalMatches) : 0;
+        int localWinRate = localSnapshot != null ? Mathf.Clamp(localSnapshot.winRatePercent, 0, 100) : 50;
+
+        BotDifficulty difficulty = GetQueueBotDifficulty(queueType);
+
+        int minLevel = 1;
+        int maxLevel = 12;
+        int minMatches = 10;
+        int maxMatches = 80;
+        int minWinRate = 38;
+        int maxWinRate = 52;
+
+        switch (difficulty)
+        {
+            case BotDifficulty.Easy:
+                minLevel = 1;
+                maxLevel = 10;
+                minMatches = 8;
+                maxMatches = 60;
+                minWinRate = 35;
+                maxWinRate = 50;
+                break;
+
+            case BotDifficulty.Medium:
+                minLevel = 5;
+                maxLevel = 18;
+                minMatches = 50;
+                maxMatches = 250;
+                minWinRate = 46;
+                maxWinRate = 60;
+                break;
+
+            case BotDifficulty.Hard:
+                minLevel = 12;
+                maxLevel = 30;
+                minMatches = 150;
+                maxMatches = 900;
+                minWinRate = 56;
+                maxWinRate = 70;
+                break;
+
+            case BotDifficulty.Unbeatable:
+                minLevel = 22;
+                maxLevel = 50;
+                minMatches = 500;
+                maxMatches = 2500;
+                minWinRate = 72;
+                maxWinRate = 90;
+                break;
+        }
+
+        int botLevel = Mathf.Clamp(localLevel + UnityEngine.Random.Range(-2, 4), minLevel, maxLevel);
+
+        int baseMatches = Mathf.Clamp(localMatches + UnityEngine.Random.Range(-20, 40), minMatches, maxMatches);
+        int targetWinRate = Mathf.Clamp(localWinRate + UnityEngine.Random.Range(-8, 9), minWinRate, maxWinRate);
+
+        int botWins = Mathf.Clamp(Mathf.RoundToInt(baseMatches * (targetWinRate / 100f)), 0, baseMatches);
+        int botLosses = Mathf.Max(0, baseMatches - botWins);
+
+        if (localMatches < 8)
+        {
+            baseMatches = UnityEngine.Random.Range(minMatches, maxMatches + 1);
+            float sampledWinRate01 = UnityEngine.Random.Range(minWinRate / 100f, maxWinRate / 100f);
+            botWins = Mathf.RoundToInt(baseMatches * sampledWinRate01);
+            botLosses = Mathf.Max(0, baseMatches - botWins);
+        }
+
+        OnlinePlayerMatchStatsSnapshot snapshot = new OnlinePlayerMatchStatsSnapshot
+        {
+            onlinePlayerId = "bot_" + Guid.NewGuid().ToString("N").Substring(0, 12),
+            profileId = "bot_profile_" + Guid.NewGuid().ToString("N").Substring(0, 12),
+            displayName = botName,
+            level = botLevel,
+            totalMatches = baseMatches,
+            totalWins = botWins,
+            totalLosses = botLosses,
+            winRatePercent = 0
+        };
+
+        snapshot.Normalize();
+        return snapshot;
+    }
+
+    private string BuildMaskedBotProfileId(QueueType queueType)
+    {
+        string prefix = queueType == QueueType.Ranked ? "ranked_masked_bot_" : "normal_masked_bot_";
+        return prefix + Guid.NewGuid().ToString("N");
+    }
+
+    private static Vector2 NormalizeDelayRange(Vector2 rawRange, float fallbackMin, float fallbackMax)
+    {
+        float min = Mathf.Max(0.5f, rawRange.x);
+        float max = Mathf.Max(min, rawRange.y);
+
+        if (rawRange == Vector2.zero)
+        {
+            min = fallbackMin;
+            max = fallbackMax;
+        }
+
+        return new Vector2(min, max);
     }
 
     private OnlinePlayerMatchStatsSnapshot CloneSnapshot(OnlinePlayerMatchStatsSnapshot source)

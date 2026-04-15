@@ -3214,7 +3214,7 @@ GameObject:
   - component: {fileID: 151282590}
   - component: {fileID: 151282589}
   m_Layer: 0
-  m_Name: OpponentNameText
+  m_Name: RightNameText
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3259,7 +3259,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: OPPONENT
+  m_text: RIGHT
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 0161d805a3764c089bef00bfe00793f5, type: 2}
   m_sharedMaterial: {fileID: 2147374, guid: 0161d805a3764c089bef00bfe00793f5, type: 2}
@@ -4434,7 +4434,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &174029172
 RectTransform:
   m_ObjectHideFlags: 0
@@ -20818,7 +20818,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1013717543}
   - component: {fileID: 1013717548}
-  - component: {fileID: 1013717549}
   - component: {fileID: 1013717546}
   - component: {fileID: 1013717545}
   - component: {fileID: 1013717544}
@@ -20944,7 +20943,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1013717542}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cb4270201125fb44cae067841c64c5e4, type: 3}
   m_Name: 
@@ -20971,26 +20970,6 @@ MonoBehaviour:
   fallbackOpponentWinLoseText: 0W - 0L
   fallbackOpponentWinRateText: 0%
   logDebug: 0
---- !u!114 &1013717549
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1013717542}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e181e6f4296422044b3ce469b241ed44, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BotMatchFoundPanelPresenter
-  botSessionRuntime: {fileID: 1973634697}
-  opponentNameText: {fileID: 151282589}
-  opponentWinLoseText: {fileID: 1298876509}
-  opponentWinRateText: {fileID: 1295250617}
-  uppercaseName: 1
-  refreshOnEnable: 1
-  clearWhenNoBot: 0
-  enableDebugLogs: 1
 --- !u!1 &1015501561
 GameObject:
   m_ObjectHideFlags: 0
@@ -22787,7 +22766,7 @@ GameObject:
   - component: {fileID: 1102928698}
   - component: {fileID: 1102928697}
   m_Layer: 0
-  m_Name: YourNameText
+  m_Name: LeftNameText
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -22832,7 +22811,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: DAVIDE
+  m_text: LEFT
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 0161d805a3764c089bef00bfe00793f5, type: 2}
   m_sharedMaterial: {fileID: 2147374, guid: 0161d805a3764c089bef00bfe00793f5, type: 2}
@@ -27263,7 +27242,7 @@ GameObject:
   - component: {fileID: 1295250618}
   - component: {fileID: 1295250617}
   m_Layer: 0
-  m_Name: OppoWRText
+  m_Name: RightPlayerWRText
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -27400,7 +27379,7 @@ GameObject:
   - component: {fileID: 1298876510}
   - component: {fileID: 1298876509}
   m_Layer: 0
-  m_Name: OppoWinLoseText
+  m_Name: RightWinLoseText
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -43531,6 +43510,16 @@ MonoBehaviour:
   profileManager: {fileID: 1445563842}
   queueRulesConfig: {fileID: 11400000, guid: 61a0ea018582ecc44b8646479d7b3504, type: 2}
   rewardsConfig: {fileID: 11400000, guid: 281bc0d748cb8994d81b2e0026a98b70, type: 2}
+  botSessionRuntime: {fileID: 1973634697}
+  botOfflineMatchRuntime: {fileID: 1973634698}
+  allowRankedMaskedBots: 1
+  rankedBotQueueDelaySeconds: {x: 15, y: 25}
+  rankedBotDifficulty: 1
+  allowNormalMaskedBots: 1
+  normalBotQueueDelaySeconds: {x: 8, y: 16}
+  normalBotDifficulty: 0
+  randomizeMaskedBotPlayerSlots: 1
+  randomizeMaskedBotStartingSide: 1
   gameplaySceneName: Gameplay
   mainMenuSceneName: MainMenu
   matchFoundUiDelaySeconds: 10
@@ -43543,6 +43532,7 @@ MonoBehaviour:
       sessionName: 
       queueType: 0
       matchMode: 0
+      runtimeType: 0
       pointsToWin: 16
       matchDurationSeconds: 180
       turnDurationSeconds: 0
@@ -43577,14 +43567,24 @@ MonoBehaviour:
         totalLosses: 0
         winRatePercent: 0
       localIsHost: 0
+      localPlayerIsPlayer1: 1
+      player1StartsOnLeft: 1
+      initialTurnOwner: 1
       player1SkinUniqueId: 
       player2SkinUniqueId: 
+      isBotMatch: 0
+      isMaskedBotMatch: 0
+      useLocalBotGameplayAuthority: 0
+      botDifficultyId: 
+      botProfileId: 
+      botFallbackDelaySeconds: 0
     currentSession:
       matchId: 
       sessionName: 
       gameplaySceneName: Gameplay
       queueType: 0
       matchMode: 0
+      runtimeType: 0
       pointsToWin: 16
       matchDurationSeconds: 180
       turnDurationSeconds: 0
@@ -43601,11 +43601,20 @@ MonoBehaviour:
         onlinePlayerId: 
         displayName: 
       localIsHost: 0
+      localPlayerIsPlayer1: 0
+      player1StartsOnLeft: 0
+      initialTurnOwner: 0
       isConnected: 0
       player1DisplayName: Player 1
       player2DisplayName: Player 2
       player1SkinUniqueId: 
       player2SkinUniqueId: 
+      isBotMatch: 0
+      isMaskedBotMatch: 0
+      useLocalBotGameplayAuthority: 0
+      botDifficultyId: 
+      botProfileId: 
+      botFallbackDelaySeconds: 0
     statusMessage: Idle
     lastError: 
     hasGameplayValidation: 0
@@ -43662,6 +43671,7 @@ MonoBehaviour:
     isVictory: 0
     isDefeat: 0
     isDraw: 0
+    isRanked: 0
     titleText: VICTORY
     playerName: PLAYER
     levelText: LV 1
@@ -45766,7 +45776,7 @@ GameObject:
   - component: {fileID: 1876205719}
   - component: {fileID: 1876205718}
   m_Layer: 0
-  m_Name: YourWinLoseText
+  m_Name: LeftWinLoseText
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -47621,10 +47631,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1973634694}
-  - component: {fileID: 1973634697}
-  - component: {fileID: 1973634696}
   - component: {fileID: 1973634695}
   - component: {fileID: 1973634698}
+  - component: {fileID: 1973634696}
+  - component: {fileID: 1973634697}
   m_Layer: 0
   m_Name: BotSessionRuntime
   m_TagString: Untagged
@@ -47667,6 +47677,7 @@ MonoBehaviour:
   easyOfflineLabel: 'BOT [EASY]'
   mediumOfflineLabel: 'BOT [MEDIUM]'
   hardOfflineLabel: 'BOT [HARD]'
+  unbeatableOfflineLabel: 'BOT [UNBEATABLE]'
   runtimeAvailableSkinIds: []
   playerSkinLoadout: {fileID: 1726694514}
   ballSkinRandomGenerator: {fileID: 1920383338}
@@ -47704,6 +47715,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 97201b5566b4eb343ae49971f61aae4a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BotSessionRuntime
+  dontDestroyOnLoad: 1
   enableDebugLogs: 1
   hasActiveBot: 0
   currentBotProfile:
@@ -48218,6 +48230,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MultiplayerMenuPresenter
   onlineFlowController: {fileID: 1801468267}
   profileManager: {fileID: 1445563842}
+  botSessionRuntime: {fileID: 0}
   onlinePanelRoot: {fileID: 1907812930}
   idlePanelRoot: {fileID: 0}
   homeVisualRoot: {fileID: 0}
@@ -48245,8 +48258,19 @@ MonoBehaviour:
   matchmakingProgressText: {fileID: 1192351268}
   matchFoundPlayerNamesText: {fileID: 0}
   matchFoundCountdownText: {fileID: 2070545531}
+  matchFoundLeftNameText: {fileID: 0}
+  matchFoundLeftWinLoseText: {fileID: 0}
+  matchFoundLeftWinRateText: {fileID: 0}
+  matchFoundRightNameText: {fileID: 0}
+  matchFoundRightWinLoseText: {fileID: 0}
+  matchFoundRightWinRateText: {fileID: 0}
   syncCountdownWithOnlineFlowDelay: 1
   fallbackMatchFoundCountdownDuration: 1
+  uppercaseNames: 1
+  fallbackLocalName: PLAYER
+  fallbackOpponentName: OPPONENT
+  fallbackPlayer1Name: PLAYER 1
+  fallbackPlayer2Name: PLAYER 2
   logDebug: 1
 --- !u!1 &2009172259
 GameObject:
@@ -49036,7 +49060,7 @@ GameObject:
   - component: {fileID: 2028602949}
   - component: {fileID: 2028602948}
   m_Layer: 0
-  m_Name: YourWRText
+  m_Name: LeftWRText
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

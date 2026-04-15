@@ -27,6 +27,43 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
         return assignment != null && assignment.localIsHost;
     }
 
+    public bool IsLocalPlayerPlayer1()
+    {
+        MatchSessionContext session = GetCurrentSession();
+        if (session != null)
+            return session.localPlayerIsPlayer1;
+
+        MatchAssignment assignment = GetCurrentAssignment();
+        if (assignment != null)
+            return assignment.localPlayerIsPlayer1;
+
+        return true;
+    }
+
+    public bool IsPlayer1OnLeft()
+    {
+        MatchSessionContext session = GetCurrentSession();
+        if (session != null)
+            return session.player1StartsOnLeft;
+
+        MatchAssignment assignment = GetCurrentAssignment();
+        if (assignment != null)
+            return assignment.player1StartsOnLeft;
+
+        return true;
+    }
+
+    public bool IsLocalOnLeft()
+    {
+        bool localIsPlayer1 = IsLocalPlayerPlayer1();
+        bool player1OnLeft = IsPlayer1OnLeft();
+
+        if (localIsPlayer1)
+            return player1OnLeft;
+
+        return !player1OnLeft;
+    }
+
     public bool TryGetLocalSnapshot(out OnlinePlayerMatchStatsSnapshot snapshot)
     {
         MatchAssignment assignment = GetCurrentAssignment();
@@ -165,6 +202,14 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
             return null;
 
         return onlineFlowController.RuntimeContext.currentAssignment;
+    }
+
+    private MatchSessionContext GetCurrentSession()
+    {
+        if (onlineFlowController == null || onlineFlowController.RuntimeContext == null)
+            return null;
+
+        return onlineFlowController.RuntimeContext.currentSession;
     }
 
     private OnlinePlayerMatchStatsSnapshot CloneSnapshot(OnlinePlayerMatchStatsSnapshot source)
