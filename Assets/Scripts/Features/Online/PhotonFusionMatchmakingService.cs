@@ -101,13 +101,19 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
 
             if (logDebug)
             {
+                int previewMatches = localSnapshot.GetMatchesForQueue(queueType);
+                int previewWins = localSnapshot.GetWinsForQueue(queueType);
+                int previewLosses = localSnapshot.GetLossesForQueue(queueType);
+                int previewWinRate = localSnapshot.GetWinRatePercentForQueue(queueType);
+
                 Debug.Log(
                     "[PhotonFusionMatchmakingService] Enqueue -> " +
                     "Queue=" + queueType +
                     " | Name=" + localSnapshot.displayName +
                     " | Level=" + localSnapshot.level +
-                    " | WL=" + localSnapshot.totalWins + "W-" + localSnapshot.totalLosses + "L" +
-                    " | WR=" + localSnapshot.winRatePercent + "%" +
+                    " | QueueWL=" + previewWins + "W-" + previewLosses + "L" +
+                    " | QueueWR=" + previewWinRate + "%" +
+                    " | QueueMatches=" + previewMatches +
                     " | TokenBytes=" + (OnlinePlayerTokenCodec.Encode(localSnapshot)?.Length ?? 0) +
                     " | AllowMaskedBot=" + queueAllowsMaskedBot +
                     " | MaskedBotDelay=" + maskedBotFallbackDelaySeconds +
@@ -266,6 +272,11 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
 
                 if (logDebug)
                 {
+                    int remoteQueueMatches = remoteSnapshot.GetMatchesForQueue(queueType);
+                    int remoteQueueWins = remoteSnapshot.GetWinsForQueue(queueType);
+                    int remoteQueueLosses = remoteSnapshot.GetLossesForQueue(queueType);
+                    int remoteQueueWinRate = remoteSnapshot.GetWinRatePercentForQueue(queueType);
+
                     Debug.Log(
                         "[PhotonFusionMatchmakingService] Match ready -> " +
                         "Session=" + assignment.sessionName +
@@ -273,8 +284,9 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
                         " | LocalIsHost=" + assignment.localIsHost +
                         " | LocalIsP1=" + assignment.localPlayerIsPlayer1 +
                         " | RemoteName=" + remoteName +
-                        " | RemoteWL=" + remoteSnapshot.totalWins + "W-" + remoteSnapshot.totalLosses + "L" +
-                        " | RemoteWR=" + remoteSnapshot.winRatePercent + "%" +
+                        " | RemoteQueueWL=" + remoteQueueWins + "W-" + remoteQueueLosses + "L" +
+                        " | RemoteQueueWR=" + remoteQueueWinRate + "%" +
+                        " | RemoteQueueMatches=" + remoteQueueMatches +
                         " | PlayerCount=" + playerCount,
                         runnerManager
                     );
@@ -510,8 +522,8 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
             : "Bot";
 
         int localLevel = localSnapshot != null ? Mathf.Max(1, localSnapshot.level) : 1;
-        int localMatches = localSnapshot != null ? Mathf.Max(0, localSnapshot.totalMatches) : 0;
-        int localWinRate = localSnapshot != null ? Mathf.Clamp(localSnapshot.winRatePercent, 0, 100) : 50;
+        int localQueueMatches = localSnapshot != null ? Mathf.Max(0, localSnapshot.GetMatchesForQueue(queueType)) : 0;
+        int localQueueWinRate = localSnapshot != null ? Mathf.Clamp(localSnapshot.GetWinRatePercentForQueue(queueType), 0, 100) : 50;
 
         BotDifficulty difficulty = GetQueueBotDifficulty(queueType);
 
@@ -563,13 +575,13 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
 
         int botLevel = Mathf.Clamp(localLevel + UnityEngine.Random.Range(-2, 4), minLevel, maxLevel);
 
-        int baseMatches = Mathf.Clamp(localMatches + UnityEngine.Random.Range(-20, 40), minMatches, maxMatches);
-        int targetWinRate = Mathf.Clamp(localWinRate + UnityEngine.Random.Range(-8, 9), minWinRate, maxWinRate);
+        int baseMatches = Mathf.Clamp(localQueueMatches + UnityEngine.Random.Range(-20, 40), minMatches, maxMatches);
+        int targetWinRate = Mathf.Clamp(localQueueWinRate + UnityEngine.Random.Range(-8, 9), minWinRate, maxWinRate);
 
         int botWins = Mathf.Clamp(Mathf.RoundToInt(baseMatches * (targetWinRate / 100f)), 0, baseMatches);
         int botLosses = Mathf.Max(0, baseMatches - botWins);
 
-        if (localMatches < 8)
+        if (localQueueMatches < 8)
         {
             baseMatches = UnityEngine.Random.Range(minMatches, maxMatches + 1);
             float sampledWinRate01 = UnityEngine.Random.Range(minWinRate / 100f, maxWinRate / 100f);
@@ -583,10 +595,18 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
             profileId = "bot_profile_" + Guid.NewGuid().ToString("N").Substring(0, 12),
             displayName = botName,
             level = botLevel,
+
             totalMatches = baseMatches,
             totalWins = botWins,
             totalLosses = botLosses,
-            winRatePercent = 0
+
+            normalMatches = queueType == QueueType.Normal ? baseMatches : 0,
+            normalWins = queueType == QueueType.Normal ? botWins : 0,
+            normalLosses = queueType == QueueType.Normal ? botLosses : 0,
+
+            rankedMatches = queueType == QueueType.Ranked ? baseMatches : 0,
+            rankedWins = queueType == QueueType.Ranked ? botWins : 0,
+            rankedLosses = queueType == QueueType.Ranked ? botLosses : 0
         };
 
         snapshot.Normalize();
@@ -624,10 +644,21 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
             profileId = source.profileId,
             displayName = source.displayName,
             level = source.level,
+
             totalMatches = source.totalMatches,
             totalWins = source.totalWins,
             totalLosses = source.totalLosses,
-            winRatePercent = source.winRatePercent
+            winRatePercent = source.winRatePercent,
+
+            normalMatches = source.normalMatches,
+            normalWins = source.normalWins,
+            normalLosses = source.normalLosses,
+            normalWinRatePercent = source.normalWinRatePercent,
+
+            rankedMatches = source.rankedMatches,
+            rankedWins = source.rankedWins,
+            rankedLosses = source.rankedLosses,
+            rankedWinRatePercent = source.rankedWinRatePercent
         };
     }
 

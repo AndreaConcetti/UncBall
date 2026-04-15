@@ -635,6 +635,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
         MatchSessionContext session = onlineFlowController.RuntimeContext.currentSession;
         MatchAssignment assignment = onlineFlowController.RuntimeContext.currentAssignment;
+        QueueType activeQueueType = ResolveActiveQueueType(assignment);
 
         string leftName = NormalizeName(fallbackPlayer1Name);
         string rightName = NormalizeName(fallbackPlayer2Name);
@@ -670,9 +671,9 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
             if (assignment.localPlayerStats != null)
             {
-                localWins = Mathf.Clamp(assignment.localPlayerStats.totalWins, 0, assignment.localPlayerStats.totalMatches);
-                localLosses = Mathf.Max(0, assignment.localPlayerStats.totalMatches - localWins);
-                localWinRate = Mathf.Clamp(assignment.localPlayerStats.winRatePercent, 0, 100);
+                localWins = Mathf.Clamp(assignment.localPlayerStats.GetWinsForQueue(activeQueueType), 0, assignment.localPlayerStats.GetMatchesForQueue(activeQueueType));
+                localLosses = Mathf.Max(0, assignment.localPlayerStats.GetLossesForQueue(activeQueueType));
+                localWinRate = Mathf.Clamp(assignment.localPlayerStats.GetWinRatePercentForQueue(activeQueueType), 0, 100);
             }
 
             int remoteWins = 0;
@@ -687,19 +688,22 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
             if (hasBotPresentation)
             {
-                OpponentPresentationProfile bot = botSessionRuntime.CurrentOpponentPresentation;
-                remoteWins = Mathf.Clamp(bot.TotalWins, 0, bot.TotalMatches);
-                remoteLosses = Mathf.Max(0, bot.TotalMatches - remoteWins);
-                remoteWinRate = Mathf.Clamp(bot.WinRatePercent, 0, 100);
+                if (assignment.remotePlayerStats != null)
+                {
+                    remoteWins = Mathf.Clamp(assignment.remotePlayerStats.GetWinsForQueue(activeQueueType), 0, assignment.remotePlayerStats.GetMatchesForQueue(activeQueueType));
+                    remoteLosses = Mathf.Max(0, assignment.remotePlayerStats.GetLossesForQueue(activeQueueType));
+                    remoteWinRate = Mathf.Clamp(assignment.remotePlayerStats.GetWinRatePercentForQueue(activeQueueType), 0, 100);
+                }
 
+                OpponentPresentationProfile bot = botSessionRuntime.CurrentOpponentPresentation;
                 if (!string.IsNullOrWhiteSpace(bot.DisplayName))
                     remoteName = NormalizeName(bot.DisplayName);
             }
             else if (assignment.remotePlayerStats != null)
             {
-                remoteWins = Mathf.Clamp(assignment.remotePlayerStats.totalWins, 0, assignment.remotePlayerStats.totalMatches);
-                remoteLosses = Mathf.Max(0, assignment.remotePlayerStats.totalMatches - remoteWins);
-                remoteWinRate = Mathf.Clamp(assignment.remotePlayerStats.winRatePercent, 0, 100);
+                remoteWins = Mathf.Clamp(assignment.remotePlayerStats.GetWinsForQueue(activeQueueType), 0, assignment.remotePlayerStats.GetMatchesForQueue(activeQueueType));
+                remoteLosses = Mathf.Max(0, assignment.remotePlayerStats.GetLossesForQueue(activeQueueType));
+                remoteWinRate = Mathf.Clamp(assignment.remotePlayerStats.GetWinRatePercentForQueue(activeQueueType), 0, 100);
             }
 
             string p1Name = assignment.localPlayerIsPlayer1 ? localName : remoteName;
@@ -742,6 +746,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
         }
 
         string snapshotKey =
+            activeQueueType + "|" +
             leftName + "|" +
             rightName + "|" +
             leftWL + "|" +
@@ -778,13 +783,25 @@ public class MultiplayerMenuPresenter : MonoBehaviour
         {
             Debug.Log(
                 "[MultiplayerMenuPresenter] RefreshMatchFoundTexts -> " +
-                "RuntimeType=" + assignment.runtimeType +
+                "Queue=" + activeQueueType +
+                " | RuntimeType=" + assignment.runtimeType +
                 " | LocalIsP1=" + assignment.localPlayerIsPlayer1 +
                 " | P1StartsOnLeft=" + assignment.player1StartsOnLeft +
                 " | Left=" + leftName +
                 " | Right=" + rightName,
                 this);
         }
+    }
+
+    private QueueType ResolveActiveQueueType(MatchAssignment assignment)
+    {
+        if (assignment != null)
+            return assignment.queueType;
+
+        if (onlineFlowController != null && onlineFlowController.RuntimeContext != null)
+            return onlineFlowController.RuntimeContext.queueType;
+
+        return QueueType.Normal;
     }
 
     private void ShowQueueTimeoutPanel()

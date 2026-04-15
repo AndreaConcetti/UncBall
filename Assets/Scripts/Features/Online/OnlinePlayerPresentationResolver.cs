@@ -81,8 +81,9 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
             Debug.Log(
                 "[OnlinePlayerPresentationResolver] Local snapshot -> " +
                 snapshot.displayName +
-                " | " + snapshot.totalWins + "W-" + snapshot.totalLosses + "L" +
-                " | WR=" + snapshot.winRatePercent + "%",
+                " | Total=" + snapshot.totalWins + "W-" + snapshot.totalLosses + "L" +
+                " | Normal=" + snapshot.normalWins + "W-" + snapshot.normalLosses + "L" +
+                " | Ranked=" + snapshot.rankedWins + "W-" + snapshot.rankedLosses + "L",
                 this
             );
         }
@@ -187,7 +188,11 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
                         snapshot.totalMatches > 0 ||
                         snapshot.totalWins > 0 ||
                         snapshot.totalLosses > 0 ||
-                        snapshot.winRatePercent > 0;
+                        snapshot.winRatePercent > 0 ||
+                        snapshot.normalMatches > 0 ||
+                        snapshot.normalWins > 0 ||
+                        snapshot.rankedMatches > 0 ||
+                        snapshot.rankedWins > 0;
 
         bool hasNonPlaceholderName =
             !string.IsNullOrWhiteSpace(snapshot.displayName) &&
@@ -223,10 +228,21 @@ public sealed class OnlinePlayerPresentationResolver : MonoBehaviour
             profileId = source.profileId,
             displayName = source.displayName,
             level = source.level,
+
             totalMatches = source.totalMatches,
             totalWins = source.totalWins,
             totalLosses = source.totalLosses,
-            winRatePercent = source.winRatePercent
+            winRatePercent = source.winRatePercent,
+
+            normalMatches = source.normalMatches,
+            normalWins = source.normalWins,
+            normalLosses = source.normalLosses,
+            normalWinRatePercent = source.normalWinRatePercent,
+
+            rankedMatches = source.rankedMatches,
+            rankedWins = source.rankedWins,
+            rankedLosses = source.rankedLosses,
+            rankedWinRatePercent = source.rankedWinRatePercent
         };
     }
 }

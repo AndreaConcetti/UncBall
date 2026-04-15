@@ -112,10 +112,10 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
             if (maskedBotQueueMatch)
             {
                 profileManager.RegisterMatchResult(
-                    PlayerMatchCategory.Bot,
+                    PlayerMatchCategory.OnlineMultiplayer,
                     request.MatchMode,
                     localWon,
-                    false
+                    rewardQueueType == QueueType.Ranked
                 );
             }
             else

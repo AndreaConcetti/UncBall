@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UncballArena.Core.Bootstrap;
 using UncballArena.Core.Profile.Models;
 using UncballArena.Core.Runtime;
@@ -42,6 +43,8 @@ public class PlayerProfileManager : MonoBehaviour
 
         Instance = this;
         MarkRuntimeRootPersistentIfNeeded();
+
+        SceneManager.sceneLoaded += HandleSceneLoaded;
 
         BootstrapLocalRuntimeMirror();
         SubscribeCompositionRootIfNeeded();
@@ -87,6 +90,7 @@ public class PlayerProfileManager : MonoBehaviour
         if (Instance == this)
             Instance = null;
 
+        SceneManager.sceneLoaded -= HandleSceneLoaded;
         UnsubscribeCompositionRootIfNeeded();
     }
 
@@ -232,7 +236,11 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.rankedLp = Mathf.Max(0, activeProfile.rankedLp + amount);
 
-        SaveLegacyActiveProfile();
+        if (IsUsingCoreProfile())
+            PushFullProfileToCompositionRoot();
+        else
+            SaveLegacyActiveProfile();
+
         NotifyActiveProfileDataChanged();
 
         if (logDebug)
@@ -257,7 +265,11 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.rankedLp = sanitized;
 
-        SaveLegacyActiveProfile();
+        if (IsUsingCoreProfile())
+            PushFullProfileToCompositionRoot();
+        else
+            SaveLegacyActiveProfile();
+
         NotifyActiveProfileDataChanged();
 
         if (logDebug)
@@ -463,6 +475,18 @@ public class PlayerProfileManager : MonoBehaviour
         NotifyActiveProfileChanged();
     }
 
+    public void ForceRefreshRuntimeAndNotify()
+    {
+        if (IsUsingCoreProfile())
+            TryPullFromCompositionRoot(forceNotify: true);
+        else
+        {
+            SaveLegacyActiveProfile();
+            ApplyActiveProfileToSystems();
+            NotifyActiveProfileChanged();
+        }
+    }
+
     public void ClearActiveProfileForDebug()
     {
         if (IsUsingCoreProfile())
@@ -531,6 +555,30 @@ public class PlayerProfileManager : MonoBehaviour
     private void HandleCompositionProfileChanged(ProfileSnapshot snapshot)
     {
         ApplySnapshotFromCore(snapshot, true);
+    }
+
+    private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        SubscribeCompositionRootIfNeeded();
+
+        if (IsUsingCoreProfile())
+            TryPullFromCompositionRoot(forceNotify: true);
+        else
+            NotifyActiveProfileDataChanged();
+
+        ApplyActiveProfileToSystems();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerProfileManager] SceneLoaded refresh -> Scene=" + scene.name +
+                " | ProfileId=" + ActiveProfileId +
+                " | RankedLp=" + ActiveRankedLp +
+                " | Soft=" + (activeProfile != null ? activeProfile.softCurrency : 0) +
+                " | Premium=" + (activeProfile != null ? activeProfile.premiumCurrency : 0),
+                this
+            );
+        }
     }
 
     private void TryPullFromCompositionRoot(bool forceNotify)

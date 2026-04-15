@@ -20817,7 +20817,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1013717543}
-  - component: {fileID: 1013717548}
   - component: {fileID: 1013717546}
   - component: {fileID: 1013717545}
   - component: {fileID: 1013717544}
@@ -20936,40 +20935,6 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
---- !u!114 &1013717548
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1013717542}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cb4270201125fb44cae067841c64c5e4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MatchFoundPlayerStatsPresenter
-  resolver: {fileID: 1801468268}
-  localNameText: {fileID: 1102928697}
-  localLevelText: {fileID: 0}
-  localWinLoseText: {fileID: 1876205718}
-  localWinRateText: {fileID: 2028602948}
-  opponentNameText: {fileID: 151282589}
-  opponentLevelText: {fileID: 0}
-  opponentWinLoseText: {fileID: 1298876509}
-  opponentWinRateText: {fileID: 1295250617}
-  uppercaseNames: 1
-  refreshEveryFrame: 1
-  showLevelPrefix: 1
-  levelPrefix: 'LV. '
-  fallbackLocalName: PLAYER
-  fallbackLocalLevelText: LV. 1
-  fallbackLocalWinLoseText: 0W - 0L
-  fallbackLocalWinRateText: 0%
-  fallbackOpponentName: OPPONENT
-  fallbackOpponentLevelText: LV. 1
-  fallbackOpponentWinLoseText: 0W - 0L
-  fallbackOpponentWinRateText: 0%
-  logDebug: 0
 --- !u!1 &1015501561
 GameObject:
   m_ObjectHideFlags: 0
@@ -30818,7 +30783,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerDisplayNamePanel
   profileManager: {fileID: 1445563842}
-  currentNameText: {fileID: 455583244}
+  currentNameText: {fileID: 0}
   rankText: {fileID: 639472534}
   softCurrencyText: {fileID: 1238508358}
   premiumCurrencyText: {fileID: 13386913}
@@ -30830,6 +30795,8 @@ MonoBehaviour:
   premiumPrefix: 
   premiumSuffix: 
   logDebug: 1
+  enableLightPolling: 1
+  pollingInterval: 0.25
 --- !u!1 &1446061575
 GameObject:
   m_ObjectHideFlags: 0
@@ -43559,6 +43526,14 @@ MonoBehaviour:
         totalWins: 0
         totalLosses: 0
         winRatePercent: 0
+        normalMatches: 0
+        normalWins: 0
+        normalLosses: 0
+        normalWinRatePercent: 0
+        rankedMatches: 0
+        rankedWins: 0
+        rankedLosses: 0
+        rankedWinRatePercent: 0
       remotePlayerStats:
         onlinePlayerId: 
         profileId: 
@@ -43568,6 +43543,14 @@ MonoBehaviour:
         totalWins: 0
         totalLosses: 0
         winRatePercent: 0
+        normalMatches: 0
+        normalWins: 0
+        normalLosses: 0
+        normalWinRatePercent: 0
+        rankedMatches: 0
+        rankedWins: 0
+        rankedLosses: 0
+        rankedWinRatePercent: 0
       localIsHost: 0
       localPlayerIsPlayer1: 1
       player1StartsOnLeft: 1
@@ -48232,7 +48215,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MultiplayerMenuPresenter
   onlineFlowController: {fileID: 1801468267}
   profileManager: {fileID: 1445563842}
-  botSessionRuntime: {fileID: 0}
+  botSessionRuntime: {fileID: 1973634697}
   onlinePanelRoot: {fileID: 1907812930}
   idlePanelRoot: {fileID: 0}
   homeVisualRoot: {fileID: 0}
@@ -48260,12 +48243,12 @@ MonoBehaviour:
   matchmakingProgressText: {fileID: 1192351268}
   matchFoundPlayerNamesText: {fileID: 0}
   matchFoundCountdownText: {fileID: 2070545531}
-  matchFoundLeftNameText: {fileID: 0}
-  matchFoundLeftWinLoseText: {fileID: 0}
-  matchFoundLeftWinRateText: {fileID: 0}
-  matchFoundRightNameText: {fileID: 0}
-  matchFoundRightWinLoseText: {fileID: 0}
-  matchFoundRightWinRateText: {fileID: 0}
+  matchFoundLeftNameText: {fileID: 1102928697}
+  matchFoundLeftWinLoseText: {fileID: 1876205718}
+  matchFoundLeftWinRateText: {fileID: 2028602948}
+  matchFoundRightNameText: {fileID: 151282589}
+  matchFoundRightWinLoseText: {fileID: 1298876509}
+  matchFoundRightWinRateText: {fileID: 1295250617}
   syncCountdownWithOnlineFlowDelay: 1
   fallbackMatchFoundCountdownDuration: 1
   uppercaseNames: 1
