@@ -105,3 +105,5 @@ InitTestScene*.unity*
 /UncBall.slnx
 /ProjectSettings/PackageManagerSettings.asset
 Assets/TextMesh Pro/Examples & Extras/Resources/Fonts & Materials/Anton SDF.asset
+/Assets/TextMesh Pro/Examples & Extras/Resources/Fonts & Materials/Anton SDF.asset
+/.gitignore
