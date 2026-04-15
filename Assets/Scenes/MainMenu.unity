@@ -43512,6 +43512,8 @@ MonoBehaviour:
   rewardsConfig: {fileID: 11400000, guid: 281bc0d748cb8994d81b2e0026a98b70, type: 2}
   botSessionRuntime: {fileID: 1973634697}
   botOfflineMatchRuntime: {fileID: 1973634698}
+  playerSkinLoadout: {fileID: 1726694514}
+  ballSkinRandomGenerator: {fileID: 1920383338}
   allowRankedMaskedBots: 1
   rankedBotQueueDelaySeconds: {x: 15, y: 25}
   rankedBotDifficulty: 1

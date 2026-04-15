@@ -22,6 +22,10 @@ public class OnlineFlowController : MonoBehaviour
     [SerializeField] private BotSessionRuntime botSessionRuntime;
     [SerializeField] private BotOfflineMatchRuntime botOfflineMatchRuntime;
 
+    [Header("Skin Runtime Integration")]
+    [SerializeField] private PlayerSkinLoadout playerSkinLoadout;
+    [SerializeField] private BallSkinRandomGenerator ballSkinRandomGenerator;
+
     [Header("Ranked Masked Bot Queue")]
     [SerializeField] private bool allowRankedMaskedBots = true;
     [SerializeField] private Vector2 rankedBotQueueDelaySeconds = new Vector2(18f, 35f);
@@ -106,6 +110,12 @@ public class OnlineFlowController : MonoBehaviour
 
         if (botOfflineMatchRuntime == null)
             botOfflineMatchRuntime = BotOfflineMatchRuntime.Instance;
+
+        if (playerSkinLoadout == null)
+            playerSkinLoadout = PlayerSkinLoadout.Instance;
+
+        if (ballSkinRandomGenerator == null)
+            ballSkinRandomGenerator = FindFirstObjectByType<BallSkinRandomGenerator>();
     }
 
     private void InitializeServices()
@@ -613,13 +623,19 @@ public class OnlineFlowController : MonoBehaviour
         assignment.player1StartsOnLeft = player1StartsOnLeft;
         assignment.initialTurnOwner = initialTurnOwner;
 
-        string localSkinId = !string.IsNullOrWhiteSpace(assignment.player1SkinUniqueId)
-            ? assignment.player1SkinUniqueId.Trim()
-            : string.Empty;
+        string localDisplayName = assignment.localPlayer != null && !string.IsNullOrWhiteSpace(assignment.localPlayer.displayName)
+            ? assignment.localPlayer.displayName.Trim()
+            : GetResolvedLocalDisplayName();
 
-        string botSkinId = !string.IsNullOrWhiteSpace(assignment.player2SkinUniqueId)
-            ? assignment.player2SkinUniqueId.Trim()
-            : string.Empty;
+        string localProfileId = assignment.localPlayer != null && !string.IsNullOrWhiteSpace(assignment.localPlayer.profileId)
+            ? assignment.localPlayer.profileId.Trim()
+            : ResolveLocalProfileId();
+
+        BallSkinData localSkin = ResolveLocalEquippedSkin();
+        BallSkinData botSkin = GenerateMaskedBotSkinForDifficulty(difficulty);
+
+        string localSkinId = GetSafeSkinId(localSkin);
+        string botSkinId = GetSafeSkinId(botSkin);
 
         string player1Skin = localPlayerIsPlayer1 ? localSkinId : botSkinId;
         string player2Skin = localPlayerIsPlayer1 ? botSkinId : localSkinId;
@@ -646,13 +662,13 @@ public class OnlineFlowController : MonoBehaviour
 
         botSessionRuntime.SetCurrentBot(botProfile);
 
-        string localDisplayName = assignment.localPlayer != null && !string.IsNullOrWhiteSpace(assignment.localPlayer.displayName)
-            ? assignment.localPlayer.displayName.Trim()
-            : GetResolvedLocalDisplayName();
-
-        string localProfileId = assignment.localPlayer != null && !string.IsNullOrWhiteSpace(assignment.localPlayer.profileId)
-            ? assignment.localPlayer.profileId.Trim()
-            : (profileManager != null ? profileManager.ActiveProfileId : "local_player_1");
+        ApplyMaskedBotSkinSnapshot(
+            localPlayerIsPlayer1,
+            localProfileId,
+            botOnlinePlayerId,
+            localSkin,
+            botSkin
+        );
 
         BotOfflineMatchRequest request = new BotOfflineMatchRequest(
             requestId: string.IsNullOrWhiteSpace(assignment.matchId) ? Guid.NewGuid().ToString("N") : assignment.matchId.Trim(),
@@ -690,9 +706,110 @@ public class OnlineFlowController : MonoBehaviour
                 " | LocalPlayerIsP1=" + localPlayerIsPlayer1 +
                 " | Player1StartsOnLeft=" + player1StartsOnLeft +
                 " | LocalOnLeft=" + localOnLeft +
-                " | InitialTurnOwner=" + initialTurnOwner,
+                " | InitialTurnOwner=" + initialTurnOwner +
+                " | LocalSkin=" + localSkinId +
+                " | BotSkin=" + botSkinId,
                 this);
         }
+    }
+
+    private void ApplyMaskedBotSkinSnapshot(
+        bool localPlayerIsPlayer1,
+        string localProfileId,
+        string botProfileId,
+        BallSkinData localSkin,
+        BallSkinData botSkin)
+    {
+        if (playerSkinLoadout == null)
+        {
+            if (logDebug)
+                Debug.LogWarning("[OnlineFlowController] PlayerSkinLoadout missing. Masked bot skin snapshot skipped.", this);
+
+            return;
+        }
+
+        string player1ProfileId = localPlayerIsPlayer1 ? localProfileId : botProfileId;
+        string player2ProfileId = localPlayerIsPlayer1 ? botProfileId : localProfileId;
+
+        BallSkinData player1Skin = localPlayerIsPlayer1 ? localSkin : botSkin;
+        BallSkinData player2Skin = localPlayerIsPlayer1 ? botSkin : localSkin;
+
+        playerSkinLoadout.ApplyMatchSnapshot(
+            player1ProfileId,
+            player1Skin,
+            player2ProfileId,
+            player2Skin
+        );
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OnlineFlowController] ApplyMaskedBotSkinSnapshot -> " +
+                "P1Profile=" + player1ProfileId +
+                " | P1Skin=" + GetSafeSkinId(player1Skin) +
+                " | P2Profile=" + player2ProfileId +
+                " | P2Skin=" + GetSafeSkinId(player2Skin),
+                this);
+        }
+    }
+
+    private BallSkinData ResolveLocalEquippedSkin()
+    {
+        if (playerSkinLoadout == null)
+            return null;
+
+        string localProfileId = ResolveLocalProfileId();
+
+        BallSkinData localSkin = playerSkinLoadout.GetEquippedSkinForProfile(localProfileId);
+        if (localSkin == null)
+            localSkin = playerSkinLoadout.GetEquippedSkinForPlayer1();
+
+        return localSkin;
+    }
+
+    private string ResolveLocalProfileId()
+    {
+        if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+            return profileManager.ActiveProfileId.Trim();
+
+        return "local_player_1";
+    }
+
+    private BallSkinData GenerateMaskedBotSkinForDifficulty(BotDifficulty difficulty)
+    {
+        if (ballSkinRandomGenerator == null)
+        {
+            if (logDebug)
+                Debug.LogWarning("[OnlineFlowController] BallSkinRandomGenerator not found. Masked bot skin generation skipped.", this);
+
+            return null;
+        }
+
+        switch (difficulty)
+        {
+            case BotDifficulty.Easy:
+                return ballSkinRandomGenerator.GenerateGuaranteedCommonSkin();
+
+            case BotDifficulty.Medium:
+                return ballSkinRandomGenerator.GenerateGuaranteedRareSkin();
+
+            case BotDifficulty.Hard:
+                return ballSkinRandomGenerator.GenerateGuaranteedEpicSkin();
+
+            case BotDifficulty.Unbeatable:
+                return ballSkinRandomGenerator.GenerateGuaranteedEpicSkin();
+
+            default:
+                return ballSkinRandomGenerator.GenerateRandomSkin();
+        }
+    }
+
+    private string GetSafeSkinId(BallSkinData skin)
+    {
+        if (skin == null || string.IsNullOrWhiteSpace(skin.skinUniqueId))
+            return string.Empty;
+
+        return skin.skinUniqueId.Trim();
     }
 
     private void ClearPreparedMaskedBotRuntime()

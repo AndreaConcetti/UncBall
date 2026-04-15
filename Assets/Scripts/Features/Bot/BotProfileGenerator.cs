@@ -50,15 +50,11 @@ public sealed class BotProfileGenerator : MonoBehaviour
         foreach (string skinId in skinIds)
         {
             if (string.IsNullOrWhiteSpace(skinId))
-            {
                 continue;
-            }
 
             string trimmed = skinId.Trim();
             if (!injectedRuntimeSkinIds.Contains(trimmed))
-            {
                 injectedRuntimeSkinIds.Add(trimmed);
-            }
         }
 
         Debug.Log($"[BotProfileGenerator] Runtime skin pool injected. Count={injectedRuntimeSkinIds.Count}.", this);
@@ -97,7 +93,6 @@ public sealed class BotProfileGenerator : MonoBehaviour
         int fakeMatchesPlayed = settings.fakeMatchesPlayedRange.Random(random);
 
         int calculatedWins = CalculateWinsFromWinRate(fakeMatchesPlayed, fakeWinRate);
-
         string botId = BuildBotId(difficulty, archetype, generatedName);
 
         BotProfileRuntimeData result = new BotProfileRuntimeData(
@@ -117,9 +112,7 @@ public sealed class BotProfileGenerator : MonoBehaviour
             isLocalBot: config.LocalBotsByDefault);
 
         if (config.EnableDebugLogs)
-        {
             Debug.Log($"[BotProfileGenerator] Generated bot -> {result}", this);
-        }
 
         return result;
     }
@@ -128,16 +121,12 @@ public sealed class BotProfileGenerator : MonoBehaviour
     {
         BotProfileRuntimeData bot = Generate(difficulty);
         if (bot == null)
-        {
             return null;
-        }
 
         OpponentPresentationProfile profile = OpponentPresentationProfile.FromBot(bot);
 
         if (config != null && config.EnableDebugLogs && profile != null)
-        {
             Debug.Log($"[BotProfileGenerator] Generated opponent presentation -> {profile}", this);
-        }
 
         return profile;
     }
@@ -151,35 +140,34 @@ public sealed class BotProfileGenerator : MonoBehaviour
         string result = $"{prefix}{coreName}{suffix}".Trim();
 
         if (string.IsNullOrWhiteSpace(result))
-        {
             result = $"Bot{random.Next(100, 999)}";
-        }
 
         return SanitizeDisplayName(result);
     }
 
     private string GenerateCoreName()
     {
-        if (config.FixedNames != null && config.FixedNames.Count > 0)
-        {
+        // 1) Override esplicito da config
+        if (config.FixedNames != null && config.FixedNames.Count >= 20)
             return PickFromList(config.FixedNames);
-        }
 
+        // 2) Fallback automatico sulla libreria grande 500+
+        IReadOnlyList<string> generatedPool = BotNameLibrary.GetDefaultGeneratedPool(500);
+        if (generatedPool != null && generatedPool.Count > 0)
+            return PickFromList(generatedPool);
+
+        // 3) Fallback di sicurezza
         return $"Bot{random.Next(100, 999)}";
     }
 
     private BotArchetype PickArchetype(DifficultyGenerationSettings settings)
     {
         if (settings == null || settings.archetypeWeights == null || settings.archetypeWeights.Count == 0)
-        {
             return BotArchetype.Balanced;
-        }
 
         float totalWeight = 0f;
         for (int i = 0; i < settings.archetypeWeights.Count; i++)
-        {
             totalWeight += Mathf.Max(0.01f, settings.archetypeWeights[i].weight);
-        }
 
         float pick = (float)(random.NextDouble() * totalWeight);
         float cumulative = 0f;
@@ -188,9 +176,7 @@ public sealed class BotProfileGenerator : MonoBehaviour
         {
             cumulative += Mathf.Max(0.01f, settings.archetypeWeights[i].weight);
             if (pick <= cumulative)
-            {
                 return settings.archetypeWeights[i].archetype;
-            }
         }
 
         return settings.archetypeWeights[settings.archetypeWeights.Count - 1].archetype;
@@ -202,18 +188,14 @@ public sealed class BotProfileGenerator : MonoBehaviour
         {
             string runtimeSkin = PickFromList(injectedRuntimeSkinIds);
             if (!string.IsNullOrWhiteSpace(runtimeSkin))
-            {
                 return runtimeSkin;
-            }
         }
 
         if (settings != null && settings.allowedSkinIds != null && settings.allowedSkinIds.Count > 0)
         {
             string configSkin = PickFromList(settings.allowedSkinIds);
             if (!string.IsNullOrWhiteSpace(configSkin))
-            {
                 return configSkin;
-            }
         }
 
         return string.Empty;
@@ -232,9 +214,7 @@ public sealed class BotProfileGenerator : MonoBehaviour
     private int CalculateWinsFromWinRate(int matches, int winRatePercent)
     {
         if (matches <= 0 || winRatePercent <= 0)
-        {
             return 0;
-        }
 
         float exact = matches * (winRatePercent / 100f);
         int wins = Mathf.RoundToInt(exact);
@@ -250,9 +230,7 @@ public sealed class BotProfileGenerator : MonoBehaviour
     private string PickFromList(IReadOnlyList<string> list)
     {
         if (list == null || list.Count == 0)
-        {
             return string.Empty;
-        }
 
         int index = random.Next(0, list.Count);
         string result = list[index];
@@ -262,16 +240,12 @@ public sealed class BotProfileGenerator : MonoBehaviour
     private string SanitizeDisplayName(string rawValue)
     {
         if (string.IsNullOrWhiteSpace(rawValue))
-        {
             return "Bot";
-        }
 
         string trimmed = rawValue.Trim();
 
         if (trimmed.Length > 16)
-        {
             trimmed = trimmed.Substring(0, 16);
-        }
 
         return trimmed;
     }

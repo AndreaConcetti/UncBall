@@ -504,21 +504,10 @@ public sealed class PhotonFusionMatchmakingService : IMatchmakingService
         OnlinePlayerMatchStatsSnapshot localSnapshot,
         QueueType queueType)
     {
-        string[] namePool =
-        {
-            "Kairo",
-            "Riven",
-            "Soren",
-            "Mavik",
-            "Tazen",
-            "Nyro",
-            "Velk",
-            "Darian",
-            "Kael",
-            "Jett"
-        };
-
-        string botName = namePool[UnityEngine.Random.Range(0, namePool.Length)];
+        IReadOnlyList<string> namePool = BotNameLibrary.GetDefaultGeneratedPool(500);
+        string botName = (namePool != null && namePool.Count > 0)
+            ? namePool[UnityEngine.Random.Range(0, namePool.Count)]
+            : "Bot";
 
         int localLevel = localSnapshot != null ? Mathf.Max(1, localSnapshot.level) : 1;
         int localMatches = localSnapshot != null ? Mathf.Max(0, localSnapshot.totalMatches) : 0;
