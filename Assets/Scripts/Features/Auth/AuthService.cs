@@ -12,11 +12,13 @@ namespace UncballArena.Core.Auth
         private readonly GuestAuthProvider guestAuthProvider;
         private readonly GooglePlayAuthProvider googlePlayAuthProvider;
         private readonly AppleAuthProvider appleAuthProvider;
+        private readonly IBackendAuthService backendAuthService;
         private readonly SemaphoreSlim actionLock = new SemaphoreSlim(1, 1);
 
         public bool IsInitialized { get; private set; }
         public PlayerIdentity CurrentIdentity { get; private set; } = PlayerIdentity.Invalid();
         public AuthSession CurrentSession { get; private set; } = AuthSession.SignedOut;
+        public BackendAuthState CurrentBackendState { get; private set; } = BackendAuthState.None;
 
         public event Action<AuthSession> SessionChanged;
 
@@ -24,12 +26,14 @@ namespace UncballArena.Core.Auth
             LocalAuthStorage storage,
             GuestAuthProvider guestAuthProvider,
             GooglePlayAuthProvider googlePlayAuthProvider,
-            AppleAuthProvider appleAuthProvider)
+            AppleAuthProvider appleAuthProvider,
+            IBackendAuthService backendAuthService)
         {
             this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
             this.guestAuthProvider = guestAuthProvider ?? throw new ArgumentNullException(nameof(guestAuthProvider));
             this.googlePlayAuthProvider = googlePlayAuthProvider ?? throw new ArgumentNullException(nameof(googlePlayAuthProvider));
             this.appleAuthProvider = appleAuthProvider ?? throw new ArgumentNullException(nameof(appleAuthProvider));
+            this.backendAuthService = backendAuthService ?? throw new ArgumentNullException(nameof(backendAuthService));
         }
 
         public AuthService(LocalAuthStorage storage)
@@ -37,7 +41,8 @@ namespace UncballArena.Core.Auth
                 storage,
                 new GuestAuthProvider(storage),
                 new GooglePlayAuthProvider(),
-                new AppleAuthProvider())
+                new AppleAuthProvider(),
+                new NullBackendAuthService())
         {
         }
 
@@ -54,15 +59,19 @@ namespace UncballArena.Core.Auth
                 if (IsInitialized)
                     return;
 
+                await backendAuthService.InitializeAsync(cancellationToken);
+
                 PlayerIdentity identity = RestoreOrCreateIdentity();
-                SetCurrentIdentity(identity);
+                await ApplyIdentityAndBackendStateAsync(identity, cancellationToken, AuthBackendSyncMode.Restore);
 
                 IsInitialized = true;
 
                 Debug.Log(
                     $"[AuthService] Initialized. Provider={CurrentSession.ProviderType} | " +
                     $"Authenticated={CurrentSession.IsAuthenticated} | Guest={CurrentSession.IsGuest} | " +
-                    $"Linked={CurrentSession.IsLinked} | DisplayName={CurrentSession.DisplayName}");
+                    $"Linked={CurrentSession.IsLinked} | DisplayName={CurrentSession.DisplayName} | " +
+                    $"BackendAuthenticated={CurrentSession.HasBackendSession} | " +
+                    $"BackendPlayerId={CurrentSession.BackendPlayerId}");
             }
             finally
             {
@@ -88,7 +97,8 @@ namespace UncballArena.Core.Auth
 
                 PlayerIdentity identity = BuildGuestIdentity();
                 storage.SetCurrentProvider(AuthProviderType.Guest);
-                SetCurrentIdentity(identity);
+
+                await ApplyIdentityAndBackendStateAsync(identity, cancellationToken, AuthBackendSyncMode.SignIn);
 
                 return CurrentIdentity;
             }
@@ -128,7 +138,7 @@ namespace UncballArena.Core.Auth
                 storage.SetCurrentProvider(AuthProviderType.GooglePlayGames);
                 storage.SetDisplayName(identity.DisplayName);
 
-                SetCurrentIdentity(identity);
+                await ApplyIdentityAndBackendStateAsync(identity, cancellationToken, AuthBackendSyncMode.SignIn);
 
                 Debug.Log(
                     $"[AuthService] Signed in with Google. " +
@@ -172,7 +182,7 @@ namespace UncballArena.Core.Auth
                 storage.SetCurrentProvider(AuthProviderType.Apple);
                 storage.SetDisplayName(identity.DisplayName);
 
-                SetCurrentIdentity(identity);
+                await ApplyIdentityAndBackendStateAsync(identity, cancellationToken, AuthBackendSyncMode.SignIn);
 
                 Debug.Log(
                     $"[AuthService] Signed in with Apple. " +
@@ -220,7 +230,7 @@ namespace UncballArena.Core.Auth
                     isGuest: false,
                     isLinked: true);
 
-                SetCurrentIdentity(identity);
+                await ApplyIdentityAndBackendStateAsync(identity, cancellationToken, AuthBackendSyncMode.SignIn);
 
                 Debug.Log(
                     $"[AuthService] Google linked successfully. " +
@@ -273,7 +283,7 @@ namespace UncballArena.Core.Auth
                     isGuest: false,
                     isLinked: true);
 
-                SetCurrentIdentity(identity);
+                await ApplyIdentityAndBackendStateAsync(identity, cancellationToken, AuthBackendSyncMode.SignIn);
 
                 Debug.Log(
                     $"[AuthService] Apple linked successfully. " +
@@ -307,7 +317,8 @@ namespace UncballArena.Core.Auth
 
                 PlayerIdentity identity = CurrentIdentity.Clone();
                 identity.DisplayName = sanitized;
-                SetCurrentIdentity(identity);
+
+                SetCurrentIdentity(identity, CurrentBackendState);
 
                 return CurrentIdentity;
             }
@@ -377,7 +388,7 @@ namespace UncballArena.Core.Auth
                 }
 
                 PlayerIdentity guestIdentity = BuildGuestIdentity();
-                SetCurrentIdentity(guestIdentity);
+                await ApplyIdentityAndBackendStateAsync(guestIdentity, cancellationToken, AuthBackendSyncMode.SignIn);
 
                 Debug.Log(
                     $"[AuthService] Unlinked provider {providerType}. " +
@@ -405,10 +416,21 @@ namespace UncballArena.Core.Auth
                     Debug.LogWarning($"[AuthService] Google provider SignOutAsync warning during SignOutAsync: {ex.Message}");
                 }
 
+                try
+                {
+                    await appleAuthProvider.SignOutAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[AuthService] Apple provider SignOutAsync warning during SignOutAsync: {ex.Message}");
+                }
+
+                await backendAuthService.SignOutAsync(cancellationToken);
+
                 storage.SetCurrentProvider(AuthProviderType.Guest);
 
                 PlayerIdentity guestIdentity = BuildGuestIdentity();
-                SetCurrentIdentity(guestIdentity);
+                await ApplyIdentityAndBackendStateAsync(guestIdentity, cancellationToken, AuthBackendSyncMode.SignIn);
 
                 Debug.Log("[AuthService] Signed out to guest.");
             }
@@ -488,7 +510,7 @@ namespace UncballArena.Core.Auth
         public AccountOverview GetAccountOverview()
         {
             return new AccountOverview(
-                CurrentSession.PlayerId,
+                CurrentSession.EffectivePlayerId,
                 CurrentSession.DisplayName,
                 CurrentSession.IsAuthenticated,
                 CurrentSession.IsGuest,
@@ -618,11 +640,61 @@ namespace UncballArena.Core.Auth
             storage.ClearAppleLink();
         }
 
-        private void SetCurrentIdentity(PlayerIdentity identity)
+        private async Task ApplyIdentityAndBackendStateAsync(
+            PlayerIdentity identity,
+            CancellationToken cancellationToken,
+            AuthBackendSyncMode syncMode)
+        {
+            BackendAuthState backendState = await ResolveBackendStateAsync(identity, cancellationToken, syncMode);
+            SetCurrentIdentity(identity, backendState);
+        }
+
+        private async Task<BackendAuthState> ResolveBackendStateAsync(
+            PlayerIdentity identity,
+            CancellationToken cancellationToken,
+            AuthBackendSyncMode syncMode)
+        {
+            if (identity == null || !identity.IsValid)
+                return BackendAuthState.None;
+
+            try
+            {
+                switch (syncMode)
+                {
+                    case AuthBackendSyncMode.Restore:
+                        return await backendAuthService.RestoreSessionAsync(identity, cancellationToken);
+
+                    case AuthBackendSyncMode.Refresh:
+                        return await backendAuthService.RefreshSessionAsync(identity, cancellationToken);
+
+                    case AuthBackendSyncMode.SignIn:
+                    default:
+                        return await backendAuthService.SignInAsync(identity, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    $"[AuthService] Backend auth sync failed. " +
+                    $"Mode={syncMode} | LocalPlayerId={identity.PlayerId} | Error={ex.Message}");
+
+                return BackendAuthState.None;
+            }
+        }
+
+        private void SetCurrentIdentity(PlayerIdentity identity, BackendAuthState backendState)
         {
             CurrentIdentity = identity ?? PlayerIdentity.Invalid();
-            CurrentSession = new AuthSession(CurrentIdentity, CurrentIdentity.IsValid);
+            CurrentBackendState = backendState ?? BackendAuthState.None;
+            CurrentSession = new AuthSession(CurrentIdentity, CurrentIdentity.IsValid, CurrentBackendState);
             SessionChanged?.Invoke(CurrentSession);
+        }
+
+        private enum AuthBackendSyncMode
+        {
+            Restore = 0,
+            SignIn = 1,
+            Refresh = 2
         }
     }
 }

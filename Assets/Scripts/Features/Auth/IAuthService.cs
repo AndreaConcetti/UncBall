@@ -10,6 +10,7 @@ namespace UncballArena.Core.Auth
         bool IsInitialized { get; }
         PlayerIdentity CurrentIdentity { get; }
         AuthSession CurrentSession { get; }
+        BackendAuthState CurrentBackendState { get; }
 
         event Action<AuthSession> SessionChanged;
 

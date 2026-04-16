@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
-using UncballArena.Core.Bootstrap;
+using UncballArena.Core.Auth;
 using UncballArena.Core.Profile.Models;
 using UncballArena.Core.Profile.Repositories;
 
@@ -11,15 +11,17 @@ namespace UncballArena.Core.Profile.Services
     public sealed class ProfileService : IProfileService
     {
         private readonly IProfileRepository repository;
+        private readonly IAuthService authService;
 
         public ProfileSnapshot CurrentProfile { get; private set; }
         public bool IsInitialized { get; private set; }
 
         public event Action<ProfileSnapshot> ProfileChanged;
 
-        public ProfileService(IProfileRepository repository)
+        public ProfileService(IProfileRepository repository, IAuthService authService = null)
         {
-            this.repository = repository;
+            this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            this.authService = authService;
         }
 
         public async Task InitializeAsync(string playerId, string displayName = "")
@@ -206,18 +208,17 @@ namespace UncballArena.Core.Profile.Services
 
         private async Task SyncDisplayNameToAuthIfPossibleAsync(string displayName)
         {
-            GameCompositionRoot root = GameCompositionRoot.Instance;
-            if (root == null || !root.IsReady || root.AuthService == null)
+            if (authService == null)
                 return;
 
-            if (root.AuthService.CurrentSession == null || !root.AuthService.CurrentSession.HasUsableIdentity())
+            if (authService.CurrentSession == null || !authService.CurrentSession.HasUsableIdentity())
                 return;
 
-            string currentAuthName = root.AuthService.CurrentSession.Identity.DisplayName ?? string.Empty;
+            string currentAuthName = authService.CurrentSession.Identity.DisplayName ?? string.Empty;
             if (string.Equals(currentAuthName, displayName ?? string.Empty, StringComparison.Ordinal))
                 return;
 
-            await root.AuthService.UpdateDisplayNameAsync(displayName, CancellationToken.None);
+            await authService.UpdateDisplayNameAsync(displayName, CancellationToken.None);
         }
 
         private string SanitizeDisplayName(string displayName)

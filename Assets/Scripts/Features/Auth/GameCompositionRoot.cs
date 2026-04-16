@@ -24,6 +24,10 @@ namespace UncballArena.Core.Bootstrap
         [SerializeField] private bool dontDestroyOnLoad = true;
         [SerializeField] private string initialGuestDisplayName = "Guest";
 
+        [Header("Backend Auth")]
+        [SerializeField] private bool usePlayFabBackendAuth = false;
+        [SerializeField] private string playFabTitleId = "";
+
         private async void Awake()
         {
             if (Instance != null && Instance != this)
@@ -58,14 +62,20 @@ namespace UncballArena.Core.Bootstrap
             GooglePlayAuthProvider googlePlayProvider = new GooglePlayAuthProvider();
             AppleAuthProvider appleProvider = new AppleAuthProvider();
 
+            IBackendAuthService backendAuthService = CreateBackendAuthService();
+
             AuthService = new AuthService(
                 localAuthStorage,
                 guestProvider,
                 googlePlayProvider,
-                appleProvider
+                appleProvider,
+                backendAuthService
             );
 
-            ProfileService = new ProfileService(new LocalProfileRepository());
+            ProfileService = new ProfileService(
+                new LocalProfileRepository(),
+                AuthService
+            );
 
             AuthService.SessionChanged += OnSessionChanged;
             ProfileService.ProfileChanged += OnProfileChanged;
@@ -75,8 +85,8 @@ namespace UncballArena.Core.Bootstrap
             if (AuthService.CurrentSession == null || !AuthService.CurrentSession.HasUsableIdentity())
                 await AuthService.SignInAsGuestAsync(CancellationToken.None);
 
-            string playerId = AuthService.CurrentSession.Identity.PlayerId;
-            string authDisplayName = AuthService.CurrentSession.Identity.DisplayName;
+            string playerId = AuthService.CurrentSession.EffectivePlayerId;
+            string authDisplayName = AuthService.CurrentSession.DisplayName;
 
             await ProfileService.InitializeAsync(playerId, string.Empty);
 
@@ -93,8 +103,21 @@ namespace UncballArena.Core.Bootstrap
             IsReady = true;
 
             Debug.Log(
-                $"[GameCompositionRoot] Ready. PlayerId={playerId} | DisplayName={ProfileService.CurrentProfile?.DisplayName} | ProfileId={ProfileService.CurrentProfile?.ProfileId}"
-            );
+                $"[GameCompositionRoot] Ready. " +
+                $"LocalPlayerId={AuthService.CurrentSession.PlayerId} | " +
+                $"EffectivePlayerId={AuthService.CurrentSession.EffectivePlayerId} | " +
+                $"BackendAuthenticated={AuthService.CurrentSession.HasBackendSession} | " +
+                $"BackendPlayerId={AuthService.CurrentSession.BackendPlayerId} | " +
+                $"DisplayName={ProfileService.CurrentProfile?.DisplayName} | " +
+                $"ProfileId={ProfileService.CurrentProfile?.ProfileId}");
+        }
+
+        private IBackendAuthService CreateBackendAuthService()
+        {
+            if (usePlayFabBackendAuth)
+                return new PlayFabBackendAuthService(playFabTitleId);
+
+            return new NullBackendAuthService();
         }
 
         private void OnDestroy()
