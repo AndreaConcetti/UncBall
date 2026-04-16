@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -27,7 +26,7 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
     [Header("Behavior")]
     [SerializeField] private bool logDebug = true;
     [SerializeField] private bool enableLightPolling = true;
-    [SerializeField][Min(0.1f)] private float pollingInterval = 0.25f;
+    [SerializeField][Min(0.05f)] private float pollingInterval = 0.25f;
 
     private float pollingTimer;
     private bool subscribed;
@@ -40,14 +39,18 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
     private void Awake()
     {
         TryResolveProfileManager();
+        ClearDestroyedReferences();
         TryResolveSceneTexts(force: true);
     }
 
     private void OnEnable()
     {
         SceneManager.sceneLoaded += HandleSceneLoaded;
+
         TryResolveProfileManager();
         SubscribeProfileEvents();
+
+        ClearDestroyedReferences();
         TryResolveSceneTexts(force: true);
         RefreshUi(forceLog: true);
     }
@@ -55,6 +58,9 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
     private void Start()
     {
         TryResolveProfileManager();
+        SubscribeProfileEvents();
+
+        ClearDestroyedReferences();
         TryResolveSceneTexts(force: true);
         RefreshUi(forceLog: true);
     }
@@ -80,7 +86,10 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
 
         bool hadMissingRefs = !HasAllTextReferences();
         if (hadMissingRefs)
+        {
+            ClearDestroyedReferences();
             TryResolveSceneTexts(force: false);
+        }
 
         RefreshUi(forceLog: false);
     }
@@ -88,6 +97,8 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         TryResolveProfileManager();
+        SubscribeProfileEvents();
+
         ClearDestroyedReferences();
         TryResolveSceneTexts(force: true);
         RefreshUi(forceLog: true);
@@ -95,7 +106,9 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         if (logDebug)
         {
             Debug.Log(
-                $"[PlayGamePanelHUD] SceneLoaded -> Scene={scene.name} | ResolvedTexts={HasAllTextReferences()}",
+                "[PlayGamePanelHUD] SceneLoaded -> " +
+                "Scene=" + scene.name +
+                " | ResolvedTexts=" + HasAllTextReferences(),
                 this);
         }
     }
@@ -111,10 +124,9 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
             return;
 
         profileManager = GetComponent<PlayerProfileManager>();
-        if (profileManager != null)
-            return;
 
-        profileManager = FindFirstObjectByType<PlayerProfileManager>();
+        if (profileManager == null)
+            profileManager = FindFirstObjectByType<PlayerProfileManager>();
     }
 
     private void SubscribeProfileEvents()
@@ -122,19 +134,13 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         if (subscribed || profileManager == null)
             return;
 
-        try
-        {
-            profileManager.OnActiveProfileChanged += HandleProfileChanged;
-            profileManager.OnActiveProfileDataChanged += HandleProfileChanged;
-            subscribed = true;
-        }
-        catch
-        {
-            if (logDebug)
-            {
-                Debug.LogWarning("[PlayGamePanelHUD] SubscribeProfileEvents fallita.", this);
-            }
-        }
+        profileManager.OnActiveProfileChanged -= HandleProfileChanged;
+        profileManager.OnActiveProfileDataChanged -= HandleProfileChanged;
+
+        profileManager.OnActiveProfileChanged += HandleProfileChanged;
+        profileManager.OnActiveProfileDataChanged += HandleProfileChanged;
+
+        subscribed = true;
     }
 
     private void UnsubscribeProfileEvents()
@@ -142,22 +148,37 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         if (!subscribed || profileManager == null)
             return;
 
-        try
-        {
-            profileManager.OnActiveProfileChanged -= HandleProfileChanged;
-            profileManager.OnActiveProfileDataChanged -= HandleProfileChanged;
-        }
-        catch
-        {
-        }
+        profileManager.OnActiveProfileChanged -= HandleProfileChanged;
+        profileManager.OnActiveProfileDataChanged -= HandleProfileChanged;
 
         subscribed = false;
     }
 
+    private void ClearDestroyedReferences()
+    {
+        if (currentNameText == null)
+            currentNameText = null;
+
+        if (rankText == null)
+            rankText = null;
+
+        if (softCurrencyText == null)
+            softCurrencyText = null;
+
+        if (premiumCurrencyText == null)
+            premiumCurrencyText = null;
+    }
+
+    private bool HasAllTextReferences()
+    {
+        return currentNameText != null &&
+               rankText != null &&
+               softCurrencyText != null &&
+               premiumCurrencyText != null;
+    }
+
     private void TryResolveSceneTexts(bool force)
     {
-        ClearDestroyedReferences();
-
         if (!force && HasAllTextReferences())
             return;
 
@@ -188,32 +209,26 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         {
             Debug.Log(
                 "[PlayGamePanelHUD] TryResolveSceneTexts -> " +
-                $"Name={(currentNameText != null)} | " +
-                $"Rank={(rankText != null)} | " +
-                $"Soft={(softCurrencyText != null)} | " +
-                $"Premium={(premiumCurrencyText != null)}",
+                "Name=" + (currentNameText != null) +
+                " | Rank=" + (rankText != null) +
+                " | Soft=" + (softCurrencyText != null) +
+                " | Premium=" + (premiumCurrencyText != null),
                 this);
         }
     }
 
-    private void ClearDestroyedReferences()
-    {
-        if (currentNameText == null) currentNameText = null;
-        if (rankText == null) rankText = null;
-        if (softCurrencyText == null) softCurrencyText = null;
-        if (premiumCurrencyText == null) premiumCurrencyText = null;
-    }
-
-    private bool HasAllTextReferences()
-    {
-        return currentNameText != null &&
-               rankText != null &&
-               softCurrencyText != null &&
-               premiumCurrencyText != null;
-    }
-
     private Transform FindPlayGamePanelRoot()
     {
+        Transform result;
+
+        result = FindTransformByScenePath("MainMenu/Canvas_Buttons/SafeAreaRoot/PlayGamePanel");
+        if (result != null)
+            return result;
+
+        result = FindTransformByScenePath("Canvas_Buttons/SafeAreaRoot/PlayGamePanel");
+        if (result != null)
+            return result;
+
         GameObject direct = GameObject.Find("PlayGamePanel");
         if (direct != null)
             return direct.transform;
@@ -245,9 +260,15 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         return null;
     }
 
-    private Transform FindTransformAnywhere(string name)
+    private Transform FindTransformByScenePath(string path)
     {
-        GameObject go = GameObject.Find(name);
+        GameObject root = GameObject.Find(path);
+        return root != null ? root.transform : null;
+    }
+
+    private Transform FindTransformAnywhere(string objectName)
+    {
+        GameObject go = GameObject.Find(objectName);
         return go != null ? go.transform : null;
     }
 
@@ -256,15 +277,16 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         if (root == null)
             return null;
 
-        Transform[] children = root.GetComponentsInChildren<Transform>(true);
-        for (int i = 0; i < children.Length; i++)
+        Transform[] all = root.GetComponentsInChildren<Transform>(true);
+
+        for (int i = 0; i < all.Length; i++)
         {
-            if (!string.Equals(children[i].name, childName, StringComparison.Ordinal))
+            if (!string.Equals(all[i].name, childName, StringComparison.Ordinal))
                 continue;
 
-            TMP_Text text = children[i].GetComponent<TMP_Text>();
-            if (text != null)
-                return text;
+            TMP_Text tmp = all[i].GetComponent<TMP_Text>();
+            if (tmp != null)
+                return tmp;
         }
 
         return null;
@@ -282,216 +304,64 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         }
 
         if (!HasAllTextReferences())
+        {
+            ClearDestroyedReferences();
             TryResolveSceneTexts(force: false);
+        }
 
         if (!HasAllTextReferences())
         {
             if (logDebug && forceLog)
+            {
                 Debug.LogWarning("[PlayGamePanelHUD] RefreshUi skipped -> text refs mancanti.", this);
+            }
+
             return;
         }
 
-        ProfileHudSnapshot snapshot = BuildSnapshot(profileManager);
+        PlayerProfileRuntimeData profile = profileManager.ActiveProfile;
 
-        currentNameText.text = snapshot.DisplayName;
-        rankText.text = $"{rankPrefix}{snapshot.RankedLp}{rankSuffix}";
-        softCurrencyText.text = $"{softPrefix}{snapshot.SoftCurrency}{softSuffix}";
-        premiumCurrencyText.text = $"{premiumPrefix}{snapshot.PremiumCurrency}{premiumSuffix}";
+        string resolvedName = emptyNameFallback;
+        int resolvedRankedLp = 0;
+        int resolvedSoft = 0;
+        int resolvedPremium = 0;
+
+        if (profile != null)
+        {
+            resolvedName = string.IsNullOrWhiteSpace(profile.displayName)
+                ? emptyNameFallback
+                : profile.displayName.Trim();
+
+            resolvedRankedLp = Mathf.Max(0, profile.rankedLp);
+            resolvedSoft = Mathf.Max(0, profile.softCurrency);
+            resolvedPremium = Mathf.Max(0, profile.premiumCurrency);
+        }
+
+        currentNameText.text = resolvedName;
+        rankText.text = $"{rankPrefix}{resolvedRankedLp}{rankSuffix}";
+        softCurrencyText.text = $"{softPrefix}{resolvedSoft}{softSuffix}";
+        premiumCurrencyText.text = $"{premiumPrefix}{resolvedPremium}{premiumSuffix}";
 
         bool changed =
-            lastAppliedName != snapshot.DisplayName ||
-            lastAppliedRankedLp != snapshot.RankedLp ||
-            lastAppliedSoft != snapshot.SoftCurrency ||
-            lastAppliedPremium != snapshot.PremiumCurrency;
+            lastAppliedName != resolvedName ||
+            lastAppliedRankedLp != resolvedRankedLp ||
+            lastAppliedSoft != resolvedSoft ||
+            lastAppliedPremium != resolvedPremium;
 
-        lastAppliedName = snapshot.DisplayName;
-        lastAppliedRankedLp = snapshot.RankedLp;
-        lastAppliedSoft = snapshot.SoftCurrency;
-        lastAppliedPremium = snapshot.PremiumCurrency;
+        lastAppliedName = resolvedName;
+        lastAppliedRankedLp = resolvedRankedLp;
+        lastAppliedSoft = resolvedSoft;
+        lastAppliedPremium = resolvedPremium;
 
         if (logDebug && (forceLog || changed))
         {
             Debug.Log(
-                $"[PlayGamePanelHUD] RefreshUi -> Name={snapshot.DisplayName} | RankedLp={snapshot.RankedLp} | Soft={snapshot.SoftCurrency} | Premium={snapshot.PremiumCurrency}",
+                "[PlayGamePanelHUD] RefreshUi -> " +
+                "Name=" + resolvedName +
+                " | RankedLp=" + resolvedRankedLp +
+                " | Soft=" + resolvedSoft +
+                " | Premium=" + resolvedPremium,
                 this);
-        }
-    }
-
-    private ProfileHudSnapshot BuildSnapshot(PlayerProfileManager manager)
-    {
-        object source = FindBestProfileSource(manager);
-
-        string displayName =
-            ReadString(source, "DisplayName", "PlayerName", "CurrentDisplayName", "Name") ??
-            ReadString(manager, "DisplayName", "PlayerName", "CurrentDisplayName", "Name") ??
-            emptyNameFallback;
-
-        if (string.IsNullOrWhiteSpace(displayName))
-            displayName = emptyNameFallback;
-
-        int rankedLp =
-            ReadInt(source, "RankedLp", "RankLP", "Elo", "RankPoints", "CurrentRankedLp") ??
-            ReadInt(manager, "RankedLp", "RankLP", "Elo", "RankPoints", "CurrentRankedLp") ??
-            0;
-
-        int softCurrency =
-            ReadInt(source, "SoftCurrency", "Soft", "Coins", "SoftCoins", "Gold") ??
-            ReadInt(manager, "SoftCurrency", "Soft", "Coins", "SoftCoins", "Gold") ??
-            0;
-
-        int premiumCurrency =
-            ReadInt(source, "PremiumCurrency", "Premium", "Gems", "Diamonds", "HardCurrency") ??
-            ReadInt(manager, "PremiumCurrency", "Premium", "Gems", "Diamonds", "HardCurrency") ??
-            0;
-
-        return new ProfileHudSnapshot(
-            displayName,
-            Mathf.Max(0, rankedLp),
-            Mathf.Max(0, softCurrency),
-            Mathf.Max(0, premiumCurrency));
-    }
-
-    private object FindBestProfileSource(PlayerProfileManager manager)
-    {
-        object source =
-            ReadObject(manager, "ActiveProfileData", "CurrentProfileData", "ProfileData", "RuntimeData", "ActiveProfile", "CurrentProfile");
-
-        if (source != null)
-            return source;
-
-        source =
-            InvokeObject(manager, "GetActiveProfileData", "GetCurrentProfileData", "GetProfileData", "GetActiveProfile", "GetCurrentProfile");
-
-        return source ?? manager;
-    }
-
-    private static object ReadObject(object target, params string[] memberNames)
-    {
-        if (target == null)
-            return null;
-
-        Type type = target.GetType();
-
-        for (int i = 0; i < memberNames.Length; i++)
-        {
-            string memberName = memberNames[i];
-
-            PropertyInfo property = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (property != null)
-            {
-                try
-                {
-                    return property.GetValue(target);
-                }
-                catch
-                {
-                }
-            }
-
-            FieldInfo field = type.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (field != null)
-            {
-                try
-                {
-                    return field.GetValue(target);
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static object InvokeObject(object target, params string[] methodNames)
-    {
-        if (target == null)
-            return null;
-
-        Type type = target.GetType();
-
-        for (int i = 0; i < methodNames.Length; i++)
-        {
-            MethodInfo method = type.GetMethod(methodNames[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (method == null || method.GetParameters().Length != 0)
-                continue;
-
-            try
-            {
-                return method.Invoke(target, null);
-            }
-            catch
-            {
-            }
-        }
-
-        return null;
-    }
-
-    private static string ReadString(object target, params string[] memberNames)
-    {
-        object value = ReadObject(target, memberNames);
-        if (value == null)
-            return null;
-
-        return value as string ?? value.ToString();
-    }
-
-    private static int? ReadInt(object target, params string[] memberNames)
-    {
-        object value = ReadObject(target, memberNames);
-        return ConvertToInt(value);
-    }
-
-    private static int? ConvertToInt(object value)
-    {
-        if (value == null)
-            return null;
-
-        switch (value)
-        {
-            case int intValue:
-                return intValue;
-            case long longValue:
-                return (int)longValue;
-            case short shortValue:
-                return shortValue;
-            case byte byteValue:
-                return byteValue;
-            case float floatValue:
-                return Mathf.RoundToInt(floatValue);
-            case double doubleValue:
-                return (int)Math.Round(doubleValue);
-            case decimal decimalValue:
-                return (int)Math.Round(decimalValue);
-            case string stringValue when int.TryParse(stringValue, out int parsed):
-                return parsed;
-            default:
-                try
-                {
-                    return Convert.ToInt32(value);
-                }
-                catch
-                {
-                    return null;
-                }
-        }
-    }
-
-    private readonly struct ProfileHudSnapshot
-    {
-        public readonly string DisplayName;
-        public readonly int RankedLp;
-        public readonly int SoftCurrency;
-        public readonly int PremiumCurrency;
-
-        public ProfileHudSnapshot(string displayName, int rankedLp, int softCurrency, int premiumCurrency)
-        {
-            DisplayName = displayName;
-            RankedLp = rankedLp;
-            SoftCurrency = softCurrency;
-            PremiumCurrency = premiumCurrency;
         }
     }
 }

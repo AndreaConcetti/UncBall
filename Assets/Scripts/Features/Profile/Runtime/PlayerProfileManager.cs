@@ -146,10 +146,10 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.displayName = sanitized;
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushDisplayNameToCore(sanitized);
-        else
-            SaveLegacyActiveProfile();
 
         NotifyActiveProfileDataChanged();
 
@@ -166,10 +166,10 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.xp += amount;
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushProfileStatsToCompositionRoot();
-        else
-            SaveLegacyActiveProfile();
 
         NotifyActiveProfileDataChanged();
     }
@@ -185,10 +185,10 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.level = sanitized;
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushProfileStatsToCompositionRoot();
-        else
-            SaveLegacyActiveProfile();
 
         NotifyActiveProfileDataChanged();
     }
@@ -202,10 +202,10 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.softCurrency = Mathf.Max(0, activeProfile.softCurrency + amount);
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushFullProfileToCompositionRoot();
-        else
-            SaveLegacyActiveProfile();
 
         NotifyActiveProfileDataChanged();
     }
@@ -219,10 +219,10 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.premiumCurrency = Mathf.Max(0, activeProfile.premiumCurrency + amount);
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushFullProfileToCompositionRoot();
-        else
-            SaveLegacyActiveProfile();
 
         NotifyActiveProfileDataChanged();
     }
@@ -236,10 +236,10 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.rankedLp = Mathf.Max(0, activeProfile.rankedLp + amount);
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushFullProfileToCompositionRoot();
-        else
-            SaveLegacyActiveProfile();
 
         NotifyActiveProfileDataChanged();
 
@@ -265,10 +265,10 @@ public class PlayerProfileManager : MonoBehaviour
 
         activeProfile.rankedLp = sanitized;
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushFullProfileToCompositionRoot();
-        else
-            SaveLegacyActiveProfile();
 
         NotifyActiveProfileDataChanged();
 
@@ -354,10 +354,11 @@ public class PlayerProfileManager : MonoBehaviour
         if (consecutiveLoginDays.HasValue)
             activeProfile.consecutiveLoginDays = Mathf.Max(0, consecutiveLoginDays.Value);
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushFullProfileToCompositionRoot();
 
-        SaveLegacyActiveProfile();
         NotifyActiveProfileDataChanged();
     }
 
@@ -446,10 +447,11 @@ public class PlayerProfileManager : MonoBehaviour
         activeProfile = CloneRuntimeData(snapshot);
         EnsureRuntimeStructure();
 
+        SaveLegacyActiveProfile();
+
         if (IsUsingCoreProfile())
             PushFullProfileToCompositionRoot();
 
-        SaveLegacyActiveProfile();
         ApplyActiveProfileToSystems();
         NotifyActiveProfileChanged();
     }
@@ -492,8 +494,8 @@ public class PlayerProfileManager : MonoBehaviour
         if (IsUsingCoreProfile())
         {
             CreateDefaultRuntimeProfile(ResolvePreferredProfileId(), ResolvePreferredDisplayName());
-            PushFullProfileToCompositionRoot();
             SaveLegacyActiveProfile();
+            PushFullProfileToCompositionRoot();
             ApplyActiveProfileToSystems();
             NotifyActiveProfileChanged();
             return;
@@ -557,15 +559,10 @@ public class PlayerProfileManager : MonoBehaviour
         ApplySnapshotFromCore(snapshot, true);
     }
 
-    private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    private void HandleSceneLoaded(Scene scene, LoadSceneMode loadSceneMode)
     {
         SubscribeCompositionRootIfNeeded();
-
-        if (IsUsingCoreProfile())
-            TryPullFromCompositionRoot(forceNotify: true);
-        else
-            NotifyActiveProfileDataChanged();
-
+        TryPullFromCompositionRoot(forceNotify: true);
         ApplyActiveProfileToSystems();
 
         if (logDebug)
@@ -573,9 +570,9 @@ public class PlayerProfileManager : MonoBehaviour
             Debug.Log(
                 "[PlayerProfileManager] SceneLoaded refresh -> Scene=" + scene.name +
                 " | ProfileId=" + ActiveProfileId +
-                " | RankedLp=" + ActiveRankedLp +
-                " | Soft=" + (activeProfile != null ? activeProfile.softCurrency : 0) +
-                " | Premium=" + (activeProfile != null ? activeProfile.premiumCurrency : 0),
+                " | RankedLp=" + activeProfile.rankedLp +
+                " | Soft=" + activeProfile.softCurrency +
+                " | Premium=" + activeProfile.premiumCurrency,
                 this
             );
         }
@@ -1037,6 +1034,8 @@ public class PlayerProfileManager : MonoBehaviour
     {
         if (!IsUsingCoreProfile())
             return;
+
+        SaveLegacyActiveProfile();
 
         ProfileSnapshot current = GameCompositionRoot.Instance.ProfileService.CurrentProfile;
         if (current == null || !current.IsValid())
