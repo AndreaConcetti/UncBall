@@ -15,12 +15,12 @@ MonoBehaviour:
   easy:
     matchMode: 1
     pointsToWin: 200
-    matchDurationSeconds: 360
+    matchDurationSeconds: 480
     turnDurationSeconds: 8
   medium:
     matchMode: 1
     pointsToWin: 1
-    matchDurationSeconds: 360
+    matchDurationSeconds: 480
     turnDurationSeconds: 8
   hard:
     matchMode: 1

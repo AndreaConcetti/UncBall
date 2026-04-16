@@ -30,8 +30,8 @@ MonoBehaviour:
       xpReward: 25
       softCurrencyReward: 35
       premiumCurrencyReward: 0
-      grantChest: 0
-      chestType: 0
+      grantChest: 1
+      chestType: 1
       rankedLpDelta: 25
   normalCompletionLoss:
     normal:

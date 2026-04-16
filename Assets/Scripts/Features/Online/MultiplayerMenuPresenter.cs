@@ -3,6 +3,7 @@ using TMPro;
 using UncballArena.Core.Runtime;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class MultiplayerMenuPresenter : MonoBehaviour
 {
@@ -20,6 +21,11 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     [SerializeField] private GameObject onlineButtonsRoot;
     [SerializeField] private GameObject matchmakingLoadingPanel;
     [SerializeField] private GameObject matchFoundPanel;
+
+    [Header("Online Buttons")]
+    [SerializeField] private Button queueNormalButton;
+    [SerializeField] private Button queueRankedButton;
+    [SerializeField] private CanvasGroup onlineButtonsCanvasGroup;
 
     [Header("Optional Legacy Panels To Force Off")]
     [SerializeField] private GameObject privateLobbyPanel;
@@ -42,6 +48,9 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     [SerializeField][TextArea] private string prematchHostLeftTitle = "MATCH CANCELED";
     [SerializeField][TextArea] private string prematchHostLeftMessage = "OPPONENT LEFT THE MATCH";
     [SerializeField][TextArea] private string prematchHostLeftDetail = "NO LP CHANGE YET";
+
+    [Header("Offline Copy")]
+    [SerializeField][TextArea] private string noInternetStatus = "NO INTERNET CONNECTION";
 
     [Header("Texts - Status")]
     [SerializeField] private TMP_Text globalStatusText;
@@ -141,6 +150,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
         RefreshPlayerNameIfNeeded();
         UpdateQueueTimer();
         UpdateMatchFoundCountdown();
+        RefreshOnlineButtonAvailability();
 
         OnlineFlowState currentState = GetCurrentState();
         if (currentState != lastRenderedState)
@@ -150,6 +160,12 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     public void QueueNormal()
     {
         ResolveDependencies(true);
+
+        if (!HasUsableInternetConnection())
+        {
+            ApplyNoInternetIdleFeedback();
+            return;
+        }
 
         if (onlineFlowController == null)
         {
@@ -164,6 +180,12 @@ public class MultiplayerMenuPresenter : MonoBehaviour
     public void QueueRanked()
     {
         ResolveDependencies(true);
+
+        if (!HasUsableInternetConnection())
+        {
+            ApplyNoInternetIdleFeedback();
+            return;
+        }
 
         if (onlineFlowController == null)
         {
@@ -316,6 +338,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
         lastMatchFoundSnapshotKey = string.Empty;
         RefreshPlayerNameImmediate();
         RefreshStateUi();
+        RefreshOnlineButtonAvailability();
     }
 
     private void RefreshPlayerNameIfNeeded()
@@ -372,9 +395,14 @@ public class MultiplayerMenuPresenter : MonoBehaviour
         OnlineFlowState state = context != null ? context.state : OnlineFlowState.Offline;
         lastRenderedState = state;
 
+        bool hasInternet = HasUsableInternetConnection();
+
         string status = context != null && !string.IsNullOrWhiteSpace(context.statusMessage)
             ? context.statusMessage
             : "Idle";
+
+        if (!hasInternet && (state == OnlineFlowState.Idle || state == OnlineFlowState.Offline || state == OnlineFlowState.Error))
+            status = noInternetStatus;
 
         if (globalStatusText != null)
             globalStatusText.text = status.ToUpperInvariant();
@@ -421,6 +449,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
             StopQueueTimer();
             StopMatchFoundCountdown();
+            RefreshOnlineButtonAvailability();
             return;
         }
 
@@ -435,6 +464,7 @@ public class MultiplayerMenuPresenter : MonoBehaviour
             if (matchFoundPanel != null)
                 matchFoundPanel.SetActive(false);
 
+            RefreshOnlineButtonAvailability();
             return;
         }
 
@@ -466,6 +496,8 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
         if (!isQueueSearching && matchmakingProgressText != null)
             matchmakingProgressText.text = string.Empty;
+
+        RefreshOnlineButtonAvailability();
     }
 
     private bool ShouldShowPrematchHostLeftPanel(OnlineRuntimeContext context)
@@ -840,6 +872,46 @@ public class MultiplayerMenuPresenter : MonoBehaviour
 
         if (queueTimeoutPanel != null)
             queueTimeoutPanel.SetActive(false);
+    }
+
+    private bool HasUsableInternetConnection()
+    {
+        return Application.internetReachability != NetworkReachability.NotReachable;
+    }
+
+    private void RefreshOnlineButtonAvailability()
+    {
+        bool hasInternet = HasUsableInternetConnection();
+        bool canUseOnlineButtons =
+            hasInternet &&
+            !queueTimeoutPanelVisible &&
+            (GetCurrentState() == OnlineFlowState.Idle ||
+             GetCurrentState() == OnlineFlowState.Offline ||
+             GetCurrentState() == OnlineFlowState.Error ||
+             GetCurrentState() == OnlineFlowState.EndingMatch);
+
+        if (queueNormalButton != null)
+            queueNormalButton.interactable = canUseOnlineButtons;
+
+        if (queueRankedButton != null)
+            queueRankedButton.interactable = canUseOnlineButtons;
+
+        if (onlineButtonsCanvasGroup != null)
+            onlineButtonsCanvasGroup.alpha = canUseOnlineButtons ? 1f : 0.55f;
+    }
+
+    private void ApplyNoInternetIdleFeedback()
+    {
+        if (globalStatusText != null)
+            globalStatusText.text = SafeUpper(noInternetStatus, "NO INTERNET CONNECTION");
+
+        if (matchmakingProgressText != null)
+            matchmakingProgressText.text = string.Empty;
+
+        RefreshOnlineButtonAvailability();
+
+        if (logDebug)
+            Debug.LogWarning("[MultiplayerMenuPresenter] Online queue blocked: no internet connection.", this);
     }
 
     private string NormalizeName(string value)

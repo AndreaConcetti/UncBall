@@ -11,6 +11,10 @@ public class ShotScorePopupUI : MonoBehaviour
     public RectTransform canvasRect;
     public OnlineGameplayAuthority onlineGameplayAuthority;
 
+    [Header("Optional Mode Detection")]
+    [SerializeField] private FusionOnlineMatchController fusionOnlineMatchController;
+    [SerializeField] private OfflineBotMatchController offlineBotMatchController;
+
     [Header("Shared Popup")]
     public RectTransform popupRoot;
     public CanvasGroup comboCanvasGroup;
@@ -43,6 +47,9 @@ public class ShotScorePopupUI : MonoBehaviour
 
     [Header("Mode")]
     public bool listenToLocalScoreManagerEvents = true;
+
+    [Header("Debug")]
+    [SerializeField] private bool logDebug = false;
 
     private Coroutine popupRoutine;
     private Vector2 comboLocalStartPos;
@@ -110,6 +117,24 @@ public class ShotScorePopupUI : MonoBehaviour
 
         if (scoreManager == null)
             scoreManager = ScoreManager.Instance;
+
+        if (fusionOnlineMatchController == null)
+        {
+#if UNITY_2023_1_OR_NEWER
+            fusionOnlineMatchController = FindFirstObjectByType<FusionOnlineMatchController>();
+#else
+            fusionOnlineMatchController = FindObjectOfType<FusionOnlineMatchController>();
+#endif
+        }
+
+        if (offlineBotMatchController == null)
+        {
+#if UNITY_2023_1_OR_NEWER
+            offlineBotMatchController = FindFirstObjectByType<OfflineBotMatchController>();
+#else
+            offlineBotMatchController = FindObjectOfType<OfflineBotMatchController>();
+#endif
+        }
     }
 
     void CacheLocalStartPositions()
@@ -129,18 +154,42 @@ public class ShotScorePopupUI : MonoBehaviour
     void RefreshLocalSubscription()
     {
         RemoveLocalSubscription();
+        AutoAssignReferences();
 
-        bool isOnlineSession = onlineGameplayAuthority != null && onlineGameplayAuthority.IsOnlineSession;
-        if (!listenToLocalScoreManagerEvents || isOnlineSession)
+        if (!listenToLocalScoreManagerEvents)
             return;
 
         if (scoreManager == null)
             scoreManager = ScoreManager.Instance;
 
-        if (scoreManager != null)
+        if (scoreManager == null)
+            return;
+
+        bool shouldListenLocally = ShouldListenToLocalScoreEvents();
+
+        if (!shouldListenLocally)
         {
-            scoreManager.onShotScoreDetailed.AddListener(HandleShotScoreDetailed);
-            subscribedToLocalScoreEvents = true;
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[ShotScorePopupUI] RefreshLocalSubscription -> local subscription skipped. " +
+                    "Mode=ReplicatedOnlineHuman",
+                    this);
+            }
+
+            return;
+        }
+
+        scoreManager.onShotScoreDetailed.AddListener(HandleShotScoreDetailed);
+        subscribedToLocalScoreEvents = true;
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[ShotScorePopupUI] RefreshLocalSubscription -> subscribed to local ScoreManager events. " +
+                "OfflineBotActive=" + IsOfflineBotSessionActive() +
+                " | HumanOnlineMatchActive=" + IsHumanOnlineMatchActive(),
+                this);
         }
     }
 
@@ -151,6 +200,42 @@ public class ShotScorePopupUI : MonoBehaviour
 
         scoreManager.onShotScoreDetailed.RemoveListener(HandleShotScoreDetailed);
         subscribedToLocalScoreEvents = false;
+    }
+
+    bool ShouldListenToLocalScoreEvents()
+    {
+        if (IsOfflineBotSessionActive())
+            return true;
+
+        if (IsHumanOnlineMatchActive())
+            return false;
+
+        if (onlineGameplayAuthority != null && onlineGameplayAuthority.IsOnlineSession)
+        {
+            if (logDebug)
+            {
+                Debug.LogWarning(
+                    "[ShotScorePopupUI] onlineGameplayAuthority.IsOnlineSession=true but no human online match controller is active. " +
+                    "Falling back to LOCAL popup mode.",
+                    this);
+            }
+
+            return true;
+        }
+
+        return true;
+    }
+
+    bool IsOfflineBotSessionActive()
+    {
+        return offlineBotMatchController != null &&
+               offlineBotMatchController.IsOfflineBotSessionActive;
+    }
+
+    bool IsHumanOnlineMatchActive()
+    {
+        return fusionOnlineMatchController != null &&
+               fusionOnlineMatchController.HasSpawnedNetworkState;
     }
 
     void HandleShotScoreDetailed(ShotScoreData data)

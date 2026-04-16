@@ -444,6 +444,12 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             return;
         }
 
+        if (!midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
+        {
+            StartMidMatchBreak();
+            return;
+        }
+
         SpawnNewActiveBall(nextOwner);
     }
 
@@ -549,6 +555,28 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
         if (!shotInFlight)
         {
+            if (!midMatchBreakTriggered && AreAllBoardsFullNow())
+            {
+                StartMidMatchBreak();
+                return;
+            }
+
+            if (midMatchBreakTriggered)
+            {
+                if (ShouldForceSecondHalfMathematicalEnd(out PlayerID forcedWinner))
+                {
+                    winner = forcedWinner;
+                    EndOfflineMatch();
+                    return;
+                }
+
+                if (AreAllBoardsFullNow())
+                {
+                    EndOfflineMatch();
+                    return;
+                }
+            }
+
             if (activeRequest.MatchMode == MatchMode.TimeLimit)
             {
                 float halftimeThreshold = activeRequest.MatchDurationSeconds * 0.5f;
@@ -620,6 +648,9 @@ public sealed class OfflineBotMatchController : MonoBehaviour
         if (midMatchBreakTriggered || shotInFlight || activeRequest == null)
             return false;
 
+        if (AreAllBoardsFullNow())
+            return true;
+
         if (activeRequest.MatchMode == MatchMode.TimeLimit)
         {
             float threshold = activeRequest.MatchDurationSeconds * 0.5f;
@@ -665,6 +696,17 @@ public sealed class OfflineBotMatchController : MonoBehaviour
 
         if (bottomBarOrderSwapper != null)
             bottomBarOrderSwapper.SetOrder(player1OnLeft);
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[OfflineBotMatchController] StartMidMatchBreak -> " +
+                "Reason=" + midMatchBreakReason +
+                " | ScoreP1=" + scoreP1 +
+                " | ScoreP2=" + scoreP2 +
+                " | AllBoardsFull=" + AreAllBoardsFullNow(),
+                this);
+        }
     }
 
     private void ResumeAfterMidMatchBreak()
@@ -1066,6 +1108,18 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             return;
         }
 
+        if (ShouldEndMatchNow())
+        {
+            EndOfflineMatch();
+            return;
+        }
+
+        if (!midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
+        {
+            StartMidMatchBreak();
+            return;
+        }
+
         PlayerID nextOwner = currentTurnOwner == PlayerID.Player1 ? PlayerID.Player2 : PlayerID.Player1;
         SpawnNewActiveBall(nextOwner);
     }
@@ -1100,7 +1154,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             return;
         }
 
-        if (activeRequest.MatchMode == MatchMode.ScoreTarget && !midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
+        if (!midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
         {
             StartMidMatchBreak();
             return;
@@ -1141,7 +1195,7 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             return;
         }
 
-        if (activeRequest.MatchMode == MatchMode.ScoreTarget && !midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
+        if (!midMatchBreakTriggered && ShouldTriggerMidMatchBreak())
         {
             StartMidMatchBreak();
             return;
@@ -1266,13 +1320,85 @@ public sealed class OfflineBotMatchController : MonoBehaviour
             return false;
 
         if (activeRequest.MatchMode == MatchMode.TimeLimit)
-            return midMatchBreakTriggered && matchTimeRemaining <= 0f;
+        {
+            if (midMatchBreakTriggered && matchTimeRemaining <= 0f)
+                return true;
+
+            if (midMatchBreakTriggered && AreAllBoardsFullNow())
+                return true;
+
+            if (midMatchBreakTriggered && ShouldForceSecondHalfMathematicalEnd(out PlayerID forcedWinner))
+            {
+                winner = forcedWinner;
+                return true;
+            }
+
+            return false;
+        }
 
         if (scoreP1 >= Mathf.Max(1, activeRequest.PointsToWin) ||
             scoreP2 >= Mathf.Max(1, activeRequest.PointsToWin))
             return true;
 
+        if (midMatchBreakTriggered && AreAllBoardsFullNow())
+            return true;
+
+        if (midMatchBreakTriggered && ShouldForceSecondHalfMathematicalEnd(out PlayerID secondHalfForcedWinner))
+        {
+            winner = secondHalfForcedWinner;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool AreAllBoardsFullNow()
+    {
         return scoreManager != null && scoreManager.AreAllBoardsFull();
+    }
+
+    private bool ShouldForceSecondHalfMathematicalEnd(out PlayerID forcedWinner)
+    {
+        forcedWinner = PlayerID.None;
+
+        if (!midMatchBreakTriggered || midMatchBreakActive || scoreManager == null)
+            return false;
+
+        int p1Remaining = scoreManager.GetMaxAdditionalPointsAvailable(PlayerID.Player1);
+        int p2Remaining = scoreManager.GetMaxAdditionalPointsAvailable(PlayerID.Player2);
+
+        bool p1CannotWin = scoreP1 + p1Remaining < scoreP2;
+        bool p2CannotWin = scoreP2 + p2Remaining < scoreP1;
+
+        if (p1CannotWin && !p2CannotWin)
+        {
+            forcedWinner = PlayerID.Player2;
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[OfflineBotMatchController] Mathematical end -> Player2 wins. " +
+                    "ScoreP1=" + scoreP1 + " | RemainingP1=" + p1Remaining +
+                    " | ScoreP2=" + scoreP2 + " | RemainingP2=" + p2Remaining,
+                    this);
+            }
+            return true;
+        }
+
+        if (p2CannotWin && !p1CannotWin)
+        {
+            forcedWinner = PlayerID.Player1;
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[OfflineBotMatchController] Mathematical end -> Player1 wins. " +
+                    "ScoreP1=" + scoreP1 + " | RemainingP1=" + p1Remaining +
+                    " | ScoreP2=" + scoreP2 + " | RemainingP2=" + p2Remaining,
+                    this);
+            }
+            return true;
+        }
+
+        return false;
     }
 
     private void ForceEndOfflineMatch()

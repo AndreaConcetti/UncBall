@@ -204,7 +204,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
         localRemoteClientConnectionLostVisible ||
         localTransportConnectionIssueVisible;
 
-
     public MatchMode CurrentMatchMode => IsNetworkStateReadable ? (MatchMode)NetMatchModeRaw : cachedMatchMode;
     public int PointsToWin => IsNetworkStateReadable ? NetPointsToWin : cachedPointsToWin;
     public float ConfiguredMatchDuration => IsNetworkStateReadable ? NetConfiguredMatchDuration : cachedConfiguredMatchDuration;
@@ -659,7 +658,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
         RPC_ReportClientBackgroundRecovered((byte)EffectiveLocalPlayerId);
     }
 
-
     public void NotifyLocalAppBackgroundForfeit()
     {
         if (IsTerminalOutcomeLocked)
@@ -825,9 +823,7 @@ public class FusionOnlineMatchController : NetworkBehaviour
         }
 
         if (logDebug && authorityRemoteExplicitBackgroundPending)
-        {
             Debug.Log("[FusionOnlineMatchController] RPC_ClientHeartbeat received while explicit background pending is active.", this);
-        }
 
         if (logDebug)
             Debug.Log("[FusionOnlineMatchController] RPC_ClientHeartbeat received from remote client.", this);
@@ -1160,7 +1156,6 @@ public class FusionOnlineMatchController : NetworkBehaviour
         if (logDebug)
             Debug.Log("[FusionOnlineMatchController] Periodic client heartbeat sent.", this);
     }
-
 
     private void TickRealtimeClientHeartbeatSenderIfNeeded()
     {
@@ -1865,6 +1860,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
             }
             else
             {
+                if (TryResolveScoreTargetBoardStateAuthority())
+                    return;
+
                 if (ShouldEndMatchNow())
                 {
                     EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
@@ -1935,6 +1933,144 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         int halfTarget = Mathf.Max(1, Mathf.CeilToInt(NetPointsToWin * 0.5f));
         return NetScoreP1 >= halfTarget || NetScoreP2 >= halfTarget;
+    }
+
+    private bool IsScoreTargetSecondHalfActive()
+    {
+        return CurrentMatchMode == MatchMode.ScoreTarget &&
+               NetBreakTriggered &&
+               !NetBreakActive &&
+               !NetMatchEnded;
+    }
+
+    private bool AreBoardsSaturatedNow()
+    {
+        return scoreManager != null && scoreManager.AreAllBoardsFull();
+    }
+
+    private bool CanPlayerStillWinMathematically(PlayerID player)
+    {
+        if (scoreManager == null)
+            return true;
+
+        PlayerID opponent =
+            player == PlayerID.Player1 ? PlayerID.Player2 :
+            player == PlayerID.Player2 ? PlayerID.Player1 :
+            PlayerID.None;
+
+        if (opponent == PlayerID.None)
+            return false;
+
+        int playerScore = player == PlayerID.Player1 ? NetScoreP1 : NetScoreP2;
+        int opponentScore = opponent == PlayerID.Player1 ? NetScoreP1 : NetScoreP2;
+        int maxAdditional = Mathf.Max(0, scoreManager.GetMaxAdditionalPointsAvailable(player));
+        int maxReachable = playerScore + maxAdditional;
+
+        return maxReachable > opponentScore;
+    }
+
+    private bool TryGetForcedWinnerByMathematicalElimination(out PlayerID forcedWinner)
+    {
+        forcedWinner = PlayerID.None;
+
+        if (!IsScoreTargetSecondHalfActive())
+            return false;
+
+        bool p1CanStillWin = CanPlayerStillWinMathematically(PlayerID.Player1);
+        bool p2CanStillWin = CanPlayerStillWinMathematically(PlayerID.Player2);
+
+        if (!p1CanStillWin && !p2CanStillWin)
+        {
+            forcedWinner = ResolveScoreLeaderOrNone();
+            return true;
+        }
+
+        if (!p1CanStillWin)
+        {
+            forcedWinner = PlayerID.Player2;
+            return true;
+        }
+
+        if (!p2CanStillWin)
+        {
+            forcedWinner = PlayerID.Player1;
+            return true;
+        }
+
+        return false;
+    }
+
+    private PlayerID ResolveScoreLeaderOrNone()
+    {
+        if (NetScoreP1 > NetScoreP2)
+            return PlayerID.Player1;
+
+        if (NetScoreP2 > NetScoreP1)
+            return PlayerID.Player2;
+
+        return PlayerID.None;
+    }
+
+    private bool TryResolveScoreTargetBoardStateAuthority()
+    {
+        if (IsTerminalOutcomeLocked)
+            return false;
+
+        if (!Object.HasStateAuthority)
+            return false;
+
+        if (CurrentMatchMode != MatchMode.ScoreTarget)
+            return false;
+
+        if (!NetMatchStarted || NetMatchEnded)
+            return false;
+
+        if (NetShotInFlight)
+            return false;
+
+        if (NetBreakActive)
+            return false;
+
+        if (TryGetForcedWinnerByMathematicalElimination(out PlayerID forcedWinner))
+        {
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[FusionOnlineMatchController] Mathematical elimination resolved -> Winner=" + forcedWinner +
+                    " | ScoreP1=" + NetScoreP1 +
+                    " | ScoreP2=" + NetScoreP2,
+                    this);
+            }
+
+            EndMatchAuthority(MatchEndReason.NormalCompletion, forcedWinner);
+            return true;
+        }
+
+        if (!AreBoardsSaturatedNow())
+            return false;
+
+        if (!NetBreakTriggered)
+        {
+            if (logDebug)
+                Debug.Log("[FusionOnlineMatchController] All boards full during first half -> starting halftime.", this);
+
+            StartMidMatchBreakAuthority();
+            return true;
+        }
+
+        PlayerID winner = ResolveScoreLeaderOrNone();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[FusionOnlineMatchController] All boards full during second half -> ending match. Winner=" + winner +
+                " | ScoreP1=" + NetScoreP1 +
+                " | ScoreP2=" + NetScoreP2,
+                this);
+        }
+
+        EndMatchAuthority(MatchEndReason.NormalCompletion, winner);
+        return true;
     }
 
     private void StartMidMatchBreakAuthority()
@@ -2009,6 +2145,10 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         DespawnActiveBallAuthority();
         NetShotInFlight = false;
+
+        if (CurrentMatchMode == MatchMode.ScoreTarget && TryResolveScoreTargetBoardStateAuthority())
+            return;
+
         SpawnNewActiveBallAuthority(nextOwner);
     }
 
@@ -2038,6 +2178,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         if (CurrentMatchMode == MatchMode.ScoreTarget)
         {
+            if (TryResolveScoreTargetBoardStateAuthority())
+                return;
+
             if (ShouldEndMatchNow())
             {
                 EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
@@ -2080,6 +2223,9 @@ public class FusionOnlineMatchController : NetworkBehaviour
 
         if (CurrentMatchMode == MatchMode.ScoreTarget)
         {
+            if (TryResolveScoreTargetBoardStateAuthority())
+                return;
+
             if (ShouldEndMatchNow())
             {
                 EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
@@ -2285,10 +2431,16 @@ public class FusionOnlineMatchController : NetworkBehaviour
             return;
         }
 
-        if (CurrentMatchMode == MatchMode.ScoreTarget && ShouldEndMatchNow())
+        if (CurrentMatchMode == MatchMode.ScoreTarget)
         {
-            EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
-            return;
+            if (TryResolveScoreTargetBoardStateAuthority())
+                return;
+
+            if (ShouldEndMatchNow())
+            {
+                EndMatchAuthority(MatchEndReason.NormalCompletion, PlayerID.None);
+                return;
+            }
         }
 
         SpawnNewActiveBallAuthority(nextOwner);
@@ -2515,7 +2667,12 @@ public class FusionOnlineMatchController : NetworkBehaviour
         NetPendingBreakAfterShot = false;
         NetPostShotDelayRemaining = 0f;
         NetBreakReasonRaw = (byte)MidMatchBreakReason.None;
-        NetEndReasonRaw = (byte)reason;
+
+        NetEndReasonRaw = (byte)(
+            reason == MatchEndReason.None
+                ? MatchEndReason.NormalCompletion
+                : reason
+        );
 
         HideAllConnectionIssueOverlays();
 
