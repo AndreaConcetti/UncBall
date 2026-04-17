@@ -58,12 +58,12 @@ namespace UncballArena.Core.Auth
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-#if PLAYFAB_ENABLED
-            PlayFabSettings.staticPlayer.SecretKey = null;
-#endif
-
             if (logDebug)
-                Debug.Log("[PlayFabBackendAuthService] SignOutAsync completed.");
+            {
+                Debug.Log(
+                    "[PlayFabBackendAuthService] SignOutAsync completed. " +
+                    "No explicit PlayFab client credential reset is required in this project flow.");
+            }
 
             return Task.CompletedTask;
         }
@@ -74,6 +74,11 @@ namespace UncballArena.Core.Auth
 
             if (localIdentity == null || !localIdentity.IsValid)
                 throw new InvalidOperationException("[PlayFabBackendAuthService] Local identity invalid.");
+
+#if PLAYFAB_ENABLED
+            if (string.IsNullOrWhiteSpace(titleId))
+                throw new InvalidOperationException("[PlayFabBackendAuthService] TitleId is null or empty.");
+#endif
 
             string customId = BuildStableCustomId(localIdentity);
 
@@ -91,14 +96,21 @@ namespace UncballArena.Core.Auth
                 }
             };
 
+            if (logDebug)
+            {
+                Debug.Log(
+                    $"[PlayFabBackendAuthService] Starting LoginWithCustomID. " +
+                    $"LocalPlayerId={localIdentity.PlayerId} | CustomId={customId} | CreateAccount={createAccount}");
+            }
+
             PlayFabClientAPI.LoginWithCustomID(
                 request,
                 result =>
                 {
                     try
                     {
-                        string backendPlayerId = result.PlayFabId ?? string.Empty;
-                        string sessionTicket = result.SessionTicket ?? string.Empty;
+                        string backendPlayerId = result != null ? result.PlayFabId ?? string.Empty : string.Empty;
+                        string sessionTicket = result != null ? result.SessionTicket ?? string.Empty : string.Empty;
                         string backendDisplayName = ExtractDisplayName(result, localIdentity.DisplayName);
 
                         BackendAuthState state = new BackendAuthState(
@@ -134,6 +146,11 @@ namespace UncballArena.Core.Auth
 
                     tcs.TrySetException(new InvalidOperationException(message));
                 });
+
+            cancellationToken.Register(() =>
+            {
+                tcs.TrySetCanceled(cancellationToken);
+            });
 
             return tcs.Task;
 #else
