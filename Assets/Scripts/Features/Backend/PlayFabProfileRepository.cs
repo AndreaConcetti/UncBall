@@ -22,6 +22,8 @@ namespace UncballArena.Core.Profile.Repositories
         }
 
         private readonly bool logDebug;
+        private string lastRequestedTitleDisplayName = string.Empty;
+        private bool titleDisplayNameUpdateInFlight;
 
         public PlayFabProfileRepository(bool logDebug = true)
         {
@@ -44,7 +46,9 @@ namespace UncballArena.Core.Profile.Repositories
                 {
                     try
                     {
-                        if (result == null || result.Data == null || !result.Data.TryGetValue(ProfileDataKey, out UserDataRecord record))
+                        if (result == null ||
+                            result.Data == null ||
+                            !result.Data.TryGetValue(ProfileDataKey, out UserDataRecord record))
                         {
                             if (logDebug)
                             {
@@ -83,6 +87,8 @@ namespace UncballArena.Core.Profile.Repositories
                     }
                     catch (Exception ex)
                     {
+                        Debug.LogError(
+                            $"[PlayFabProfileRepository] Exception while loading profile. PlayerId={playerId} | Exception={ex}");
                         tcs.TrySetException(ex);
                     }
                 },
@@ -207,6 +213,15 @@ namespace UncballArena.Core.Profile.Repositories
             if (string.IsNullOrWhiteSpace(sanitized))
                 return;
 
+            if (titleDisplayNameUpdateInFlight && string.Equals(lastRequestedTitleDisplayName, sanitized, StringComparison.Ordinal))
+                return;
+
+            if (string.Equals(lastRequestedTitleDisplayName, sanitized, StringComparison.Ordinal))
+                return;
+
+            lastRequestedTitleDisplayName = sanitized;
+            titleDisplayNameUpdateInFlight = true;
+
             UpdateUserTitleDisplayNameRequest request = new UpdateUserTitleDisplayNameRequest
             {
                 DisplayName = sanitized
@@ -216,14 +231,42 @@ namespace UncballArena.Core.Profile.Repositories
                 request,
                 result =>
                 {
+                    titleDisplayNameUpdateInFlight = false;
+
                     if (logDebug)
                         Debug.Log($"[PlayFabProfileRepository] Updated PlayFab title display name -> {sanitized}");
                 },
                 error =>
                 {
+                    titleDisplayNameUpdateInFlight = false;
+
+                    if (IsDisplayNameConflict(error))
+                    {
+                        if (logDebug)
+                        {
+                            Debug.Log(
+                                $"[PlayFabProfileRepository] Title display name update skipped due to transient profile version conflict. Requested={sanitized}");
+                        }
+
+                        return;
+                    }
+
                     string message = error != null ? error.GenerateErrorReport() : "Unknown PlayFab display name update error.";
                     Debug.LogWarning($"[PlayFabProfileRepository] Display name update failed. Error={message}");
                 });
+        }
+
+        private static bool IsDisplayNameConflict(PlayFabError error)
+        {
+            if (error == null)
+                return false;
+
+            string report = error.GenerateErrorReport() ?? string.Empty;
+
+            return error.HttpCode == 409 ||
+                   error.Error == PlayFabErrorCode.EntityProfileVersionMismatch ||
+                   report.IndexOf("EntityProfileVersionMismatch", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   report.IndexOf("409 Conflict", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 #endif
     }

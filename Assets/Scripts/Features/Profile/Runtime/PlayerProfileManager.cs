@@ -1211,6 +1211,9 @@ public class PlayerProfileManager : MonoBehaviour
             current.EquippedTableSkinId,
             activeProfile.softCurrency,
             activeProfile.premiumCurrency,
+            activeProfile.rankedLp,
+            activeProfile.lastDailyLoginClaimDateUtc,
+            activeProfile.consecutiveLoginDays,
             current.CreatedAtUnixSeconds,
             GetNowUnixSeconds()
         );

@@ -64,8 +64,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
     private Coroutine playRoutine;
     private bool showTriggeredThisEnable;
-    private bool isShowing;
-    private string lastShownMatchId = string.Empty;
+    private string lastShownResultSignature;
 
     private void Awake()
     {
@@ -77,20 +76,13 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         ResolveDependencies();
         showTriggeredThisEnable = false;
 
-        if (!playOnEnable)
-            return;
-
-        if (isShowing)
-            return;
-
-        ShowLatest();
+        if (playOnEnable)
+            ShowLatest();
     }
 
     private void OnDisable()
     {
-        StopActiveSequence();
         showTriggeredThisEnable = false;
-        isShowing = false;
     }
 
     public void ShowLatest()
@@ -111,64 +103,33 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         Show(result, false);
     }
 
-    public void ForceReplayLatest()
-    {
-        ResolveDependencies();
-
-        if (resultStore == null)
-            return;
-
-        if (!resultStore.TryGetLatest(out OnlineMatchPresentationResult result))
-            return;
-
-        showTriggeredThisEnable = false;
-        lastShownMatchId = string.Empty;
-
-        Show(result, true);
-    }
-
-    public void Hide()
-    {
-        StopActiveSequence();
-        showTriggeredThisEnable = false;
-        isShowing = false;
-
-        if (levelUpOverlayPanel != null)
-            levelUpOverlayPanel.SetActive(false);
-
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
-    }
-
-    private void Show(OnlineMatchPresentationResult result, bool forceReplay)
+    public void Show(OnlineMatchPresentationResult result, bool forceReplay)
     {
         if (result == null || !result.hasData)
             return;
 
-        string currentMatchId = string.IsNullOrWhiteSpace(result.sourceMatchId)
-            ? string.Empty
-            : result.sourceMatchId.Trim();
+        string resultSignature = BuildResultSignature(result);
 
         if (!forceReplay)
         {
             if (showTriggeredThisEnable)
                 return;
 
-            if (isShowing)
-                return;
-
-            if (!string.IsNullOrEmpty(currentMatchId) && currentMatchId == lastShownMatchId)
+            if (!string.IsNullOrEmpty(lastShownResultSignature) && lastShownResultSignature == resultSignature)
                 return;
         }
 
         showTriggeredThisEnable = true;
-        isShowing = true;
-        lastShownMatchId = currentMatchId;
+        lastShownResultSignature = resultSignature;
 
         if (panelRoot != null)
             panelRoot.SetActive(true);
 
-        StopActiveSequence();
+        if (playRoutine != null)
+        {
+            StopCoroutine(playRoutine);
+            playRoutine = null;
+        }
 
         ApplyStaticTexts(result);
         ApplyImmediateVisuals(result);
@@ -191,11 +152,40 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 " | ResultIsRanked=" + result.isRanked +
                 " | RuntimeShouldShowLp=" + ShouldShowLpForCurrentContext(result) +
                 " | ForceReplay=" + forceReplay +
-                " | MatchId=" + currentMatchId,
+                " | Signature=" + resultSignature,
                 this);
         }
 
         playRoutine = StartCoroutine(PlaySequence(result));
+    }
+
+    public void ForceReplayLatest()
+    {
+        ResolveDependencies();
+
+        if (resultStore == null)
+            return;
+
+        if (!resultStore.TryGetLatest(out OnlineMatchPresentationResult result))
+            return;
+
+        showTriggeredThisEnable = false;
+        Show(result, true);
+    }
+
+    public void Hide()
+    {
+        if (playRoutine != null)
+        {
+            StopCoroutine(playRoutine);
+            playRoutine = null;
+        }
+
+        if (levelUpOverlayPanel != null)
+            levelUpOverlayPanel.SetActive(false);
+
+        if (panelRoot != null)
+            panelRoot.SetActive(false);
     }
 
     private IEnumerator PlaySequence(OnlineMatchPresentationResult result)
@@ -229,8 +219,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             if (levelUpOverlayVisibleSeconds > 0f)
                 yield return new WaitForSecondsRealtime(levelUpOverlayVisibleSeconds);
 
-            if (levelUpOverlayPanel != null)
-                levelUpOverlayPanel.SetActive(false);
+            levelUpOverlayPanel.SetActive(false);
 
             if (animateRewardTotalsAfterLevelUp)
                 yield return AnimateRewardTotalsAfterLevelUp(result);
@@ -243,7 +232,6 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         }
 
         playRoutine = null;
-        isShowing = false;
     }
 
     private void ApplyStaticTexts(OnlineMatchPresentationResult result)
@@ -277,11 +265,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         if (lpGainedText != null)
         {
             lpGainedText.gameObject.SetActive(showLpTexts);
-
-            if (showLpTexts)
-                lpGainedText.text = FormatLpDelta(result.rankedLpDelta);
-            else
-                lpGainedText.text = string.Empty;
+            lpGainedText.text = showLpTexts ? FormatLpDelta(result.rankedLpDelta) : string.Empty;
         }
 
         if (animatedTotalLpText != null)
@@ -322,10 +306,8 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
     private void ApplyFinalRewardVisuals(OnlineMatchPresentationResult result)
     {
-        ChestType finalChestType = ResolveFinalChestType(result);
-
         SetDisplayedSoftCurrency(Mathf.Max(0, result.totalSoftCurrencyGained));
-        SetDisplayedChest(Mathf.Max(0, result.totalChestCount), finalChestType);
+        SetDisplayedChest(Mathf.Max(0, result.totalChestCount), ResolveFinalChestType(result));
 
         if (logDebug)
         {
@@ -333,7 +315,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 "[OnlineRewardsObtainedPresenter] ApplyFinalRewardVisuals -> " +
                 "FinalSoft=" + result.totalSoftCurrencyGained +
                 " | FinalChestCount=" + result.totalChestCount +
-                " | FinalChestType=" + finalChestType,
+                " | FinalChestType=" + ResolveFinalChestType(result),
                 this);
         }
     }
@@ -399,12 +381,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
         if (endLevel <= startLevel)
         {
-            yield return AnimateXpSegment(
-                result.startLevelProgress01,
-                result.endLevelProgress01,
-                startLevel,
-                xpAnimationDuration);
-
+            yield return AnimateXpSegment(result.startLevelProgress01, result.endLevelProgress01, startLevel, xpAnimationDuration);
             yield break;
         }
 
@@ -412,11 +389,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         float resetPause = Mathf.Max(0f, levelUpXpResetPauseSeconds);
         float secondSegmentDuration = Mathf.Max(0.05f, xpAnimationDuration * 0.45f);
 
-        yield return AnimateXpSegment(
-            result.startLevelProgress01,
-            1f,
-            startLevel,
-            firstSegmentDuration);
+        yield return AnimateXpSegment(result.startLevelProgress01, 1f, startLevel, firstSegmentDuration);
 
         if (playerLevelText != null)
             playerLevelText.text = "LV " + endLevel;
@@ -429,11 +402,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         if (resetPause > 0f)
             yield return new WaitForSecondsRealtime(resetPause);
 
-        yield return AnimateXpSegment(
-            0f,
-            result.endLevelProgress01,
-            endLevel,
-            secondSegmentDuration);
+        yield return AnimateXpSegment(0f, result.endLevelProgress01, endLevel, secondSegmentDuration);
     }
 
     private IEnumerator AnimateXpSegment(float fromFill, float toFill, int levelToDisplay, float duration)
@@ -513,11 +482,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         if (levelUpOverlaySoftCurrencyText != null)
         {
             levelUpOverlaySoftCurrencyText.gameObject.SetActive(result.levelUpBonusSoftCurrency > 0);
-
-            if (result.levelUpBonusSoftCurrency > 0)
-                levelUpOverlaySoftCurrencyText.text = "+" + result.levelUpBonusSoftCurrency;
-            else
-                levelUpOverlaySoftCurrencyText.text = string.Empty;
+            levelUpOverlaySoftCurrencyText.text = result.levelUpBonusSoftCurrency > 0 ? "+" + result.levelUpBonusSoftCurrency : string.Empty;
         }
 
         bool hasChest = result.levelUpBonusChestCount > 0;
@@ -540,8 +505,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 "Soft=" + result.levelUpBonusSoftCurrency +
                 " | ChestCount=" + result.levelUpBonusChestCount +
                 " | ChestType=" + result.levelUpBonusChestType,
-                this
-            );
+                this);
         }
     }
 
@@ -653,16 +617,12 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
         if (raw == "RANDOM")
             return "RANDOM";
-
         if (raw.Contains("LEGENDARY"))
             return "LEGENDARY";
-
         if (raw.Contains("EPIC"))
             return "EPIC";
-
         if (raw.Contains("RARE"))
             return "RARE";
-
         if (raw.Contains("COMMON"))
             return "COMMON";
 
@@ -689,6 +649,33 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         return flowController.RuntimeContext.queueType == QueueType.Ranked;
     }
 
+    private string BuildResultSignature(OnlineMatchPresentationResult result)
+    {
+        return string.Concat(
+            SafeKey(result.playerName), "|",
+            result.startLevel, "|",
+            result.endLevel, "|",
+            Mathf.RoundToInt(result.startLevelProgress01 * 1000f), "|",
+            Mathf.RoundToInt(result.endLevelProgress01 * 1000f), "|",
+            result.totalSoftCurrencyGained, "|",
+            result.totalChestCount, "|",
+            (int)result.totalChestType, "|",
+            result.levelUpCount, "|",
+            result.levelUpBonusSoftCurrency, "|",
+            result.levelUpBonusChestCount, "|",
+            (int)result.levelUpBonusChestType, "|",
+            result.rankedLpDelta, "|",
+            result.newRankedLpTotal, "|",
+            result.isRanked ? 1 : 0, "|",
+            SafeKey(result.titleText), "|",
+            SafeKey(result.rewardSummaryText));
+    }
+
+    private string SafeKey(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+    }
+
     private string FormatLpDelta(int value)
     {
         if (value > 0)
@@ -704,18 +691,6 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     {
         string resolved = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         return resolved.ToUpperInvariant();
-    }
-
-    private void StopActiveSequence()
-    {
-        if (playRoutine != null)
-        {
-            StopCoroutine(playRoutine);
-            playRoutine = null;
-        }
-
-        if (levelUpOverlayPanel != null)
-            levelUpOverlayPanel.SetActive(false);
     }
 
     private void ResolveDependencies()

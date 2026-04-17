@@ -117,10 +117,12 @@ namespace UncballArena.Core.Profile.Services
         {
             EnsureProfileExists();
 
-            if (string.Equals(CurrentProfile.EquippedBallSkinId, skinId ?? string.Empty, StringComparison.Ordinal))
+            string sanitized = string.IsNullOrWhiteSpace(skinId) ? string.Empty : skinId.Trim();
+
+            if (string.Equals(CurrentProfile.EquippedBallSkinId, sanitized, StringComparison.Ordinal))
                 return CurrentProfile;
 
-            CurrentProfile = CurrentProfile.WithEquippedBallSkin(skinId);
+            CurrentProfile = CurrentProfile.WithEquippedBallSkin(sanitized);
             await repository.SaveAsync(CurrentProfile);
             RaiseProfileChanged();
             return CurrentProfile;
@@ -130,10 +132,12 @@ namespace UncballArena.Core.Profile.Services
         {
             EnsureProfileExists();
 
-            if (string.Equals(CurrentProfile.EquippedTableSkinId, skinId ?? string.Empty, StringComparison.Ordinal))
+            string sanitized = string.IsNullOrWhiteSpace(skinId) ? string.Empty : skinId.Trim();
+
+            if (string.Equals(CurrentProfile.EquippedTableSkinId, sanitized, StringComparison.Ordinal))
                 return CurrentProfile;
 
-            CurrentProfile = CurrentProfile.WithEquippedTableSkin(skinId);
+            CurrentProfile = CurrentProfile.WithEquippedTableSkin(sanitized);
             await repository.SaveAsync(CurrentProfile);
             RaiseProfileChanged();
             return CurrentProfile;
@@ -197,6 +201,108 @@ namespace UncballArena.Core.Profile.Services
             return CurrentProfile;
         }
 
+        public async Task<ProfileSnapshot> SetCurrenciesAsync(int softCurrency, int hardCurrency)
+        {
+            EnsureProfileExists();
+
+            int sanitizedSoft = Mathf.Max(0, softCurrency);
+            int sanitizedHard = Mathf.Max(0, hardCurrency);
+
+            if (CurrentProfile.SoftCurrency == sanitizedSoft &&
+                CurrentProfile.HardCurrency == sanitizedHard)
+            {
+                return CurrentProfile;
+            }
+
+            CurrentProfile = CurrentProfile.WithCurrencies(sanitizedSoft, sanitizedHard);
+            await repository.SaveAsync(CurrentProfile);
+            RaiseProfileChanged();
+            return CurrentProfile;
+        }
+
+        public async Task<ProfileSnapshot> SetRankedLpAsync(int rankedLp)
+        {
+            EnsureProfileExists();
+
+            int sanitizedLp = Mathf.Max(0, rankedLp);
+
+            if (CurrentProfile.RankedLp == sanitizedLp)
+                return CurrentProfile;
+
+            CurrentProfile = CurrentProfile.WithRankedLp(sanitizedLp);
+            await repository.SaveAsync(CurrentProfile);
+            RaiseProfileChanged();
+            return CurrentProfile;
+        }
+
+        public async Task<ProfileSnapshot> AddRankedLpAsync(int delta)
+        {
+            EnsureProfileExists();
+
+            int target = Mathf.Max(0, CurrentProfile.RankedLp + delta);
+            return await SetRankedLpAsync(target);
+        }
+
+        public async Task<ProfileSnapshot> SetDailyLoginStateAsync(
+            string lastDailyLoginClaimDateUtc,
+            int consecutiveLoginDays)
+        {
+            EnsureProfileExists();
+
+            string sanitizedDate = string.IsNullOrWhiteSpace(lastDailyLoginClaimDateUtc)
+                ? string.Empty
+                : lastDailyLoginClaimDateUtc.Trim();
+
+            int sanitizedStreak = Mathf.Max(0, consecutiveLoginDays);
+
+            bool unchanged =
+                string.Equals(CurrentProfile.LastDailyLoginClaimDateUtc, sanitizedDate, StringComparison.Ordinal) &&
+                CurrentProfile.ConsecutiveLoginDays == sanitizedStreak;
+
+            if (unchanged)
+                return CurrentProfile;
+
+            CurrentProfile = CurrentProfile.WithDailyLoginState(sanitizedDate, sanitizedStreak);
+            await repository.SaveAsync(CurrentProfile);
+            RaiseProfileChanged();
+            return CurrentProfile;
+        }
+
+        public async Task<ProfileSnapshot> SetProgressionAndDailyLoginAsync(
+            int xp,
+            int level,
+            string lastDailyLoginClaimDateUtc,
+            int consecutiveLoginDays)
+        {
+            EnsureProfileExists();
+
+            int sanitizedXp = Mathf.Max(0, xp);
+            int sanitizedLevel = Mathf.Max(1, level);
+            string sanitizedDate = string.IsNullOrWhiteSpace(lastDailyLoginClaimDateUtc)
+                ? string.Empty
+                : lastDailyLoginClaimDateUtc.Trim();
+            int sanitizedStreak = Mathf.Max(0, consecutiveLoginDays);
+
+            bool unchanged =
+                CurrentProfile.Xp == sanitizedXp &&
+                CurrentProfile.Level == sanitizedLevel &&
+                string.Equals(CurrentProfile.LastDailyLoginClaimDateUtc, sanitizedDate, StringComparison.Ordinal) &&
+                CurrentProfile.ConsecutiveLoginDays == sanitizedStreak;
+
+            if (unchanged)
+                return CurrentProfile;
+
+            CurrentProfile = CurrentProfile.WithProgressionAndDailyLogin(
+                sanitizedXp,
+                sanitizedLevel,
+                sanitizedDate,
+                sanitizedStreak);
+
+            await repository.SaveAsync(CurrentProfile);
+            RaiseProfileChanged();
+            return CurrentProfile;
+        }
+
         public async Task<ProfileSnapshot> ApplyAuthoritativeSnapshotAsync(ProfileSnapshot snapshot)
         {
             if (snapshot == null || !snapshot.IsValid())
@@ -250,8 +356,10 @@ namespace UncballArena.Core.Profile.Services
 
         private void EnsureProfileExists()
         {
-            if (CurrentProfile == null)
-                throw new InvalidOperationException("[ProfileService] CurrentProfile is null. InitializeAsync or LoadOrCreateProfileAsync must be called first.");
+            if (CurrentProfile != null && CurrentProfile.IsValid())
+                return;
+
+            throw new InvalidOperationException("[ProfileService] CurrentProfile is null or invalid.");
         }
 
         private void RaiseProfileChanged()
