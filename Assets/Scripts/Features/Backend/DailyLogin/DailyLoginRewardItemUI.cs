@@ -1,6 +1,15 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+
+[Serializable]
+public struct DailyLoginRewardVisualMapping
+{
+    public DailyLoginRewardType rewardType;
+    public Sprite sprite;
+    public string labelOverride;
+}
 
 public class DailyLoginRewardItemUI : MonoBehaviour
 {
@@ -10,24 +19,28 @@ public class DailyLoginRewardItemUI : MonoBehaviour
     [SerializeField] private TMP_Text stateText;
 
     [Header("Visuals")]
-    [SerializeField] private Image chestImage;
+    [SerializeField] private Image rewardIcon;
     [SerializeField] private GameObject claimedMark;
     [SerializeField] private GameObject todayHighlight;
     [SerializeField] private GameObject claimableHighlight;
 
-    [Header("Chest mappings optional")]
-    [SerializeField] private ChestVisualMapping[] chestVisualMappings;
+    [Header("Reward mappings")]
+    [SerializeField] private DailyLoginRewardVisualMapping[] rewardVisualMappings;
+
+    private DailyLoginDayState currentState;
 
     public void Bind(DailyLoginDayState state)
     {
+        currentState = state;
+
         if (dayText != null)
-            dayText.text = "DAY " + state.dayIndex;
+            dayText.text = "DAY " + Mathf.Max(1, state.dayIndex);
 
         if (rewardText != null)
-            rewardText.text = BuildRewardLabel(state.reward);
+            rewardText.text = BuildRewardText(state);
 
         if (stateText != null)
-            stateText.text = BuildStateLabel(state);
+            stateText.text = BuildStateText(state);
 
         if (claimedMark != null)
             claimedMark.SetActive(state.isClaimed);
@@ -38,59 +51,84 @@ public class DailyLoginRewardItemUI : MonoBehaviour
         if (claimableHighlight != null)
             claimableHighlight.SetActive(state.isClaimable);
 
-        ApplyChestVisual(state.reward);
+        ApplyIcon(state);
     }
 
-    private string BuildRewardLabel(DailyLoginRewardDefinition reward)
+    private void ApplyIcon(DailyLoginDayState state)
     {
-        if (!string.IsNullOrWhiteSpace(reward.label))
-            return reward.label.ToUpperInvariant();
+        if (rewardIcon == null)
+            return;
 
-        switch (reward.rewardType)
+        DailyLoginRewardVisualMapping mapping = FindMapping(state.rewardType);
+
+        if (mapping.sprite != null)
         {
-            case DailyLoginRewardType.SoftCurrency:
-                return reward.amount + " COINS";
-            case DailyLoginRewardType.PremiumCurrency:
-                return reward.amount + " GEMS";
-            case DailyLoginRewardType.Chest:
-                return "CHEST X" + Mathf.Max(1, reward.amount);
-            default:
-                return "-";
+            rewardIcon.gameObject.SetActive(true);
+            rewardIcon.sprite = mapping.sprite;
+            rewardIcon.enabled = true;
+        }
+        else
+        {
+            rewardIcon.gameObject.SetActive(false);
         }
     }
 
-    private string BuildStateLabel(DailyLoginDayState state)
+    private string BuildRewardText(DailyLoginDayState state)
+    {
+        switch (state.rewardType)
+        {
+            case DailyLoginRewardType.SoftCurrency:
+                return state.amount + " COINS";
+
+            case DailyLoginRewardType.PremiumCurrency:
+                return state.amount + " GEMS";
+
+            case DailyLoginRewardType.Chest:
+                if (!string.IsNullOrWhiteSpace(state.customLabel))
+                    return state.customLabel.ToUpperInvariant();
+
+                return "CHEST";
+
+            case DailyLoginRewardType.FreeLuckyShot:
+                return state.amount > 1
+                    ? state.amount + " FREE SHOTS"
+                    : "FREE SHOT";
+
+            default:
+                return string.Empty;
+        }
+    }
+
+    private string BuildStateText(DailyLoginDayState state)
     {
         if (state.isClaimed)
             return "CLAIMED";
 
         if (state.isClaimable)
-            return "TODAY";
+            return "CLAIM NOW";
 
-        if (state.isMissed)
-            return "UPCOMING";
+        if (state.isToday)
+            return "READY";
 
-        return string.Empty;
+        return "LOCKED";
     }
 
-    private void ApplyChestVisual(DailyLoginRewardDefinition reward)
+    private DailyLoginRewardVisualMapping FindMapping(DailyLoginRewardType rewardType)
     {
-        if (chestImage == null)
-            return;
-
-        bool showChest = reward.rewardType == DailyLoginRewardType.Chest && reward.amount > 0;
-        chestImage.gameObject.SetActive(showChest);
-
-        if (!showChest)
-            return;
-
-        for (int i = 0; i < chestVisualMappings.Length; i++)
+        if (rewardVisualMappings != null)
         {
-            if (chestVisualMappings[i].chestType == reward.chestType)
+            for (int i = 0; i < rewardVisualMappings.Length; i++)
             {
-                chestImage.sprite = chestVisualMappings[i].sprite;
-                return;
+                if (rewardVisualMappings[i].rewardType == rewardType)
+                    return rewardVisualMappings[i];
             }
         }
+
+        return new DailyLoginRewardVisualMapping
+        {
+            rewardType = rewardType,
+            sprite = null,
+            labelOverride = string.Empty
+        };
     }
 }

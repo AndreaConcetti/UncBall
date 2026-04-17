@@ -1,5 +1,3 @@
-using System;
-using System.Threading;
 using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
@@ -9,7 +7,7 @@ public class DailyLoginPanelUI : MonoBehaviour
 {
     [Header("Roots")]
     [SerializeField] private GameObject panelRoot;
-    [SerializeField] private Transform daysContainer;
+    [SerializeField] private RectTransform daysContainer;
     [SerializeField] private DailyLoginRewardItemUI dayItemPrefab;
 
     [Header("Texts")]
@@ -30,135 +28,185 @@ public class DailyLoginPanelUI : MonoBehaviour
     [SerializeField] private bool verboseLogs = true;
 
     private DailyLoginRewardService service;
-    private CancellationTokenSource cts;
     private DailyLoginPreviewState currentPreview;
-    private DailyLoginRewardItemUI[] spawnedItems = Array.Empty<DailyLoginRewardItemUI>();
+    private bool isRefreshing;
 
     private void Awake()
     {
-        service = DailyLoginRewardService.Instance;
+        ResolveService();
 
         if (claimButton != null)
-            claimButton.onClick.AddListener(OnPressClaim);
+            claimButton.onClick.AddListener(HandleClaimPressed);
 
         if (closeButton != null)
-            closeButton.onClick.AddListener(Close);
+            closeButton.onClick.AddListener(ClosePanel);
+
+        if (verboseLogs)
+        {
+            Debug.Log(
+                "[DailyLoginPanelUI] Awake -> " +
+                "Service=" + (service != null) +
+                " | PanelRoot=" + GetName(panelRoot) +
+                " | DaysContainer=" + GetName(daysContainer) +
+                " | DayItemPrefab=" + GetName(dayItemPrefab),
+                this);
+        }
     }
 
     private void OnEnable()
     {
-        cts = new CancellationTokenSource();
+        if (verboseLogs)
+            Debug.Log("[DailyLoginPanelUI] OnEnable called.", this);
 
-        if (service == null)
-            service = DailyLoginRewardService.Instance;
+        ResolveService();
 
-        if (service != null)
-        {
-            service.PreviewUpdated += HandlePreviewUpdated;
-            service.ClaimCompleted += HandleClaimCompleted;
-        }
+        if (verboseLogs)
+            Debug.Log("[DailyLoginPanelUI] OnEnable -> Service=" + (service != null), this);
 
         if (refreshOnEnable)
-            _ = RefreshAsync();
-    }
-
-    private void OnDisable()
-    {
-        if (service != null)
-        {
-            service.PreviewUpdated -= HandlePreviewUpdated;
-            service.ClaimCompleted -= HandleClaimCompleted;
-        }
-
-        cts?.Cancel();
-        cts?.Dispose();
-        cts = null;
+            RefreshNow();
     }
 
     private void Update()
     {
-        if (resetTimerText == null || !currentPreview.isReady)
+        if (!currentPreview.isReady)
             return;
 
-        long seconds = Mathf.Max(0, (int)(currentPreview.nextResetUnixSeconds - DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
-        TimeSpan span = TimeSpan.FromSeconds(seconds);
-        resetTimerText.text = $"NEXT RESET IN {span.Hours:00}:{span.Minutes:00}:{span.Seconds:00}";
+        if (resetTimerText != null)
+            resetTimerText.text = BuildResetText(currentPreview.nextResetUnixSeconds);
     }
 
-    public async Task RefreshAsync()
+    public void RefreshNow()
     {
-        if (service == null)
-            service = DailyLoginRewardService.Instance;
-
-        if (service == null)
-            return;
-
-        DailyLoginPreviewState preview = await service.RefreshPreviewAsync(cts != null ? cts.Token : default);
-        ApplyPreview(preview);
-    }
-
-    public void Open()
-    {
-        if (panelRoot != null)
-            panelRoot.SetActive(true);
+        if (verboseLogs)
+            Debug.Log("[DailyLoginPanelUI] RefreshNow called.", this);
 
         _ = RefreshAsync();
     }
 
-    public void Close()
+    private async Task RefreshAsync()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
-    }
-
-    private async void OnPressClaim()
-    {
-        if (service == null)
+        if (isRefreshing)
             return;
 
-        SetFeedback("Claiming...");
-        SetClaimInteractable(false);
-        await service.ClaimTodayAsync(cts != null ? cts.Token : default);
+        isRefreshing = true;
+
+        if (verboseLogs)
+        {
+            Debug.Log(
+                "[DailyLoginPanelUI] RefreshAsync start -> " +
+                "ServiceBeforeResolve=" + (service != null) +
+                " | Container=" + GetName(daysContainer) +
+                " | Prefab=" + GetName(dayItemPrefab),
+                this);
+        }
+
+        ResolveService();
+
+        if (verboseLogs)
+            Debug.Log("[DailyLoginPanelUI] RefreshAsync -> ServiceAfterResolve=" + (service != null), this);
+
+        if (service == null)
+        {
+            SetFeedback("Daily login service missing.");
+            isRefreshing = false;
+            return;
+        }
+
+        await Task.Yield();
+
+        currentPreview = service.GetPreviewState();
+        RebuildItems(currentPreview);
+        ApplyPreview(currentPreview);
+
+        isRefreshing = false;
     }
 
-    private void HandlePreviewUpdated(DailyLoginPreviewState preview)
+    private void HandleClaimPressed()
     {
-        ApplyPreview(preview);
+        ResolveService();
+
+        if (service == null)
+        {
+            SetFeedback("Daily login service missing.");
+            return;
+        }
+
+        DailyLoginClaimResult result = service.ClaimTodayReward();
+
+        if (!result.success)
+        {
+            SetFeedback(string.IsNullOrWhiteSpace(result.failureReason)
+                ? "Reward not claimable."
+                : result.failureReason);
+
+            RefreshNow();
+            return;
+        }
+
+        if (rewardPopup != null)
+            rewardPopup.Show(result);
+
+        SetFeedback(string.Empty);
+        RefreshNow();
     }
 
-    private void HandleClaimCompleted(DailyLoginClaimResult result)
+    private void RebuildItems(DailyLoginPreviewState preview)
     {
-        ApplyPreview(result.previewAfterClaim);
-
-        if (result.success)
+        if (daysContainer == null || dayItemPrefab == null)
         {
-            SetFeedback(BuildClaimFeedback(result));
-
-            if (rewardPopup != null)
-                rewardPopup.Show(result);
+            SetFeedback("Daily login UI references missing.");
+            return;
         }
-        else if (result.alreadyClaimed)
+
+        ClearContainer(daysContainer);
+
+        if (preview.days == null)
         {
-            SetFeedback("Reward already claimed today.");
+            if (verboseLogs)
+                Debug.LogWarning("[DailyLoginPanelUI] RebuildItems -> preview.days is null.", this);
+            return;
         }
-        else
+
+        for (int i = 0; i < preview.days.Length; i++)
         {
-            SetFeedback("Claim failed.");
+            DailyLoginRewardItemUI item = Instantiate(dayItemPrefab, daysContainer);
+            item.Bind(preview.days[i]);
+
+            if (verboseLogs)
+            {
+                Debug.Log(
+                    "[DailyLoginPanelUI] Spawning item index=" + i +
+                    " | DaySlot=" + preview.days[i].dayIndex +
+                    " | Claimable=" + preview.days[i].isClaimable +
+                    " | Claimed=" + preview.days[i].isClaimed,
+                    this);
+            }
+        }
+
+        if (verboseLogs)
+        {
+            Debug.Log(
+                "[DailyLoginPanelUI] RebuildItems complete -> " +
+                "Spawned=" + preview.days.Length +
+                " | ChildrenNow=" + daysContainer.childCount,
+                this);
         }
     }
 
     private void ApplyPreview(DailyLoginPreviewState preview)
     {
-        currentPreview = preview;
-
         if (titleText != null)
             titleText.text = "DAILY LOGIN";
 
         if (streakText != null)
-            streakText.text = $"DAY {Mathf.Clamp(preview.nextClaimDay, 1, 7)} / 7";
+            streakText.text = "DAY " + Mathf.Clamp(preview.currentStreakDay, 0, 7) + "/7";
 
-        RebuildItems(preview);
-        SetClaimInteractable(HasClaimableDay(preview));
+        if (resetTimerText != null)
+            resetTimerText.text = BuildResetText(preview.nextResetUnixSeconds);
+
+        if (claimButton != null)
+            claimButton.interactable = preview.canClaimNow;
 
         if (verboseLogs)
         {
@@ -166,72 +214,70 @@ public class DailyLoginPanelUI : MonoBehaviour
                 "[DailyLoginPanelUI] ApplyPreview -> " +
                 "Ready=" + preview.isReady +
                 " | CurrentStreakDay=" + preview.currentStreakDay +
-                " | NextClaimDay=" + preview.nextClaimDay,
+                " | NextClaimDay=" + preview.nextClaimDayIndex +
+                " | SpawnedItems=" + (preview.days != null ? preview.days.Length : 0),
                 this);
         }
     }
 
-    private void RebuildItems(DailyLoginPreviewState preview)
+    public void OpenPanel()
     {
-        if (daysContainer == null || dayItemPrefab == null)
+        if (panelRoot != null)
+            panelRoot.SetActive(true);
+        else
+            gameObject.SetActive(true);
+
+        RefreshNow();
+    }
+
+    public void ClosePanel()
+    {
+        if (panelRoot != null)
+            panelRoot.SetActive(false);
+        else
+            gameObject.SetActive(false);
+    }
+
+    private void ResolveService()
+    {
+        if (service != null)
             return;
 
-        for (int i = daysContainer.childCount - 1; i >= 0; i--)
-            Destroy(daysContainer.GetChild(i).gameObject);
+        service = DailyLoginRewardService.Instance;
 
-        if (preview.days == null)
-        {
-            spawnedItems = Array.Empty<DailyLoginRewardItemUI>();
-            return;
-        }
-
-        spawnedItems = new DailyLoginRewardItemUI[preview.days.Length];
-
-        for (int i = 0; i < preview.days.Length; i++)
-        {
-            DailyLoginRewardItemUI item = Instantiate(dayItemPrefab, daysContainer);
-            item.Bind(preview.days[i]);
-            spawnedItems[i] = item;
-        }
+        if (service == null)
+            service = FindFirstObjectByType<DailyLoginRewardService>();
     }
 
-    private bool HasClaimableDay(DailyLoginPreviewState preview)
+    private void ClearContainer(RectTransform container)
     {
-        if (preview.days == null)
-            return false;
-
-        for (int i = 0; i < preview.days.Length; i++)
-        {
-            if (preview.days[i].isClaimable)
-                return true;
-        }
-
-        return false;
+        for (int i = container.childCount - 1; i >= 0; i--)
+            Destroy(container.GetChild(i).gameObject);
     }
 
-    private void SetClaimInteractable(bool interactable)
+    private string BuildResetText(long nextResetUnix)
     {
-        if (claimButton != null)
-            claimButton.interactable = interactable;
+        long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        long remaining = Mathf.Max(0, (int)(nextResetUnix - now));
+
+        int hours = (int)(remaining / 3600);
+        int minutes = (int)((remaining % 3600) / 60);
+        int seconds = (int)(remaining % 60);
+
+        return "NEXT RESET IN " + hours.ToString("00") + ":" + minutes.ToString("00") + ":" + seconds.ToString("00");
     }
 
-    private string BuildClaimFeedback(DailyLoginClaimResult result)
-    {
-        if (result.reward.rewardType == DailyLoginRewardType.SoftCurrency)
-            return $"Claimed {result.reward.amount} coins.";
-
-        if (result.reward.rewardType == DailyLoginRewardType.PremiumCurrency)
-            return $"Claimed {result.reward.amount} gems.";
-
-        if (result.reward.rewardType == DailyLoginRewardType.Chest)
-            return $"Claimed chest x{Mathf.Max(1, result.reward.amount)}.";
-
-        return "Reward claimed.";
-    }
-
-    private void SetFeedback(string text)
+    private void SetFeedback(string message)
     {
         if (feedbackText != null)
-            feedbackText.text = text;
+            feedbackText.text = message;
+
+        if (verboseLogs)
+            Debug.Log("[DailyLoginPanelUI] Feedback -> " + message, this);
+    }
+
+    private string GetName(Object target)
+    {
+        return target == null ? "<null>" : target.name;
     }
 }
