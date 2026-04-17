@@ -72,7 +72,6 @@ public class DailyLoginRewardService : MonoBehaviour
     [SerializeField] private bool verboseLogs = true;
 
     private const int CycleLength = 7;
-
     private const string LastClaimUnixKey = "DAILY_LOGIN_LAST_CLAIM_UNIX";
     private const string CurrentStreakKey = "DAILY_LOGIN_CURRENT_STREAK";
     private const string LastClaimDayIndexKey = "DAILY_LOGIN_LAST_CLAIM_DAY_INDEX";
@@ -292,7 +291,11 @@ public class DailyLoginRewardService : MonoBehaviour
         if (amount <= 0)
             return;
 
+#if UNITY_2023_1_OR_NEWER
         PlayerChestSlotInventory inventory = FindFirstObjectByType<PlayerChestSlotInventory>();
+#else
+        PlayerChestSlotInventory inventory = FindObjectOfType<PlayerChestSlotInventory>();
+#endif
         if (inventory == null)
         {
             if (verboseLogs)
@@ -328,7 +331,7 @@ public class DailyLoginRewardService : MonoBehaviour
             "TryAddChest",
             "AddRewardChest",
             "AddChestReward",
-            "AddChest"
+            "AwardChest"
         };
 
         for (int i = 0; i < candidateNames.Length; i++)
@@ -347,44 +350,27 @@ public class DailyLoginRewardService : MonoBehaviour
                 if (parameters.Length == 1 && parameters[0].ParameterType == typeof(ChestType))
                 {
                     object result = method.Invoke(inventory, new object[] { chestType });
-
-                    if (result is bool boolResult)
-                        return boolResult;
-
-                    return true;
+                    return result is bool boolResult ? boolResult : true;
                 }
 
                 if (parameters.Length == 2 &&
                     parameters[0].ParameterType == typeof(ChestType) &&
-                    parameters[1].ParameterType == typeof(bool))
+                    parameters[1].ParameterType == typeof(string))
                 {
-                    object result = method.Invoke(inventory, new object[] { chestType, true });
-
-                    if (result is bool boolResult)
-                        return boolResult;
-
-                    return true;
+                    object result = method.Invoke(inventory, new object[] { chestType, "daily_login" });
+                    return result is bool boolResult ? boolResult : true;
                 }
 
                 if (parameters.Length == 0)
                 {
                     object result = method.Invoke(inventory, null);
-
-                    if (result is bool boolResult)
-                        return boolResult;
-
-                    return true;
+                    return result is bool boolResult ? boolResult : true;
                 }
             }
             catch (Exception ex)
             {
                 if (verboseLogs)
-                {
-                    Debug.LogWarning(
-                        "[DailyLoginRewardService] Chest invoke failed -> Method=" + candidateNames[i] +
-                        " | Error=" + ex.Message,
-                        this);
-                }
+                    Debug.LogWarning("[DailyLoginRewardService] Chest grant reflection failed on method " + candidateNames[i] + " -> " + ex.Message, this);
             }
         }
 
@@ -394,7 +380,7 @@ public class DailyLoginRewardService : MonoBehaviour
     private void GrantFreeLuckyShot(int amount)
     {
         if (verboseLogs)
-            Debug.Log("[DailyLoginRewardService] GrantFreeLuckyShot -> placeholder amount=" + amount, this);
+            Debug.Log("[DailyLoginRewardService] GrantFreeLuckyShot -> Amount=" + amount + " (placeholder only).", this);
     }
 
     private long GetNowUnixSeconds()
@@ -402,9 +388,9 @@ public class DailyLoginRewardService : MonoBehaviour
         return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     }
 
-    private long GetNextUtcMidnightUnix(long nowUnix)
+    private long GetNextUtcMidnightUnix(long currentUnix)
     {
-        DateTimeOffset now = DateTimeOffset.FromUnixTimeSeconds(nowUnix);
+        DateTimeOffset now = DateTimeOffset.FromUnixTimeSeconds(currentUnix);
         DateTimeOffset nextMidnight = new DateTimeOffset(
             now.UtcDateTime.Date.AddDays(1),
             TimeSpan.Zero);
@@ -412,32 +398,32 @@ public class DailyLoginRewardService : MonoBehaviour
         return nextMidnight.ToUnixTimeSeconds();
     }
 
-    private bool IsSameUtcDay(long unixA, long unixB)
+    private bool IsSameUtcDay(long aUnix, long bUnix)
     {
-        if (unixA <= 0 || unixB <= 0)
+        if (aUnix <= 0 || bUnix <= 0)
             return false;
 
-        DateTime a = DateTimeOffset.FromUnixTimeSeconds(unixA).UtcDateTime.Date;
-        DateTime b = DateTimeOffset.FromUnixTimeSeconds(unixB).UtcDateTime.Date;
+        DateTime a = DateTimeOffset.FromUnixTimeSeconds(aUnix).UtcDateTime.Date;
+        DateTime b = DateTimeOffset.FromUnixTimeSeconds(bUnix).UtcDateTime.Date;
         return a == b;
     }
 
-    private bool IsYesterdayUtcDay(long unixA, long unixB)
+    private bool IsYesterdayUtcDay(long lastClaimUnix, long nowUnix)
     {
-        if (unixA <= 0 || unixB <= 0)
+        if (lastClaimUnix <= 0 || nowUnix <= 0)
             return false;
 
-        DateTime a = DateTimeOffset.FromUnixTimeSeconds(unixA).UtcDateTime.Date;
-        DateTime b = DateTimeOffset.FromUnixTimeSeconds(unixB).UtcDateTime.Date;
-        return a == b.AddDays(-1);
+        DateTime last = DateTimeOffset.FromUnixTimeSeconds(lastClaimUnix).UtcDateTime.Date;
+        DateTime now = DateTimeOffset.FromUnixTimeSeconds(nowUnix).UtcDateTime.Date;
+        return last == now.AddDays(-1);
     }
 
     private int SafeUnixToInt(long unix)
     {
-        if (unix <= int.MinValue)
+        if (unix < int.MinValue)
             return int.MinValue;
 
-        if (unix >= int.MaxValue)
+        if (unix > int.MaxValue)
             return int.MaxValue;
 
         return (int)unix;

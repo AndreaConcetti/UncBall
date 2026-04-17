@@ -245,8 +245,13 @@ public class DailyLoginPanelUI : MonoBehaviour
 
         service = DailyLoginRewardService.Instance;
 
+#if UNITY_2023_1_OR_NEWER
         if (service == null)
             service = FindFirstObjectByType<DailyLoginRewardService>();
+#else
+        if (service == null)
+            service = FindObjectOfType<DailyLoginRewardService>();
+#endif
     }
 
     private void ClearContainer(RectTransform container)

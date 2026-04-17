@@ -559,7 +559,7 @@ MonoBehaviour:
   dayText: {fileID: 3223107150956741337}
   rewardText: {fileID: 5170685356946723554}
   stateText: {fileID: 7465648865866027098}
-  rewardIcon: {fileID: 0}
+  rewardIcon: {fileID: 8787098652182234607}
   claimedMark: {fileID: 5789031043485588082}
   todayHighlight: {fileID: 3297246907740354544}
   claimableHighlight: {fileID: 7324004725577736114}

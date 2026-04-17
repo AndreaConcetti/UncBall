@@ -155,10 +155,10 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
                 return "+" + Mathf.Max(0, result.amount);
 
             case DailyLoginRewardType.Chest:
-                return result.amount > 1 ? "x" + result.amount : "x1";
+                return "X" + Mathf.Max(1, result.amount);
 
             case DailyLoginRewardType.FreeLuckyShot:
-                return result.amount > 1 ? "x" + result.amount : "x1";
+                return "X" + Mathf.Max(1, result.amount);
 
             default:
                 return string.Empty;
@@ -176,11 +176,6 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
             }
         }
 
-        return new DailyLoginPopupRewardVisualMapping
-        {
-            rewardType = rewardType,
-            sprite = null,
-            labelOverride = string.Empty
-        };
+        return default;
     }
 }
