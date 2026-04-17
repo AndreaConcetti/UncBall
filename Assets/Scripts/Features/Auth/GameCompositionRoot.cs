@@ -28,6 +28,9 @@ namespace UncballArena.Core.Bootstrap
         [SerializeField] private bool usePlayFabBackendAuth = false;
         [SerializeField] private string playFabTitleId = "";
 
+        [Header("Backend Profile")]
+        [SerializeField] private bool usePlayFabProfileRepository = true;
+
         private async void Awake()
         {
             if (Instance != null && Instance != this)
@@ -72,8 +75,11 @@ namespace UncballArena.Core.Bootstrap
                 backendAuthService
             );
 
+            IProfileRepository localCacheRepository = new LocalProfileRepository();
+            IProfileRepository profileRepository = CreateProfileRepository(localCacheRepository);
+
             ProfileService = new ProfileService(
-                new LocalProfileRepository(),
+                profileRepository,
                 AuthService
             );
 
@@ -85,10 +91,10 @@ namespace UncballArena.Core.Bootstrap
             if (AuthService.CurrentSession == null || !AuthService.CurrentSession.HasUsableIdentity())
                 await AuthService.SignInAsGuestAsync(CancellationToken.None);
 
-            string playerId = AuthService.CurrentSession.EffectivePlayerId;
+            string effectivePlayerId = AuthService.CurrentSession.EffectivePlayerId;
             string authDisplayName = AuthService.CurrentSession.DisplayName;
 
-            await ProfileService.InitializeAsync(playerId, string.Empty);
+            await ProfileService.InitializeAsync(effectivePlayerId, authDisplayName);
 
             if (ProfileService.CurrentProfile != null &&
                 string.IsNullOrWhiteSpace(ProfileService.CurrentProfile.DisplayName) &&
@@ -118,6 +124,17 @@ namespace UncballArena.Core.Bootstrap
                 return new PlayFabBackendAuthService(playFabTitleId);
 
             return new NullBackendAuthService();
+        }
+
+        private IProfileRepository CreateProfileRepository(IProfileRepository localCacheRepository)
+        {
+            if (usePlayFabProfileRepository)
+            {
+                IProfileRepository remoteRepository = new PlayFabProfileRepository();
+                return new CachedProfileRepository(remoteRepository, localCacheRepository);
+            }
+
+            return localCacheRepository;
         }
 
         private void OnDestroy()

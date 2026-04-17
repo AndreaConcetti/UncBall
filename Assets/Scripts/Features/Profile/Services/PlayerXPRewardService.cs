@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Globalization;
 using UnityEngine;
 using UncballArena.Core.Bootstrap;
@@ -30,10 +31,16 @@ public class PlayerXPRewardService : MonoBehaviour
     [SerializeField] private bool dontDestroyOnLoad = true;
     [SerializeField] private bool autoClaimDailyLoginOnStart = true;
 
+    [Header("Daily Login Persistence")]
+    [SerializeField] private string dailyLoginClaimDateKeyPrefix = "PLAYER_DAILY_LOGIN_LAST_DATE_UTC";
+    [SerializeField] private string consecutiveLoginDaysKeyPrefix = "PLAYER_DAILY_LOGIN_STREAK";
+    [SerializeField] private string localSessionClaimGuardKeyPrefix = "PLAYER_DAILY_LOGIN_SESSION_GUARD";
+
     [Header("Debug")]
     [SerializeField] private bool logDebug = true;
 
-    private bool dailyLoginCheckedThisSession = false;
+    private bool dailyLoginCheckedThisSession;
+    private Coroutine delayedAutoClaimRoutine;
 
     public event Action<PlayerXPGrantResult> OnXpGranted;
 
@@ -52,8 +59,87 @@ public class PlayerXPRewardService : MonoBehaviour
 
     private void Start()
     {
-        if (autoClaimDailyLoginOnStart)
-            TryClaimDailyLoginReward();
+        if (!autoClaimDailyLoginOnStart)
+            return;
+
+        StartDelayedAutoClaimIfNeeded();
+    }
+
+    private void OnEnable()
+    {
+        ResolveDependencies();
+
+        if (profileManager != null)
+        {
+            profileManager.OnActiveProfileChanged -= HandleProfileChanged;
+            profileManager.OnActiveProfileChanged += HandleProfileChanged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (profileManager != null)
+            profileManager.OnActiveProfileChanged -= HandleProfileChanged;
+    }
+
+    private void HandleProfileChanged(PlayerProfileRuntimeData _)
+    {
+        if (!autoClaimDailyLoginOnStart)
+            return;
+
+        if (dailyLoginCheckedThisSession)
+            return;
+
+        if (delayedAutoClaimRoutine == null)
+            StartDelayedAutoClaimIfNeeded();
+    }
+
+    private void StartDelayedAutoClaimIfNeeded()
+    {
+        if (delayedAutoClaimRoutine != null)
+            StopCoroutine(delayedAutoClaimRoutine);
+
+        delayedAutoClaimRoutine = StartCoroutine(AutoClaimDailyLoginWhenReadyCoroutine());
+    }
+
+    private IEnumerator AutoClaimDailyLoginWhenReadyCoroutine()
+    {
+        float timeout = 15f;
+        float elapsed = 0f;
+
+        while (!HasUsableResolvedProfile())
+        {
+            elapsed += Time.unscaledDeltaTime;
+            if (elapsed >= timeout)
+                break;
+
+            yield return null;
+        }
+
+        delayedAutoClaimRoutine = null;
+
+        if (!HasUsableResolvedProfile())
+        {
+            if (logDebug)
+            {
+                Debug.LogWarning(
+                    "[PlayerXPRewardService] Auto-claim skipped because no resolved profile became available in time.",
+                    this
+                );
+            }
+
+            yield break;
+        }
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerXPRewardService] Core/profile ready. Executing delayed daily login claim.",
+                this
+            );
+        }
+
+        TryClaimDailyLoginReward();
     }
 
     public PlayerXPGrantResult TryClaimDailyLoginReward()
@@ -64,8 +150,14 @@ public class PlayerXPRewardService : MonoBehaviour
         {
             success = false,
             source = "daily_login",
-            reason = ""
+            reason = string.Empty
         };
+
+        if (!HasUsableResolvedProfile())
+        {
+            result.reason = "profile_not_ready";
+            return result;
+        }
 
         if (dailyLoginCheckedThisSession)
         {
@@ -81,11 +173,26 @@ public class PlayerXPRewardService : MonoBehaviour
             return result;
         }
 
+        string profileId = GetResolvedProfileId();
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            result.reason = "missing_profile_id";
+            return result;
+        }
+
         string todayUtc = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        string sessionGuard = GetLocalSessionGuardDate(profileId);
+        if (!string.IsNullOrWhiteSpace(sessionGuard) && sessionGuard == todayUtc)
+        {
+            result.reason = "already_claimed_today_session_guard";
+            return result;
+        }
 
         string lastClaimDate = GetLastDailyLoginClaimDateUtc();
         if (!string.IsNullOrWhiteSpace(lastClaimDate) && lastClaimDate == todayUtc)
         {
+            SetLocalSessionGuardDate(profileId, todayUtc);
             result.reason = "already_claimed_today";
             return result;
         }
@@ -96,11 +203,11 @@ public class PlayerXPRewardService : MonoBehaviour
         if (!string.IsNullOrWhiteSpace(lastClaimDate))
         {
             if (DateTime.TryParseExact(
-                lastClaimDate,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out DateTime lastClaimParsed))
+                    lastClaimDate,
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out DateTime lastClaimParsed))
             {
                 DateTime yesterdayUtc = DateTime.UtcNow.Date.AddDays(-1);
 
@@ -118,6 +225,9 @@ public class PlayerXPRewardService : MonoBehaviour
             newDailyLoginDateUtc: todayUtc,
             newConsecutiveLoginDays: newStreak
         );
+
+        if (result.success)
+            SetLocalSessionGuardDate(profileId, todayUtc);
 
         if (logDebug)
         {
@@ -142,8 +252,14 @@ public class PlayerXPRewardService : MonoBehaviour
         {
             success = false,
             source = "match_completion",
-            reason = ""
+            reason = string.Empty
         };
+
+        if (!HasUsableResolvedProfile())
+        {
+            result.reason = "profile_not_ready";
+            return result;
+        }
 
         if (progressionRules == null)
         {
@@ -209,6 +325,9 @@ public class PlayerXPRewardService : MonoBehaviour
             newDailyLoginDateUtc,
             newConsecutiveLoginDays
         );
+
+        if (!string.IsNullOrWhiteSpace(newDailyLoginDateUtc))
+            SaveDailyLoginLocalState(newDailyLoginDateUtc, newConsecutiveLoginDays ?? result.consecutiveLoginDays);
 
         result.success = true;
         result.newTotalXp = newTotalXp;
@@ -279,20 +398,47 @@ public class PlayerXPRewardService : MonoBehaviour
         await GameCompositionRoot.Instance.ProfileService.ApplyAuthoritativeSnapshotAsync(updated);
 
         if (profileManager != null)
+        {
             profileManager.ApplyProgressionState(
                 totalXp: newTotalXp,
                 totalLevel: newLevel,
                 lastDailyLoginClaimDateUtc: newDailyLoginDateUtc,
                 consecutiveLoginDays: newConsecutiveLoginDays
             );
+        }
+    }
+
+    private bool HasUsableResolvedProfile()
+    {
+        string resolvedProfileId = GetResolvedProfileId();
+        if (string.IsNullOrWhiteSpace(resolvedProfileId))
+            return false;
+
+        if (string.Equals(resolvedProfileId, "local_player_1", StringComparison.OrdinalIgnoreCase))
+        {
+            if (IsUsingCoreProfile())
+                return true;
+
+            if (profileManager != null &&
+                profileManager.ActiveProfile != null &&
+                !string.IsNullOrWhiteSpace(profileManager.ActiveProfile.profileId) &&
+                !string.Equals(profileManager.ActiveProfile.profileId, "local_player_1", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        return true;
     }
 
     private bool IsUsingCoreProfile()
     {
         return GameCompositionRoot.Instance != null &&
-               GameCompositionRoot.Instance.IsReady &&
                GameCompositionRoot.Instance.ProfileService != null &&
-               GameCompositionRoot.Instance.ProfileService.CurrentProfile != null;
+               GameCompositionRoot.Instance.ProfileService.CurrentProfile != null &&
+               GameCompositionRoot.Instance.ProfileService.CurrentProfile.IsValid();
     }
 
     private int GetCurrentTotalXp()
@@ -319,18 +465,121 @@ public class PlayerXPRewardService : MonoBehaviour
 
     private string GetLastDailyLoginClaimDateUtc()
     {
+        string local = GetStoredDailyLoginDateForResolvedProfile();
+        if (!string.IsNullOrWhiteSpace(local))
+            return local;
+
         if (profileManager != null && profileManager.ActiveProfile != null)
-            return profileManager.ActiveProfile.lastDailyLoginClaimDateUtc;
+        {
+            string legacy = profileManager.ActiveProfile.lastDailyLoginClaimDateUtc;
+            if (!string.IsNullOrWhiteSpace(legacy))
+            {
+                SaveDailyLoginLocalState(legacy, GetCurrentConsecutiveLoginDays());
+                return legacy;
+            }
+        }
 
         return string.Empty;
     }
 
     private int GetCurrentConsecutiveLoginDays()
     {
+        int local = GetStoredConsecutiveLoginDaysForResolvedProfile();
+        if (local > 0)
+            return local;
+
         if (profileManager != null && profileManager.ActiveProfile != null)
-            return Mathf.Max(0, profileManager.ActiveProfile.consecutiveLoginDays);
+        {
+            int legacy = Mathf.Max(0, profileManager.ActiveProfile.consecutiveLoginDays);
+            if (legacy > 0)
+            {
+                string lastDate = profileManager.ActiveProfile.lastDailyLoginClaimDateUtc;
+                if (!string.IsNullOrWhiteSpace(lastDate))
+                    SaveDailyLoginLocalState(lastDate, legacy);
+            }
+
+            return legacy;
+        }
 
         return 0;
+    }
+
+    private void SaveDailyLoginLocalState(string claimDateUtc, int streak)
+    {
+        string profileId = GetResolvedProfileId();
+        if (string.IsNullOrWhiteSpace(profileId))
+            return;
+
+        PlayerPrefs.SetString(BuildDailyLoginClaimDateKey(profileId), claimDateUtc ?? string.Empty);
+        PlayerPrefs.SetInt(BuildConsecutiveLoginDaysKey(profileId), Mathf.Max(0, streak));
+        PlayerPrefs.Save();
+    }
+
+    private string GetStoredDailyLoginDateForResolvedProfile()
+    {
+        string profileId = GetResolvedProfileId();
+        if (string.IsNullOrWhiteSpace(profileId))
+            return string.Empty;
+
+        return PlayerPrefs.GetString(BuildDailyLoginClaimDateKey(profileId), string.Empty);
+    }
+
+    private int GetStoredConsecutiveLoginDaysForResolvedProfile()
+    {
+        string profileId = GetResolvedProfileId();
+        if (string.IsNullOrWhiteSpace(profileId))
+            return 0;
+
+        return Mathf.Max(0, PlayerPrefs.GetInt(BuildConsecutiveLoginDaysKey(profileId), 0));
+    }
+
+    private string GetLocalSessionGuardDate(string profileId)
+    {
+        if (string.IsNullOrWhiteSpace(profileId))
+            return string.Empty;
+
+        return PlayerPrefs.GetString(BuildLocalSessionGuardKey(profileId), string.Empty);
+    }
+
+    private void SetLocalSessionGuardDate(string profileId, string dateUtc)
+    {
+        if (string.IsNullOrWhiteSpace(profileId))
+            return;
+
+        PlayerPrefs.SetString(BuildLocalSessionGuardKey(profileId), dateUtc ?? string.Empty);
+        PlayerPrefs.Save();
+    }
+
+    private string GetResolvedProfileId()
+    {
+        if (IsUsingCoreProfile())
+            return GameCompositionRoot.Instance.ProfileService.CurrentProfile.PlayerId;
+
+        if (profileManager != null)
+        {
+            if (profileManager.ActiveProfile != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfile.profileId))
+                return profileManager.ActiveProfile.profileId;
+
+            if (!string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
+                return profileManager.ActiveProfileId;
+        }
+
+        return string.Empty;
+    }
+
+    private string BuildDailyLoginClaimDateKey(string profileId)
+    {
+        return $"{dailyLoginClaimDateKeyPrefix}_{profileId}";
+    }
+
+    private string BuildConsecutiveLoginDaysKey(string profileId)
+    {
+        return $"{consecutiveLoginDaysKeyPrefix}_{profileId}";
+    }
+
+    private string BuildLocalSessionGuardKey(string profileId)
+    {
+        return $"{localSessionClaimGuardKeyPrefix}_{profileId}";
     }
 
     private void ResolveDependencies()

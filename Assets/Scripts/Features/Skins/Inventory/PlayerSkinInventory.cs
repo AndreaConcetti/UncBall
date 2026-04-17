@@ -65,30 +65,22 @@ public class PlayerSkinInventory : MonoBehaviour
         MarkRuntimeRootPersistentIfNeeded();
 
         ResolveDependencies();
-        activeProfileId = ResolveCurrentProfileId();
 
-        LoadInventory();
-        EnsureRuntimeStructure();
-        MigrateLoadedDataIfNeeded();
-        RemoveDuplicateSkinsInPlace();
-
-        if (createStartupUnlockedSkinsIfSaveEmpty && IsInventoryEmpty())
-            CreateStartupUnlockedSkins();
-
-        EnsureEquippedSkinAppliedToLoadout();
-        SaveInventory();
-        NotifyInventoryChanged();
-
-        if (logDebug)
+        if (ShouldDeferProfileBoundInitialization())
         {
-            Debug.Log(
-                "[PlayerSkinInventory] Initialized. " +
-                "ProfileId=" + activeProfileId +
-                " | UnlockedSkins=" + runtimeData.unlockedSkins.Count +
-                " | EquippedSkinId=" + runtimeData.equippedSkinId,
-                this
-            );
+            EnsureRuntimeStructure();
+
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[PlayerSkinInventory] Deferred profile-bound initialization until core/profile is ready.",
+                    this);
+            }
+
+            return;
         }
+
+        InitializeForResolvedProfile();
     }
 
     private void OnEnable()
@@ -405,6 +397,39 @@ public class PlayerSkinInventory : MonoBehaviour
         SetActiveProfileId(profileData.profileId, true);
     }
 
+    private void InitializeForResolvedProfile()
+    {
+        activeProfileId = ResolveCurrentProfileId();
+
+        LoadInventory();
+        EnsureRuntimeStructure();
+        MigrateLoadedDataIfNeeded();
+        RemoveDuplicateSkinsInPlace();
+
+        if (createStartupUnlockedSkinsIfSaveEmpty && IsInventoryEmpty())
+            CreateStartupUnlockedSkins();
+
+        EnsureEquippedSkinAppliedToLoadout();
+        SaveInventory();
+        NotifyInventoryChanged();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerSkinInventory] Initialized. " +
+                "ProfileId=" + activeProfileId +
+                " | UnlockedSkins=" + runtimeData.unlockedSkins.Count +
+                " | EquippedSkinId=" + runtimeData.equippedSkinId,
+                this
+            );
+        }
+    }
+
+    private bool ShouldDeferProfileBoundInitialization()
+    {
+        return GameCompositionRoot.Instance != null && !GameCompositionRoot.Instance.IsReady;
+    }
+
     private void ResolveDependencies()
     {
         if (playerSkinLoadout == null)
@@ -690,6 +715,15 @@ public class PlayerSkinInventory : MonoBehaviour
 
     private string ResolveCurrentProfileId()
     {
+        if (GameCompositionRoot.Instance != null &&
+            GameCompositionRoot.Instance.IsReady &&
+            GameCompositionRoot.Instance.AuthService != null &&
+            GameCompositionRoot.Instance.AuthService.CurrentSession != null &&
+            !string.IsNullOrWhiteSpace(GameCompositionRoot.Instance.AuthService.CurrentSession.EffectivePlayerId))
+        {
+            return GameCompositionRoot.Instance.AuthService.CurrentSession.EffectivePlayerId.Trim();
+        }
+
         if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
             return profileManager.ActiveProfileId.Trim();
 

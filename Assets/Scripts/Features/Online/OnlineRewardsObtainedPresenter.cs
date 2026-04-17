@@ -64,6 +64,8 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
     private Coroutine playRoutine;
     private bool showTriggeredThisEnable;
+    private bool isShowing;
+    private string lastShownMatchId = string.Empty;
 
     private void Awake()
     {
@@ -75,13 +77,20 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         ResolveDependencies();
         showTriggeredThisEnable = false;
 
-        if (playOnEnable)
-            ShowLatest();
+        if (!playOnEnable)
+            return;
+
+        if (isShowing)
+            return;
+
+        ShowLatest();
     }
 
     private void OnDisable()
     {
+        StopActiveSequence();
         showTriggeredThisEnable = false;
+        isShowing = false;
     }
 
     public void ShowLatest()
@@ -94,24 +103,76 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         if (!resultStore.TryGetLatest(out OnlineMatchPresentationResult result))
             return;
 
-        Show(result);
+        Show(result, false);
     }
 
     public void Show(OnlineMatchPresentationResult result)
     {
+        Show(result, false);
+    }
+
+    public void ForceReplayLatest()
+    {
+        ResolveDependencies();
+
+        if (resultStore == null)
+            return;
+
+        if (!resultStore.TryGetLatest(out OnlineMatchPresentationResult result))
+            return;
+
+        showTriggeredThisEnable = false;
+        lastShownMatchId = string.Empty;
+
+        Show(result, true);
+    }
+
+    public void Hide()
+    {
+        StopActiveSequence();
+        showTriggeredThisEnable = false;
+        isShowing = false;
+
+        if (levelUpOverlayPanel != null)
+            levelUpOverlayPanel.SetActive(false);
+
+        if (panelRoot != null)
+            panelRoot.SetActive(false);
+    }
+
+    private void Show(OnlineMatchPresentationResult result, bool forceReplay)
+    {
         if (result == null || !result.hasData)
             return;
 
-        if (showTriggeredThisEnable)
-            return;
+        string currentMatchId = string.IsNullOrWhiteSpace(result.sourceMatchId)
+            ? string.Empty
+            : result.sourceMatchId.Trim();
+
+        if (!forceReplay)
+        {
+            if (showTriggeredThisEnable)
+                return;
+
+            if (isShowing)
+                return;
+
+            if (!string.IsNullOrEmpty(currentMatchId) && currentMatchId == lastShownMatchId)
+                return;
+        }
 
         showTriggeredThisEnable = true;
+        isShowing = true;
+        lastShownMatchId = currentMatchId;
 
         if (panelRoot != null)
             panelRoot.SetActive(true);
 
-        if (playRoutine != null)
-            StopCoroutine(playRoutine);
+        StopActiveSequence();
+
+        ApplyStaticTexts(result);
+        ApplyImmediateVisuals(result);
+        ApplyBaseRewardVisuals(result);
 
         if (logDebug)
         {
@@ -128,40 +189,17 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 " | TotalChest=" + result.totalChestCount +
                 " | LevelUpChest=" + result.levelUpBonusChestCount +
                 " | ResultIsRanked=" + result.isRanked +
-                " | RuntimeShouldShowLp=" + ShouldShowLpForCurrentContext(result),
+                " | RuntimeShouldShowLp=" + ShouldShowLpForCurrentContext(result) +
+                " | ForceReplay=" + forceReplay +
+                " | MatchId=" + currentMatchId,
                 this);
         }
 
         playRoutine = StartCoroutine(PlaySequence(result));
     }
 
-    public void ForceReplayLatest()
-    {
-        showTriggeredThisEnable = false;
-        ShowLatest();
-    }
-
-    public void Hide()
-    {
-        if (playRoutine != null)
-        {
-            StopCoroutine(playRoutine);
-            playRoutine = null;
-        }
-
-        if (levelUpOverlayPanel != null)
-            levelUpOverlayPanel.SetActive(false);
-
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
-    }
-
     private IEnumerator PlaySequence(OnlineMatchPresentationResult result)
     {
-        ApplyStaticTexts(result);
-        ApplyImmediateVisuals(result);
-        ApplyBaseRewardVisuals(result);
-
         if (startDelaySeconds > 0f)
             yield return new WaitForSecondsRealtime(startDelaySeconds);
 
@@ -191,7 +229,8 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
             if (levelUpOverlayVisibleSeconds > 0f)
                 yield return new WaitForSecondsRealtime(levelUpOverlayVisibleSeconds);
 
-            levelUpOverlayPanel.SetActive(false);
+            if (levelUpOverlayPanel != null)
+                levelUpOverlayPanel.SetActive(false);
 
             if (animateRewardTotalsAfterLevelUp)
                 yield return AnimateRewardTotalsAfterLevelUp(result);
@@ -204,6 +243,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
         }
 
         playRoutine = null;
+        isShowing = false;
     }
 
     private void ApplyStaticTexts(OnlineMatchPresentationResult result)
@@ -282,8 +322,10 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
 
     private void ApplyFinalRewardVisuals(OnlineMatchPresentationResult result)
     {
+        ChestType finalChestType = ResolveFinalChestType(result);
+
         SetDisplayedSoftCurrency(Mathf.Max(0, result.totalSoftCurrencyGained));
-        SetDisplayedChest(Mathf.Max(0, result.totalChestCount), ResolveFinalChestType(result));
+        SetDisplayedChest(Mathf.Max(0, result.totalChestCount), finalChestType);
 
         if (logDebug)
         {
@@ -291,7 +333,7 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
                 "[OnlineRewardsObtainedPresenter] ApplyFinalRewardVisuals -> " +
                 "FinalSoft=" + result.totalSoftCurrencyGained +
                 " | FinalChestCount=" + result.totalChestCount +
-                " | FinalChestType=" + ResolveFinalChestType(result),
+                " | FinalChestType=" + finalChestType,
                 this);
         }
     }
@@ -662,6 +704,18 @@ public class OnlineRewardsObtainedPresenter : MonoBehaviour
     {
         string resolved = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         return resolved.ToUpperInvariant();
+    }
+
+    private void StopActiveSequence()
+    {
+        if (playRoutine != null)
+        {
+            StopCoroutine(playRoutine);
+            playRoutine = null;
+        }
+
+        if (levelUpOverlayPanel != null)
+            levelUpOverlayPanel.SetActive(false);
     }
 
     private void ResolveDependencies()

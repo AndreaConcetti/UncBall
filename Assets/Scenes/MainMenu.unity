@@ -12686,6 +12686,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UncballArena.Core.Bootstrap.GameCompositionRoot
   dontDestroyOnLoad: 1
   initialGuestDisplayName: ENTER NAME HERE
+  usePlayFabBackendAuth: 1
+  playFabTitleId: 19D582
+  usePlayFabProfileRepository: 1
 --- !u!1 &619814229
 GameObject:
   m_ObjectHideFlags: 0
@@ -20892,7 +20895,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 440, y: -844.6667}
+  m_AnchoredPosition: {x: 440, y: -844.66675}
   m_SizeDelta: {x: 150, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1009417270
@@ -30962,6 +30965,9 @@ MonoBehaviour:
   progressionRules: {fileID: 1445563844}
   dontDestroyOnLoad: 1
   autoClaimDailyLoginOnStart: 1
+  waitForCoreProfileBeforeAutoClaim: 1
+  coreWaitPollInterval: 0.1
+  maxCoreWaitSeconds: 15
   logDebug: 1
 --- !u!114 &1445563844
 MonoBehaviour:
@@ -31011,6 +31017,7 @@ MonoBehaviour:
   logDebug: 1
   enableLightPolling: 1
   pollingInterval: 0.25
+  suppressPlaceholderWhileCoreBootstraps: 1
 --- !u!1 &1446061575
 GameObject:
   m_ObjectHideFlags: 0
@@ -41422,7 +41429,7 @@ MonoBehaviour:
       patternIntensity: 1
       patternScale: 1
       rarity: 0
-  logDebug: 0
+  logDebug: 1
 --- !u!114 &1726694515
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -41491,7 +41498,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8d26b3cb7a973944a7d42b7f7013fc3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LocalDeviceChestTimeProvider
-  logDebug: 0
+  logDebug: 1
 --- !u!1 &1731076499
 GameObject:
   m_ObjectHideFlags: 0
@@ -43999,7 +44006,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OnlinePlayerPresentationResolver
   onlineFlowController: {fileID: 1801468267}
-  logDebug: 0
+  logDebug: 1
 --- !u!114 &1801468269
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -44077,7 +44084,7 @@ MonoBehaviour:
   runnerManager: {fileID: 1801468266}
   retireSessionAsSoonAsMatchEnds: 1
   onlyServerMayRetireSession: 1
-  logDebug: 0
+  logDebug: 1
 --- !u!114 &1801468272
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -44101,7 +44108,7 @@ MonoBehaviour:
   popupDuration: 2
   checkContinuously: 1
   disableButtonInteractable: 0
-  logDebug: 0
+  logDebug: 1
 --- !u!1 &1805039842
 GameObject:
   m_ObjectHideFlags: 0
@@ -47226,7 +47233,7 @@ MonoBehaviour:
   patternIntensityRange: {x: 1, y: 1}
   patternScaleRange: {x: 1, y: 1}
   fallbackToNearestAvailableRarity: 1
-  logDebug: 0
+  logDebug: 1
 --- !u!114 &1920383339
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -47240,7 +47247,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChestDebugPanel
   playerChestSlotInventory: {fileID: 1726694513}
-  logDebug: 0
+  logDebug: 1
 --- !u!1 &1922575127
 GameObject:
   m_ObjectHideFlags: 0
@@ -48202,7 +48209,7 @@ MonoBehaviour:
   autoLoadGameplayScene: 1
   gameplaySceneName: Gameplay
   defaultDifficulty: 1
-  enableDebugLogs: 0
+  enableDebugLogs: 1
 --- !u!114 &1973634696
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -48276,7 +48283,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BotOfflineMatchRuntime
   dontDestroyOnLoad: 1
-  enableDebugLogs: 0
+  enableDebugLogs: 1
   hasPendingRequest: 0
   currentRequest:
     requestId: 

@@ -37,6 +37,9 @@ public class PlayerSkinLoadout : MonoBehaviour
     public string Player1ProfileId => player1Slot != null ? player1Slot.profileId : string.Empty;
     public string Player2ProfileId => player2Slot != null ? player2Slot.profileId : string.Empty;
 
+    private PlayerProfileManager subscribedProfileManager;
+    private bool subscribed;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -52,14 +55,19 @@ public class PlayerSkinLoadout : MonoBehaviour
         EnsureRuntimeStructure();
         SanitizeRuntimeData();
 
-        player1Slot.profileId = ResolveLocalProfileId();
+        string resolvedLocalProfileId = ResolveLocalProfileId(false);
+        if (!string.IsNullOrWhiteSpace(resolvedLocalProfileId))
+            player1Slot.profileId = resolvedLocalProfileId;
+
+        if (string.IsNullOrWhiteSpace(player2Slot.profileId))
+            player2Slot.profileId = SanitizeProfileId(player2ProfileId, "remote_player");
 
         if (logDebug)
         {
             Debug.Log(
                 "[PlayerSkinLoadout] Initialized. " +
-                "Player1ProfileId=" + player1Slot.profileId +
-                " | Player2ProfileId=" + player2Slot.profileId +
+                "Player1ProfileId=" + SafeProfileId(player1Slot.profileId) +
+                " | Player2ProfileId=" + SafeProfileId(player2Slot.profileId) +
                 " | P1Skin=" + GetSafeSkinId(player1Slot.equippedSkin) +
                 " | P2Skin=" + GetSafeSkinId(player2Slot.equippedSkin) +
                 " | Database=" + (database != null ? database.name : "null"),
@@ -71,33 +79,35 @@ public class PlayerSkinLoadout : MonoBehaviour
     private void OnEnable()
     {
         ResolveDependencies();
-
-        if (profileManager != null)
-        {
-            profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
-            profileManager.OnActiveProfileChanged += HandleActiveProfileChanged;
-        }
+        SubscribeProfileEvents();
     }
 
     private void OnDisable()
     {
-        if (profileManager != null)
-            profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+        UnsubscribeProfileEvents();
     }
 
     private void Start()
     {
         ResolveDependencies();
-        SetPlayer1ProfileId(ResolveLocalProfileId());
+        SubscribeProfileEvents();
+
+        string resolvedLocalProfileId = ResolveLocalProfileId(false);
+        if (!string.IsNullOrWhiteSpace(resolvedLocalProfileId))
+            SetPlayer1ProfileId(resolvedLocalProfileId);
     }
 
     public void SetPlayer1ProfileId(string profileId)
     {
         EnsureRuntimeStructure();
 
-        string sanitized = SanitizeProfileId(profileId, ResolveLocalProfileId());
+        string fallback = ResolveLocalProfileId(true);
+        string sanitized = SanitizeProfileId(profileId, fallback);
 
-        if (player1Slot.profileId == sanitized)
+        if (string.IsNullOrWhiteSpace(sanitized))
+            return;
+
+        if (string.Equals(player1Slot.profileId, sanitized, StringComparison.Ordinal))
             return;
 
         player1Slot.profileId = sanitized;
@@ -113,7 +123,7 @@ public class PlayerSkinLoadout : MonoBehaviour
 
         string sanitized = SanitizeProfileId(profileId, "remote_player");
 
-        if (player2Slot.profileId == sanitized)
+        if (string.Equals(player2Slot.profileId, sanitized, StringComparison.Ordinal))
             return;
 
         player2Slot.profileId = sanitized;
@@ -127,7 +137,7 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         EnsureRuntimeStructure();
 
-        player1Slot.profileId = SanitizeProfileId(localProfileId, ResolveLocalProfileId());
+        player1Slot.profileId = SanitizeProfileId(localProfileId, ResolveLocalProfileId(true));
         player2Slot.profileId = SanitizeProfileId(remoteProfileId, "remote_player");
 
         NotifyLoadoutChanged();
@@ -136,8 +146,8 @@ public class PlayerSkinLoadout : MonoBehaviour
         {
             Debug.Log(
                 "[PlayerSkinLoadout] ConfigureMatchProfiles -> " +
-                "P1=" + player1Slot.profileId +
-                " | P2=" + player2Slot.profileId,
+                "P1=" + SafeProfileId(player1Slot.profileId) +
+                " | P2=" + SafeProfileId(player2Slot.profileId),
                 this
             );
         }
@@ -159,14 +169,17 @@ public class PlayerSkinLoadout : MonoBehaviour
             return;
         }
 
-        player1Slot.profileId = ResolveLocalProfileId();
+        string resolvedLocalProfileId = ResolveLocalProfileId(true);
+        if (!string.IsNullOrWhiteSpace(resolvedLocalProfileId))
+            player1Slot.profileId = resolvedLocalProfileId;
+
         player1Slot.equippedSkin = CloneSkin(skin);
         NotifyLoadoutChanged();
 
         if (logDebug)
         {
             Debug.Log(
-                "[PlayerSkinLoadout] Equipped skin for Player1/Profile=" + player1Slot.profileId +
+                "[PlayerSkinLoadout] Equipped skin for Player1/Profile=" + SafeProfileId(player1Slot.profileId) +
                 " | SkinId=" + skin.skinUniqueId,
                 this
             );
@@ -195,7 +208,7 @@ public class PlayerSkinLoadout : MonoBehaviour
         if (logDebug)
         {
             Debug.Log(
-                "[PlayerSkinLoadout] Equipped skin for Player2/Profile=" + player2Slot.profileId +
+                "[PlayerSkinLoadout] Equipped skin for Player2/Profile=" + SafeProfileId(player2Slot.profileId) +
                 " | SkinId=" + skin.skinUniqueId,
                 this
             );
@@ -218,15 +231,15 @@ public class PlayerSkinLoadout : MonoBehaviour
             return;
         }
 
-        string sanitized = SanitizeProfileId(profileId, ResolveLocalProfileId());
+        string sanitized = SanitizeProfileId(profileId, ResolveLocalProfileId(true));
 
-        if (player1Slot.profileId == sanitized)
+        if (string.Equals(player1Slot.profileId, sanitized, StringComparison.Ordinal))
         {
             EquipSkinForPlayer1(skin);
             return;
         }
 
-        if (player2Slot.profileId == sanitized)
+        if (string.Equals(player2Slot.profileId, sanitized, StringComparison.Ordinal))
         {
             EquipSkinForPlayer2(skin);
             return;
@@ -240,7 +253,7 @@ public class PlayerSkinLoadout : MonoBehaviour
         {
             Debug.Log(
                 "[PlayerSkinLoadout] EquipSkinForProfile mapped to Player1 slot. " +
-                "Profile=" + sanitized +
+                "Profile=" + SafeProfileId(sanitized) +
                 " | SkinId=" + skin.skinUniqueId,
                 this
             );
@@ -268,10 +281,10 @@ public class PlayerSkinLoadout : MonoBehaviour
 
         string sanitized = SanitizeProfileId(profileId, string.Empty);
 
-        if (player1Slot.profileId == sanitized)
+        if (string.Equals(player1Slot.profileId, sanitized, StringComparison.Ordinal))
             return player1Slot.equippedSkin;
 
-        if (player2Slot.profileId == sanitized)
+        if (string.Equals(player2Slot.profileId, sanitized, StringComparison.Ordinal))
             return player2Slot.equippedSkin;
 
         return null;
@@ -317,7 +330,7 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         EnsureRuntimeStructure();
 
-        player1Slot.profileId = SanitizeProfileId(newPlayer1ProfileId, ResolveLocalProfileId());
+        player1Slot.profileId = SanitizeProfileId(newPlayer1ProfileId, ResolveLocalProfileId(true));
         player2Slot.profileId = SanitizeProfileId(newPlayer2ProfileId, "remote_player");
 
         player1Slot.equippedSkin = IsSkinDataUsable(newPlayer1Skin) ? CloneSkin(newPlayer1Skin) : null;
@@ -329,9 +342,9 @@ public class PlayerSkinLoadout : MonoBehaviour
         {
             Debug.Log(
                 "[PlayerSkinLoadout] Applied match snapshot. " +
-                "P1Profile=" + player1Slot.profileId +
+                "P1Profile=" + SafeProfileId(player1Slot.profileId) +
                 " | P1Skin=" + GetSafeSkinId(player1Slot.equippedSkin) +
-                " | P2Profile=" + player2Slot.profileId +
+                " | P2Profile=" + SafeProfileId(player2Slot.profileId) +
                 " | P2Skin=" + GetSafeSkinId(player2Slot.equippedSkin),
                 this
             );
@@ -342,7 +355,10 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         EnsureRuntimeStructure();
 
-        player1Slot.profileId = ResolveLocalProfileId();
+        string resolvedLocalProfileId = ResolveLocalProfileId(true);
+        if (!string.IsNullOrWhiteSpace(resolvedLocalProfileId))
+            player1Slot.profileId = resolvedLocalProfileId;
+
         player2Slot.profileId = SanitizeProfileId(player2ProfileId, "remote_player");
 
         NotifyLoadoutChanged();
@@ -351,8 +367,8 @@ public class PlayerSkinLoadout : MonoBehaviour
         {
             Debug.Log(
                 "[PlayerSkinLoadout] ResetToDefaultProfiles -> " +
-                "P1=" + player1Slot.profileId +
-                " | P2=" + player2Slot.profileId,
+                "P1=" + SafeProfileId(player1Slot.profileId) +
+                " | P2=" + SafeProfileId(player2Slot.profileId),
                 this
             );
         }
@@ -363,6 +379,9 @@ public class PlayerSkinLoadout : MonoBehaviour
         if (profileData == null)
             return;
 
+        if (string.IsNullOrWhiteSpace(profileData.profileId))
+            return;
+
         SetPlayer1ProfileId(profileData.profileId);
     }
 
@@ -370,6 +389,45 @@ public class PlayerSkinLoadout : MonoBehaviour
     {
         if (profileManager == null)
             profileManager = PlayerProfileManager.Instance;
+
+#if UNITY_2023_1_OR_NEWER
+        if (profileManager == null)
+            profileManager = FindFirstObjectByType<PlayerProfileManager>();
+#else
+        if (profileManager == null)
+            profileManager = FindObjectOfType<PlayerProfileManager>();
+#endif
+    }
+
+    private void SubscribeProfileEvents()
+    {
+        if (profileManager == null)
+            return;
+
+        if (subscribed && subscribedProfileManager == profileManager)
+            return;
+
+        UnsubscribeProfileEvents();
+
+        profileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+        profileManager.OnActiveProfileChanged += HandleActiveProfileChanged;
+
+        subscribedProfileManager = profileManager;
+        subscribed = true;
+    }
+
+    private void UnsubscribeProfileEvents()
+    {
+        if (!subscribed || subscribedProfileManager == null)
+        {
+            subscribed = false;
+            subscribedProfileManager = null;
+            return;
+        }
+
+        subscribedProfileManager.OnActiveProfileChanged -= HandleActiveProfileChanged;
+        subscribed = false;
+        subscribedProfileManager = null;
     }
 
     private void EnsureRuntimeStructure()
@@ -381,7 +439,11 @@ public class PlayerSkinLoadout : MonoBehaviour
             player2Slot = new PlayerLoadoutSlotData();
 
         if (string.IsNullOrWhiteSpace(player1Slot.profileId))
-            player1Slot.profileId = ResolveLocalProfileId();
+        {
+            string resolvedLocalProfileId = ResolveLocalProfileId(false);
+            if (!string.IsNullOrWhiteSpace(resolvedLocalProfileId))
+                player1Slot.profileId = resolvedLocalProfileId;
+        }
 
         if (string.IsNullOrWhiteSpace(player2Slot.profileId))
             player2Slot.profileId = SanitizeProfileId(player2ProfileId, "remote_player");
@@ -420,13 +482,16 @@ public class PlayerSkinLoadout : MonoBehaviour
 
     private string SanitizeProfileId(string profileId, string fallback)
     {
-        if (string.IsNullOrWhiteSpace(profileId))
-            return fallback;
+        if (!string.IsNullOrWhiteSpace(profileId))
+            return profileId.Trim();
 
-        return profileId.Trim();
+        if (!string.IsNullOrWhiteSpace(fallback))
+            return fallback.Trim();
+
+        return string.Empty;
     }
 
-    private string ResolveLocalProfileId()
+    private string ResolveLocalProfileId(bool allowConfiguredFallback)
     {
         if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
             return profileManager.ActiveProfileId.Trim();
@@ -434,7 +499,10 @@ public class PlayerSkinLoadout : MonoBehaviour
         if (OnlineLocalPlayerContext.IsAvailable && !string.IsNullOrWhiteSpace(OnlineLocalPlayerContext.PlayerId))
             return OnlineLocalPlayerContext.PlayerId.Trim();
 
-        return string.IsNullOrWhiteSpace(player1ProfileId) ? "guest_fallback" : player1ProfileId.Trim();
+        if (allowConfiguredFallback && !string.IsNullOrWhiteSpace(player1ProfileId))
+            return player1ProfileId.Trim();
+
+        return string.Empty;
     }
 
     private BallSkinData CloneSkin(BallSkinData source)
@@ -457,6 +525,11 @@ public class PlayerSkinLoadout : MonoBehaviour
     private string GetSafeSkinId(BallSkinData skin)
     {
         return skin != null ? skin.skinUniqueId : "none";
+    }
+
+    private string SafeProfileId(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "<unresolved>" : value;
     }
 
     private void MarkRuntimeRootPersistentIfNeeded()

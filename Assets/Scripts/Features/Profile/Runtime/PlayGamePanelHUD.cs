@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -28,13 +29,23 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
     [SerializeField] private bool enableLightPolling = true;
     [SerializeField][Min(0.05f)] private float pollingInterval = 0.25f;
 
+    [Header("Scene Filtering")]
+    [SerializeField] private bool restrictToExpectedScenes = true;
+    [SerializeField] private List<string> expectedSceneNames = new List<string> { "MainMenu" };
+    [SerializeField] private bool warnWhenMissingInExpectedScene = true;
+
     private float pollingTimer;
     private bool subscribed;
+    private PlayerProfileManager subscribedProfileManager;
 
-    private string lastAppliedName;
+    private string lastAppliedName = string.Empty;
     private int lastAppliedRankedLp = int.MinValue;
     private int lastAppliedSoft = int.MinValue;
     private int lastAppliedPremium = int.MinValue;
+
+    private bool lastResolvedTextsState;
+    private string lastActiveSceneName = string.Empty;
+    private bool hasRenderedAtLeastOnce;
 
     private void Awake()
     {
@@ -76,6 +87,9 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         if (!enableLightPolling)
             return;
 
+        if (!IsSceneExpectedForHud())
+            return;
+
         pollingTimer -= Time.unscaledDeltaTime;
         if (pollingTimer > 0f)
             return;
@@ -83,6 +97,7 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         pollingTimer = pollingInterval;
 
         TryResolveProfileManager();
+        SubscribeProfileEvents();
 
         bool hadMissingRefs = !HasAllTextReferences();
         if (hadMissingRefs)
@@ -96,6 +111,8 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        pollingTimer = 0f;
+
         TryResolveProfileManager();
         SubscribeProfileEvents();
 
@@ -126,13 +143,26 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         profileManager = GetComponent<PlayerProfileManager>();
 
         if (profileManager == null)
+            profileManager = PlayerProfileManager.Instance;
+
+#if UNITY_2023_1_OR_NEWER
+        if (profileManager == null)
             profileManager = FindFirstObjectByType<PlayerProfileManager>();
+#else
+        if (profileManager == null)
+            profileManager = FindObjectOfType<PlayerProfileManager>();
+#endif
     }
 
     private void SubscribeProfileEvents()
     {
-        if (subscribed || profileManager == null)
+        if (profileManager == null)
             return;
+
+        if (subscribed && subscribedProfileManager == profileManager)
+            return;
+
+        UnsubscribeProfileEvents();
 
         profileManager.OnActiveProfileChanged -= HandleProfileChanged;
         profileManager.OnActiveProfileDataChanged -= HandleProfileChanged;
@@ -141,17 +171,23 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         profileManager.OnActiveProfileDataChanged += HandleProfileChanged;
 
         subscribed = true;
+        subscribedProfileManager = profileManager;
     }
 
     private void UnsubscribeProfileEvents()
     {
-        if (!subscribed || profileManager == null)
+        if (!subscribed || subscribedProfileManager == null)
+        {
+            subscribed = false;
+            subscribedProfileManager = null;
             return;
+        }
 
-        profileManager.OnActiveProfileChanged -= HandleProfileChanged;
-        profileManager.OnActiveProfileDataChanged -= HandleProfileChanged;
+        subscribedProfileManager.OnActiveProfileChanged -= HandleProfileChanged;
+        subscribedProfileManager.OnActiveProfileDataChanged -= HandleProfileChanged;
 
         subscribed = false;
+        subscribedProfileManager = null;
     }
 
     private void ClearDestroyedReferences()
@@ -177,18 +213,34 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
                premiumCurrencyText != null;
     }
 
+    private bool IsSceneExpectedForHud()
+    {
+        if (!restrictToExpectedScenes)
+            return true;
+
+        string activeSceneName = SceneManager.GetActiveScene().name;
+        for (int i = 0; i < expectedSceneNames.Count; i++)
+        {
+            if (string.Equals(expectedSceneNames[i], activeSceneName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
     private void TryResolveSceneTexts(bool force)
     {
+        if (!IsSceneExpectedForHud())
+            return;
+
         if (!force && HasAllTextReferences())
             return;
 
         Transform playGamePanel = FindPlayGamePanelRoot();
         if (playGamePanel == null)
         {
-            if (logDebug && force)
-            {
+            if (logDebug && force && warnWhenMissingInExpectedScene)
                 Debug.LogWarning("[PlayGamePanelHUD] PlayGamePanel root non trovato.", this);
-            }
 
             return;
         }
@@ -205,7 +257,8 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         if (premiumCurrencyText == null)
             premiumCurrencyText = FindTextByName(playGamePanel, "PremiumCurrencyText");
 
-        if (logDebug)
+        bool resolvedNow = HasAllTextReferences();
+        if (logDebug && (force || resolvedNow != lastResolvedTextsState))
         {
             Debug.Log(
                 "[PlayGamePanelHUD] TryResolveSceneTexts -> " +
@@ -215,6 +268,8 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
                 " | Premium=" + (premiumCurrencyText != null),
                 this);
         }
+
+        lastResolvedTextsState = resolvedNow;
     }
 
     private Transform FindPlayGamePanelRoot()
@@ -292,9 +347,31 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
         return null;
     }
 
-    public void RefreshUi(bool forceLog = false)
+    private bool HasUsableProfileData()
     {
         TryResolveProfileManager();
+
+        if (profileManager == null || profileManager.ActiveProfile == null)
+            return false;
+
+        string profileId = profileManager.ActiveProfile.profileId;
+        if (string.IsNullOrWhiteSpace(profileId))
+            return false;
+
+        return true;
+    }
+
+    public void RefreshUi(bool forceLog = false)
+    {
+        string activeSceneName = SceneManager.GetActiveScene().name;
+        bool sceneChanged = !string.Equals(lastActiveSceneName, activeSceneName, StringComparison.Ordinal);
+        lastActiveSceneName = activeSceneName;
+
+        if (!IsSceneExpectedForHud())
+            return;
+
+        TryResolveProfileManager();
+        SubscribeProfileEvents();
 
         if (profileManager == null)
         {
@@ -311,49 +388,62 @@ public sealed class PlayGamePanelHUD : MonoBehaviour
 
         if (!HasAllTextReferences())
         {
-            if (logDebug && forceLog)
-            {
+            if (logDebug && forceLog && warnWhenMissingInExpectedScene)
                 Debug.LogWarning("[PlayGamePanelHUD] RefreshUi skipped -> text refs mancanti.", this);
-            }
+
+            return;
+        }
+
+        if (!HasUsableProfileData())
+        {
+            if (logDebug && forceLog)
+                Debug.Log("[PlayGamePanelHUD] RefreshUi deferred while resolved profile is not ready.", this);
 
             return;
         }
 
         PlayerProfileRuntimeData profile = profileManager.ActiveProfile;
 
-        string resolvedName = emptyNameFallback;
-        int resolvedRankedLp = 0;
-        int resolvedSoft = 0;
-        int resolvedPremium = 0;
+        string resolvedName = string.IsNullOrWhiteSpace(profile.displayName)
+            ? emptyNameFallback
+            : profile.displayName.Trim();
 
-        if (profile != null)
-        {
-            resolvedName = string.IsNullOrWhiteSpace(profile.displayName)
-                ? emptyNameFallback
-                : profile.displayName.Trim();
-
-            resolvedRankedLp = Mathf.Max(0, profile.rankedLp);
-            resolvedSoft = Mathf.Max(0, profile.softCurrency);
-            resolvedPremium = Mathf.Max(0, profile.premiumCurrency);
-        }
-
-        currentNameText.text = resolvedName;
-        rankText.text = $"{rankPrefix}{resolvedRankedLp}{rankSuffix}";
-        softCurrencyText.text = $"{softPrefix}{resolvedSoft}{softSuffix}";
-        premiumCurrencyText.text = $"{premiumPrefix}{resolvedPremium}{premiumSuffix}";
+        int resolvedRankedLp = Mathf.Max(0, profile.rankedLp);
+        int resolvedSoft = Mathf.Max(0, profile.softCurrency);
+        int resolvedPremium = Mathf.Max(0, profile.premiumCurrency);
 
         bool changed =
-            lastAppliedName != resolvedName ||
+            !string.Equals(lastAppliedName, resolvedName, StringComparison.Ordinal) ||
             lastAppliedRankedLp != resolvedRankedLp ||
             lastAppliedSoft != resolvedSoft ||
             lastAppliedPremium != resolvedPremium;
+
+        if (!changed && !forceLog && !sceneChanged && hasRenderedAtLeastOnce)
+            return;
+
+        string rankValue = $"{rankPrefix}{resolvedRankedLp}{rankSuffix}";
+        string softValue = $"{softPrefix}{resolvedSoft}{softSuffix}";
+        string premiumValue = $"{premiumPrefix}{resolvedPremium}{premiumSuffix}";
+
+        if (currentNameText != null && !string.Equals(currentNameText.text, resolvedName, StringComparison.Ordinal))
+            currentNameText.text = resolvedName;
+
+        if (rankText != null && !string.Equals(rankText.text, rankValue, StringComparison.Ordinal))
+            rankText.text = rankValue;
+
+        if (softCurrencyText != null && !string.Equals(softCurrencyText.text, softValue, StringComparison.Ordinal))
+            softCurrencyText.text = softValue;
+
+        if (premiumCurrencyText != null && !string.Equals(premiumCurrencyText.text, premiumValue, StringComparison.Ordinal))
+            premiumCurrencyText.text = premiumValue;
 
         lastAppliedName = resolvedName;
         lastAppliedRankedLp = resolvedRankedLp;
         lastAppliedSoft = resolvedSoft;
         lastAppliedPremium = resolvedPremium;
+        hasRenderedAtLeastOnce = true;
 
-        if (logDebug && (forceLog || changed))
+        if (logDebug && (forceLog || changed || sceneChanged))
         {
             Debug.Log(
                 "[PlayGamePanelHUD] RefreshUi -> " +

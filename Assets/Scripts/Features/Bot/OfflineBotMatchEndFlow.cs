@@ -310,6 +310,14 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
 
         resultApplied = true;
 
+        if (postMatchPanelsController != null)
+        {
+            if (autoOpenRewardsPanel)
+                postMatchPanelsController.OpenRewardsObtained();
+            else
+                postMatchPanelsController.ShowPostGameOnly();
+        }
+
         if (logDebug)
         {
             Debug.Log(
@@ -325,15 +333,10 @@ public sealed class OfflineBotMatchEndFlow : MonoBehaviour
                 " | Soft=" + grantedSoftCurrency +
                 " | LPDelta=" + rankedLpDelta +
                 " | ChestCount=" + grantedChestCount +
-                " | RewardsConfigNull=" + (onlineMatchRewardsConfig == null),
+                " | RewardsConfigNull=" + (onlineMatchRewardsConfig == null) +
+                " | AutoOpenRewards=" + autoOpenRewardsPanel,
                 this
             );
-        }
-
-        if (autoOpenRewardsPanel && postMatchPanelsController != null)
-        {
-            if (logDebug)
-                Debug.Log("[OfflineBotMatchEndFlow] autoOpenRewardsPanel attivo, ma il flow consigliato è aprire RewardsObtained solo da bottone PostGame.", this);
         }
     }
 

@@ -8,11 +8,17 @@ namespace UncballArena.Core.Profile.Repositories
     public sealed class LocalProfileRepository : IProfileRepository
     {
         private const string KeyPrefix = "uncball.profile.";
+        private readonly bool logDebug;
 
         [Serializable]
         private sealed class ProfileWrapper
         {
             public ProfileSnapshot snapshot;
+        }
+
+        public LocalProfileRepository(bool logDebug = true)
+        {
+            this.logDebug = logDebug;
         }
 
         public Task<ProfileSnapshot> LoadByPlayerIdAsync(string playerId)
@@ -34,6 +40,13 @@ namespace UncballArena.Core.Profile.Repositories
                 ProfileWrapper wrapper = JsonUtility.FromJson<ProfileWrapper>(json);
                 if (wrapper == null || wrapper.snapshot == null || !wrapper.snapshot.IsValid())
                     return Task.FromResult<ProfileSnapshot>(null);
+
+                if (logDebug)
+                {
+                    Debug.Log(
+                        $"[LocalProfileRepository] Loaded cached profile. " +
+                        $"PlayerId={playerId} | ProfileId={wrapper.snapshot.ProfileId}");
+                }
 
                 return Task.FromResult(wrapper.snapshot);
             }
@@ -65,7 +78,12 @@ namespace UncballArena.Core.Profile.Repositories
                 PlayerPrefs.SetString(key, json);
                 PlayerPrefs.Save();
 
-                Debug.Log($"[LocalProfileRepository] Saved profile. PlayerId={snapshot.PlayerId} | ProfileId={snapshot.ProfileId}");
+                if (logDebug)
+                {
+                    Debug.Log(
+                        $"[LocalProfileRepository] Saved cached profile. " +
+                        $"PlayerId={snapshot.PlayerId} | ProfileId={snapshot.ProfileId}");
+                }
             }
             catch (Exception ex)
             {
@@ -86,7 +104,9 @@ namespace UncballArena.Core.Profile.Repositories
             {
                 PlayerPrefs.DeleteKey(key);
                 PlayerPrefs.Save();
-                Debug.Log($"[LocalProfileRepository] Deleted profile for PlayerId={playerId}");
+
+                if (logDebug)
+                    Debug.Log($"[LocalProfileRepository] Deleted cached profile for PlayerId={playerId}");
             }
 
             return Task.CompletedTask;

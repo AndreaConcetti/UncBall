@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UncballArena.Core.Bootstrap;
 using UncballArena.Core.Runtime;
 
 public class PlayerChestSlotInventory : MonoBehaviour
@@ -61,26 +62,22 @@ public class PlayerChestSlotInventory : MonoBehaviour
         MarkRuntimeRootPersistentIfNeeded();
 
         ResolveDependencies();
-        activeProfileId = ResolveCurrentProfileId();
 
-        LoadInventory();
-        EnsureRuntimeStructure();
-        MigrateLoadedDataIfNeeded();
-        SaveInventory();
-        NotifyInventoryChanged();
-
-        if (logDebug)
+        if (ShouldDeferProfileBoundInitialization())
         {
-            Debug.Log(
-                "[PlayerChestSlotInventory] Initialized. " +
-                "ProfileId=" + activeProfileId +
-                " | SlotCount=" + SlotCount +
-                " | OccupiedSlots=" + GetOccupiedSlotCount() +
-                " | Queued=" + GetQueuedChestCount() +
-                " | TimeProvider=" + GetTimeProviderDebugName(),
-                this
-            );
+            EnsureRuntimeStructure();
+
+            if (logDebug)
+            {
+                Debug.Log(
+                    "[PlayerChestSlotInventory] Deferred profile-bound initialization until core/profile is ready.",
+                    this);
+            }
+
+            return;
         }
+
+        InitializeForResolvedProfile();
     }
 
     private void OnEnable()
@@ -451,6 +448,35 @@ public class PlayerChestSlotInventory : MonoBehaviour
         SetActiveProfileId(profileData.profileId, true);
     }
 
+    private void InitializeForResolvedProfile()
+    {
+        activeProfileId = ResolveCurrentProfileId();
+
+        LoadInventory();
+        EnsureRuntimeStructure();
+        MigrateLoadedDataIfNeeded();
+        SaveInventory();
+        NotifyInventoryChanged();
+
+        if (logDebug)
+        {
+            Debug.Log(
+                "[PlayerChestSlotInventory] Initialized. " +
+                "ProfileId=" + activeProfileId +
+                " | SlotCount=" + SlotCount +
+                " | OccupiedSlots=" + GetOccupiedSlotCount() +
+                " | Queued=" + GetQueuedChestCount() +
+                " | TimeProvider=" + GetTimeProviderDebugName(),
+                this
+            );
+        }
+    }
+
+    private bool ShouldDeferProfileBoundInitialization()
+    {
+        return GameCompositionRoot.Instance != null && !GameCompositionRoot.Instance.IsReady;
+    }
+
     private void AssignChestToSlot(int slotIndex, ChestRuntimeData chest)
     {
         if (!IsValidSlotIndex(slotIndex) || chest == null)
@@ -678,6 +704,15 @@ public class PlayerChestSlotInventory : MonoBehaviour
 
     private string ResolveCurrentProfileId()
     {
+        if (GameCompositionRoot.Instance != null &&
+            GameCompositionRoot.Instance.IsReady &&
+            GameCompositionRoot.Instance.AuthService != null &&
+            GameCompositionRoot.Instance.AuthService.CurrentSession != null &&
+            !string.IsNullOrWhiteSpace(GameCompositionRoot.Instance.AuthService.CurrentSession.EffectivePlayerId))
+        {
+            return GameCompositionRoot.Instance.AuthService.CurrentSession.EffectivePlayerId.Trim();
+        }
+
         if (profileManager != null && !string.IsNullOrWhiteSpace(profileManager.ActiveProfileId))
             return profileManager.ActiveProfileId.Trim();
 

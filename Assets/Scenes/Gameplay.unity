@@ -8710,6 +8710,7 @@ MonoBehaviour:
   inGameUiRoot: {fileID: 1940017666}
   keepInGameUiActiveAtMatchEnd: 0
   hideRewardsOnAwake: 1
+  hidePostGameOnAwake: 1
   hidePostGameWhenOpeningRewards: 1
   disablePostGameRaycastsWhenRewardsOpen: 1
   restorePostGameOnReturn: 1
@@ -13855,7 +13856,7 @@ RectTransform:
   m_Father: {fileID: 1940017670}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 0.9605263}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -15234,7 +15235,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 42.75
+  m_fontSize: 45.4
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -17002,7 +17003,7 @@ MonoBehaviour:
   onlineMatchRewardsConfig: {fileID: 0}
   applyRewards: 1
   applyProfileStats: 1
-  autoOpenRewardsPanel: 1
+  autoOpenRewardsPanel: 0
   logDebug: 1
 --- !u!1 &1404626876
 GameObject:
@@ -25406,7 +25407,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 5.42552
+  orthographic size: 4.568859
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2

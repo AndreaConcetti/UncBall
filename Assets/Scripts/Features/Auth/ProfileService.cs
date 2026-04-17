@@ -40,16 +40,29 @@ namespace UncballArena.Core.Profile.Services
 
         public async Task<ProfileSnapshot> LoadOrCreateProfileAsync(string playerId, string displayName = "")
         {
-            ProfileSnapshot loaded = await repository.LoadByPlayerIdAsync(playerId);
+            string sanitizedPlayerId = SanitizePlayerId(playerId);
+            string sanitizedDisplayName = SanitizeDisplayName(displayName);
+
+            ProfileSnapshot loaded = await repository.LoadByPlayerIdAsync(sanitizedPlayerId);
 
             if (loaded != null && loaded.IsValid())
             {
-                CurrentProfile = loaded;
+                bool needsDisplayNameBackfill =
+                    string.IsNullOrWhiteSpace(loaded.DisplayName) &&
+                    !string.IsNullOrWhiteSpace(sanitizedDisplayName);
+
+                CurrentProfile = needsDisplayNameBackfill
+                    ? loaded.WithDisplayName(sanitizedDisplayName)
+                    : loaded;
+
+                if (needsDisplayNameBackfill)
+                    await repository.SaveAsync(CurrentProfile);
+
                 RaiseProfileChanged();
                 return CurrentProfile;
             }
 
-            CurrentProfile = ProfileSnapshot.CreateNew(playerId, SanitizeDisplayName(displayName));
+            CurrentProfile = ProfileSnapshot.CreateNew(sanitizedPlayerId, sanitizedDisplayName);
             await repository.SaveAsync(CurrentProfile);
 
             RaiseProfileChanged();
@@ -226,6 +239,13 @@ namespace UncballArena.Core.Profile.Services
             return string.IsNullOrWhiteSpace(displayName)
                 ? string.Empty
                 : displayName.Trim();
+        }
+
+        private string SanitizePlayerId(string playerId)
+        {
+            return string.IsNullOrWhiteSpace(playerId)
+                ? string.Empty
+                : playerId.Trim();
         }
 
         private void EnsureProfileExists()

@@ -16,6 +16,7 @@ public class OnlinePostMatchPanelsController : MonoBehaviour
 
     [Header("Behaviour")]
     [SerializeField] private bool hideRewardsOnAwake = true;
+    [SerializeField] private bool hidePostGameOnAwake = true;
     [SerializeField] private bool hidePostGameWhenOpeningRewards = true;
     [SerializeField] private bool disablePostGameRaycastsWhenRewardsOpen = true;
     [SerializeField] private bool restorePostGameOnReturn = true;
@@ -39,7 +40,8 @@ public class OnlinePostMatchPanelsController : MonoBehaviour
                 " | RewardsRoot=" + SafeName(rewardsObtainedRoot) +
                 " | RewardsPresenter=" + SafeName(rewardsPresenter) +
                 " | InGameUiRoot=" + SafeName(inGameUiRoot) +
-                " | KeepInGameUiActiveAtMatchEnd=" + keepInGameUiActiveAtMatchEnd,
+                " | KeepInGameUiActiveAtMatchEnd=" + keepInGameUiActiveAtMatchEnd +
+                " | HidePostGameOnAwake=" + hidePostGameOnAwake,
                 this
             );
         }
@@ -61,7 +63,7 @@ public class OnlinePostMatchPanelsController : MonoBehaviour
 
         if (hidePostGameWhenOpeningRewards)
         {
-            SetRootVisible(postGameRoot, postGameCanvasGroup, false, !disablePostGameRaycastsWhenRewardsOpen);
+            SetRootVisible(postGameRoot, postGameCanvasGroup, false, false);
         }
         else if (disablePostGameRaycastsWhenRewardsOpen)
         {
@@ -72,13 +74,9 @@ public class OnlinePostMatchPanelsController : MonoBehaviour
         ApplyGameplayUiPolicy();
 
         if (rewardsPresenter != null)
-        {
             rewardsPresenter.ForceReplayLatest();
-        }
         else
-        {
             Debug.LogWarning("[OnlinePostMatchPanelsController] Rewards presenter is NULL.", this);
-        }
     }
 
     public void ReturnToPostGame()
@@ -102,6 +100,30 @@ public class OnlinePostMatchPanelsController : MonoBehaviour
             SetCanvasGroupInteraction(postGameCanvasGroup, true, true);
 
         ApplyGameplayUiPolicy();
+    }
+
+    public void ShowPostGameOnly()
+    {
+        ResolveDependencies();
+
+        SetRootVisible(rewardsObtainedRoot, rewardsCanvasGroup, false, false);
+        SetRootVisible(postGameRoot, postGameCanvasGroup, true, true);
+        ApplyGameplayUiPolicy();
+
+        if (logDebug)
+            Debug.Log("[OnlinePostMatchPanelsController] ShowPostGameOnly invoked.", this);
+    }
+
+    public void HideAllPostMatchPanels()
+    {
+        ResolveDependencies();
+
+        SetRootVisible(rewardsObtainedRoot, rewardsCanvasGroup, false, false);
+        SetRootVisible(postGameRoot, postGameCanvasGroup, false, false);
+        ApplyGameplayUiPolicy();
+
+        if (logDebug)
+            Debug.Log("[OnlinePostMatchPanelsController] HideAllPostMatchPanels invoked.", this);
     }
 
     public void ApplyGameplayUiPolicy()
@@ -129,7 +151,11 @@ public class OnlinePostMatchPanelsController : MonoBehaviour
         else
             SetRootVisible(rewardsObtainedRoot, rewardsCanvasGroup, true, true);
 
-        if (postGameRoot != null)
+        if (hidePostGameOnAwake)
+        {
+            SetRootVisible(postGameRoot, postGameCanvasGroup, false, false);
+        }
+        else if (postGameRoot != null)
         {
             bool shouldBeVisible = postGameRoot.activeSelf;
             SetRootVisible(postGameRoot, postGameCanvasGroup, shouldBeVisible, shouldBeVisible);
@@ -145,7 +171,7 @@ public class OnlinePostMatchPanelsController : MonoBehaviour
         {
             canvasGroup.alpha = visible ? 1f : 0f;
             canvasGroup.interactable = visible;
-            canvasGroup.blocksRaycasts = allowRaycasts && visible;
+            canvasGroup.blocksRaycasts = visible && allowRaycasts;
         }
 
         if (logDebug)
