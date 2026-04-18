@@ -36,24 +36,35 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
     [SerializeField] private bool hideOnAwake = true;
     [SerializeField] private bool verboseLogs = true;
 
+    private bool suppressInitialHide;
+    private bool listenersBound;
+
     private void Awake()
     {
-        if (continueButton != null)
-            continueButton.onClick.AddListener(Hide);
+        BindButtons();
 
-        if (closeButton != null)
-            closeButton.onClick.AddListener(Hide);
-
-        if (hideOnAwake)
+        if (hideOnAwake && !suppressInitialHide)
             HideImmediate();
+
+        suppressInitialHide = false;
+    }
+
+    private void OnEnable()
+    {
+        BindButtons();
     }
 
     public void Show(DailyLoginClaimResult result)
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(true);
-        else
-            gameObject.SetActive(true);
+        BindButtons();
+
+        suppressInitialHide = true;
+
+        GameObject root = GetEffectiveRoot();
+        if (root != null)
+            root.SetActive(true);
+
+        gameObject.SetActive(true);
 
         if (titleText != null)
             titleText.text = "DAILY REWARD";
@@ -69,6 +80,8 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
 
         ApplyIcon(result.rewardType);
 
+        ForceCanvasRefresh();
+
         if (verboseLogs)
         {
             Debug.Log(
@@ -77,25 +90,73 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
                 " | Type=" + result.rewardType +
                 " | Amount=" + result.amount +
                 " | ChestType=" + result.chestType +
-                " | Label=" + result.customLabel,
+                " | Label=" + result.customLabel +
+                " | Root=" + GetName(root),
                 this);
         }
     }
 
     public void Hide()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
+        GameObject root = GetEffectiveRoot();
+        if (root != null)
+            root.SetActive(false);
         else
             gameObject.SetActive(false);
     }
 
     public void HideImmediate()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
+        GameObject root = GetEffectiveRoot();
+        if (root != null)
+            root.SetActive(false);
         else
             gameObject.SetActive(false);
+    }
+
+    private void BindButtons()
+    {
+        if (listenersBound)
+            return;
+
+        if (continueButton != null)
+        {
+            continueButton.onClick.RemoveListener(Hide);
+            continueButton.onClick.AddListener(Hide);
+        }
+
+        if (closeButton != null)
+        {
+            closeButton.onClick.RemoveListener(Hide);
+            closeButton.onClick.AddListener(Hide);
+        }
+
+        listenersBound = true;
+    }
+
+    private GameObject GetEffectiveRoot()
+    {
+        if (panelRoot != null)
+            return panelRoot;
+
+        return gameObject;
+    }
+
+    private void ForceCanvasRefresh()
+    {
+        Canvas.ForceUpdateCanvases();
+
+        RectTransform rootRect = null;
+        GameObject root = GetEffectiveRoot();
+
+        if (root != null)
+            rootRect = root.transform as RectTransform;
+
+        if (rootRect != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
+
+        if (rewardIcon != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rewardIcon.transform as RectTransform);
     }
 
     private void ApplyIcon(DailyLoginRewardType rewardType)
@@ -110,6 +171,7 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
             rewardIcon.gameObject.SetActive(true);
             rewardIcon.enabled = true;
             rewardIcon.sprite = mapping.sprite;
+            rewardIcon.preserveAspect = true;
         }
         else
         {
@@ -155,8 +217,6 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
                 return "+" + Mathf.Max(0, result.amount);
 
             case DailyLoginRewardType.Chest:
-                return "X" + Mathf.Max(1, result.amount);
-
             case DailyLoginRewardType.FreeLuckyShot:
                 return "X" + Mathf.Max(1, result.amount);
 
@@ -177,5 +237,10 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
         }
 
         return default;
+    }
+
+    private string GetName(UnityEngine.Object target)
+    {
+        return target == null ? "<null>" : target.name;
     }
 }
