@@ -892,7 +892,12 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 330605304}
+  - component: {fileID: 330605310}
+  - component: {fileID: 330605307}
   - component: {fileID: 330605305}
+  - component: {fileID: 330605306}
+  - component: {fileID: 330605309}
+  - component: {fileID: 330605308}
   m_Layer: 0
   m_Name: LuckyShotRuntime
   m_TagString: Untagged
@@ -927,20 +932,130 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a9622cfaf4b1e434496eab3cd6075030, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LuckyShotSlotRegistry
-  scanRoot: {fileID: 0}
-  includeInactive: 1
   autoScanOnAwake: 1
+  scanRoot: {fileID: 767120471}
+  includeInactive: 1
   highlightAnchorChildName: HighlightAnchor
   verboseLogs: 1
   slots:
-  - slotScorer: {fileID: 0}
-    starPlate: {fileID: 0}
-    boardNumber: 0
-    slotIndex: 0
+  - boardNumber: 0
     slotId: 
+    slotIndex: 0
     slotTransform: {fileID: 0}
     highlightAnchor: {fileID: 0}
-    slotCollider3D: {fileID: 0}
+    hitCollider3D: {fileID: 0}
+    hitCollider2D: {fileID: 0}
+    slotScorer: {fileID: 0}
+    slotTarget: {fileID: 0}
+--- !u!114 &330605306
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330605303}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0e1a02758753e248892a8f12e838abe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotSessionRuntime
+  slotRegistry: {fileID: 330605305}
+  launchZoneLeft: {fileID: 1196475057}
+  launchZoneRight: {fileID: 1691939045}
+  dontDestroyOnLoad: 0
+  autoResolveServicesOnAwake: 1
+  verboseLogs: 1
+--- !u!114 &330605307
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330605303}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8f9e80ea6ab94647af86d523509166f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotHighlightController
+  slotRegistry: {fileID: 330605305}
+  sessionRuntime: {fileID: 330605306}
+  board1HighlightRoot: {fileID: 0}
+  board2HighlightRoot: {fileID: 0}
+  board3HighlightRoot: {fileID: 0}
+  leftLaunchMarker: {fileID: 0}
+  rightLaunchMarker: {fileID: 0}
+  board1LocalOffset: {x: 0, y: 0, z: 0}
+  board2LocalOffset: {x: 0, y: 0, z: 0}
+  board3LocalOffset: {x: 0, y: 0, z: 0}
+  matchRotation: 0
+  hideHighlightIfSlotMissing: 1
+  verboseLogs: 1
+--- !u!114 &330605308
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330605303}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 628588223db62184ab69aab55438d047, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotShotResolver
+  sessionRuntime: {fileID: 330605306}
+  gameplayController: {fileID: 330605309}
+  slotRegistry: {fileID: 330605305}
+  activeBall: {fileID: 0}
+  hasResolvedCurrentBall: 0
+  verboseLogs: 1
+--- !u!114 &330605309
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330605303}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 25db2df8c605bea4aa382180e7a26b91, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotGameplayController
+  sessionRuntime: {fileID: 330605306}
+  shotResolver: {fileID: 330605308}
+  ballTurnSpawner: {fileID: 472537354}
+  ballLauncher: {fileID: 472537353}
+  localLuckyShotPlayer: 1
+  autoSpawnBallOnSessionLoaded: 1
+  respawnBallAfterAdExtraShot: 1
+  currentBall: {fileID: 0}
+  shotLaunchObserved: 0
+  shotResolutionPending: 0
+  spawnInProgress: 0
+  verboseLogs: 1
+--- !u!114 &330605310
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330605303}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f6c265fd5b9d05a4aa3224f9eca690a9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotSceneBootstrap
+  sessionRuntime: {fileID: 330605306}
+  highlightController: {fileID: 330605307}
+  slotRegistry: {fileID: 330605305}
+  shotsLeftText: {fileID: 0}
+  launchSideText: {fileID: 0}
+  sessionDateText: {fileID: 0}
+  feedbackText: {fileID: 0}
+  leftSideRoot: {fileID: 0}
+  rightSideRoot: {fileID: 0}
+  bootstrapOnEnable: 1
+  clearFeedbackOnSuccess: 1
+  verboseLogs: 1
 --- !u!1 &357837719
 GameObject:
   m_ObjectHideFlags: 0
@@ -2985,6 +3100,11 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+--- !u!4 &767120471 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5702621668462501790, guid: d9c2120ad05af4243afc363adf3aa782, type: 3}
+  m_PrefabInstance: {fileID: 1915144543}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &834137098
 GameObject:
   m_ObjectHideFlags: 0
@@ -3143,6 +3263,81 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 834137098}
   m_CullTransparentMesh: 1
+--- !u!1 &844328533
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 844328534}
+  - component: {fileID: 844328536}
+  - component: {fileID: 844328535}
+  m_Layer: 0
+  m_Name: WinningHighlight_Board3
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &844328534
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 844328533}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &844328535
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 844328533}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 0, b: 0, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: 4379871c896cb47159ca30caed15cf45, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &844328536
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 844328533}
+  m_CullTransparentMesh: 1
 --- !u!1 &880244587
 GameObject:
   m_ObjectHideFlags: 0
@@ -3233,6 +3428,81 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 944095410}
+  m_CullTransparentMesh: 1
+--- !u!1 &961213448
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 961213449}
+  - component: {fileID: 961213451}
+  - component: {fileID: 961213450}
+  m_Layer: 0
+  m_Name: WinningHighlight_Board1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &961213449
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 961213448}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &961213450
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 961213448}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 0, b: 0, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: 4379871c896cb47159ca30caed15cf45, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &961213451
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 961213448}
   m_CullTransparentMesh: 1
 --- !u!1 &973354174
 GameObject:
@@ -3824,6 +4094,11 @@ Canvas:
   m_SortingLayerID: 0
   m_SortingOrder: 0
   m_TargetDisplay: 0
+--- !u!4 &1196475057 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7650670177844803245, guid: d9c2120ad05af4243afc363adf3aa782, type: 3}
+  m_PrefabInstance: {fileID: 1915144543}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1205499650
 GameObject:
   m_ObjectHideFlags: 0
@@ -4244,6 +4519,81 @@ Canvas:
   m_SortingLayerID: 0
   m_SortingOrder: 0
   m_TargetDisplay: 0
+--- !u!1 &1251531636
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1251531637}
+  - component: {fileID: 1251531639}
+  - component: {fileID: 1251531638}
+  m_Layer: 0
+  m_Name: WinningHighlight_Board2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1251531637
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1251531636}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1251531638
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1251531636}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 0, b: 0, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: 4379871c896cb47159ca30caed15cf45, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1251531639
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1251531636}
+  m_CullTransparentMesh: 1
 --- !u!1 &1350182676
 GameObject:
   m_ObjectHideFlags: 0
@@ -5125,6 +5475,11 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1687620410}
   m_CullTransparentMesh: 1
+--- !u!4 &1691939045 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4246787328724081912, guid: d9c2120ad05af4243afc363adf3aa782, type: 3}
+  m_PrefabInstance: {fileID: 1915144543}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1718801522
 GameObject:
   m_ObjectHideFlags: 0
@@ -6960,3 +7315,6 @@ SceneRoots:
   - {fileID: 2100959708}
   - {fileID: 94034231}
   - {fileID: 1165096094}
+  - {fileID: 961213449}
+  - {fileID: 1251531637}
+  - {fileID: 844328534}

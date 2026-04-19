@@ -134,6 +134,11 @@ public class StarPlate : MonoBehaviour
         int totalThisShot = shotPoints + fullStarExtra;
         Vector3 slotWorldPosition = slotTransform != null ? slotTransform.position : transform.position;
 
+        if (LuckyShotShotResolver.Instance != null)
+        {
+            LuckyShotShotResolver.Instance.NotifySlotEntered(plateNumber, slotIndex, ball, slotTransform);
+        }
+
         ScoreManager scoreManager = ScoreManager.Instance;
         if (scoreManager != null)
         {

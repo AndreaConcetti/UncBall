@@ -39,6 +39,11 @@ public class DeathZone : MonoBehaviour
             return;
         }
 
+        if (LuckyShotGameplayController.Instance != null)
+        {
+            LuckyShotGameplayController.Instance.NotifyBallLost(ball);
+        }
+
         // Fallback local cleanup.
         if (ball != null)
             Destroy(ball.gameObject);
