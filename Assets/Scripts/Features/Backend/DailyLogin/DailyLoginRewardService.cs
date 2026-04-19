@@ -1,80 +1,45 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
+using UncballArena.Core.Bootstrap;
+using UncballArena.Core.Profile.Models;
+using UncballArena.Core.Profile.Services;
 
 public class DailyLoginRewardService : MonoBehaviour
 {
     public static DailyLoginRewardService Instance { get; private set; }
 
-    [Header("Definitions")]
-    [SerializeField]
-    private DailyLoginRewardDefinition[] rewardDefinitions =
-    {
-        new DailyLoginRewardDefinition
-        {
-            dayIndex = 1,
-            rewardType = DailyLoginRewardType.SoftCurrency,
-            amount = 50,
-            chestType = ChestType.Random,
-            customLabel = ""
-        },
-        new DailyLoginRewardDefinition
-        {
-            dayIndex = 2,
-            rewardType = DailyLoginRewardType.SoftCurrency,
-            amount = 75,
-            chestType = ChestType.Random,
-            customLabel = ""
-        },
-        new DailyLoginRewardDefinition
-        {
-            dayIndex = 3,
-            rewardType = DailyLoginRewardType.Chest,
-            amount = 1,
-            chestType = ChestType.Random,
-            customLabel = "CHEST"
-        },
-        new DailyLoginRewardDefinition
-        {
-            dayIndex = 4,
-            rewardType = DailyLoginRewardType.SoftCurrency,
-            amount = 100,
-            chestType = ChestType.Random,
-            customLabel = ""
-        },
-        new DailyLoginRewardDefinition
-        {
-            dayIndex = 5,
-            rewardType = DailyLoginRewardType.PremiumCurrency,
-            amount = 10,
-            chestType = ChestType.Random,
-            customLabel = ""
-        },
-        new DailyLoginRewardDefinition
-        {
-            dayIndex = 6,
-            rewardType = DailyLoginRewardType.Chest,
-            amount = 1,
-            chestType = ChestType.Random,
-            customLabel = "RARE CHEST"
-        },
-        new DailyLoginRewardDefinition
-        {
-            dayIndex = 7,
-            rewardType = DailyLoginRewardType.Chest,
-            amount = 1,
-            chestType = ChestType.Random,
-            customLabel = "EPIC CHEST"
-        }
-    };
+    [Header("Dependencies")]
+    [SerializeField] private PlayerChestSlotInventory playerChestSlotInventory;
 
-    [Header("Options")]
+    [Header("Release Config")]
+    [SerializeField] private bool autoResolveDependencies = true;
+    [SerializeField] private bool useUtcDay = true;
+    [SerializeField][Range(0, 23)] private int resetHourUtc = 0;
+    [SerializeField] private bool resetStreakIfOneDailyWindowIsMissed = true;
     [SerializeField] private bool verboseLogs = true;
 
-    private const int CycleLength = 7;
-    private const string LastClaimUnixKey = "DAILY_LOGIN_LAST_CLAIM_UNIX";
-    private const string CurrentStreakKey = "DAILY_LOGIN_CURRENT_STREAK";
-    private const string LastClaimDayIndexKey = "DAILY_LOGIN_LAST_CLAIM_DAY_INDEX";
+    [Header("7-Day Reward Track")]
+    [SerializeField]
+    private DailyLoginRewardDefinition[] rewards = new DailyLoginRewardDefinition[7]
+    {
+        new DailyLoginRewardDefinition { dayIndex = 1, rewardType = DailyLoginRewardType.SoftCurrency, amount = 50, chestType = ChestType.Random, customLabel = "50 COINS" },
+        new DailyLoginRewardDefinition { dayIndex = 2, rewardType = DailyLoginRewardType.SoftCurrency, amount = 75, chestType = ChestType.Random, customLabel = "75 COINS" },
+        new DailyLoginRewardDefinition { dayIndex = 3, rewardType = DailyLoginRewardType.Chest, amount = 1, chestType = ChestType.GuaranteedCommon, customLabel = "CHEST" },
+        new DailyLoginRewardDefinition { dayIndex = 4, rewardType = DailyLoginRewardType.SoftCurrency, amount = 100, chestType = ChestType.Random, customLabel = "100 COINS" },
+        new DailyLoginRewardDefinition { dayIndex = 5, rewardType = DailyLoginRewardType.PremiumCurrency, amount = 10, chestType = ChestType.Random, customLabel = "10 GEMS" },
+        new DailyLoginRewardDefinition { dayIndex = 6, rewardType = DailyLoginRewardType.Chest, amount = 1, chestType = ChestType.GuaranteedRare, customLabel = "RARE CHEST" },
+        new DailyLoginRewardDefinition { dayIndex = 7, rewardType = DailyLoginRewardType.FreeLuckyShot, amount = 1, chestType = ChestType.Random, customLabel = "FREE LUCKY SHOT" },
+    };
+
+    public event Action<DailyLoginPreviewState> PreviewUpdated;
+    public event Action<DailyLoginClaimResult> ClaimCompleted;
+
+    private IProfileService profileService;
+    private bool isBusy;
 
     private void Awake()
     {
@@ -86,144 +51,189 @@ public class DailyLoginRewardService : MonoBehaviour
 
         Instance = this;
 
+        if (autoResolveDependencies)
+            ResolveDependencies();
+
         if (verboseLogs)
             Debug.Log("[DailyLoginRewardService] Awake -> ready.", this);
     }
 
     public DailyLoginRewardDefinition[] GetDefinitions()
     {
-        DailyLoginRewardDefinition[] copy = new DailyLoginRewardDefinition[rewardDefinitions.Length];
-        Array.Copy(rewardDefinitions, copy, rewardDefinitions.Length);
-        return copy;
+        List<DailyLoginRewardDefinition> normalized = GetNormalizedRewards();
+        return normalized.ToArray();
+    }
+
+    public DailyLoginPreviewState GetPreview()
+    {
+        ResolveDependencies();
+        ProfileSnapshot snapshot = GetCurrentSnapshot();
+        return BuildPreview(snapshot);
     }
 
     public DailyLoginPreviewState GetPreviewState()
     {
-        long now = GetNowUnixSeconds();
-        long lastClaimUnix = PlayerPrefs.GetInt(LastClaimUnixKey, 0);
-        int streak = Mathf.Max(0, PlayerPrefs.GetInt(CurrentStreakKey, 0));
+        return GetPreview();
+    }
 
-        bool alreadyClaimedToday = IsSameUtcDay(lastClaimUnix, now);
-        bool streakBroken = lastClaimUnix > 0 && !alreadyClaimedToday && !IsYesterdayUtcDay(lastClaimUnix, now);
+    public async Task<DailyLoginPreviewState> RefreshPreviewAsync(CancellationToken cancellationToken = default)
+    {
+        await Task.Yield();
+        cancellationToken.ThrowIfCancellationRequested();
 
-        if (streakBroken)
-            streak = 0;
+        DailyLoginPreviewState preview = GetPreview();
+        PreviewUpdated?.Invoke(preview);
+        return preview;
+    }
 
-        int nextDayIndex = Mathf.Clamp(streak + 1, 1, CycleLength);
-        bool canClaimNow = !alreadyClaimedToday;
+    public async Task<DailyLoginClaimResult> ClaimTodayAsync(CancellationToken cancellationToken = default)
+    {
+        ResolveDependencies();
 
-        DailyLoginPreviewState preview = new DailyLoginPreviewState
+        if (isBusy)
         {
-            isReady = true,
-            currentStreakDay = streak,
-            nextClaimDayIndex = nextDayIndex,
-            canClaimNow = canClaimNow,
-            nextResetUnixSeconds = GetNextUtcMidnightUnix(now),
-            days = BuildDayStates(streak, nextDayIndex, canClaimNow)
-        };
-
-        if (verboseLogs)
-        {
-            Debug.Log(
-                "[DailyLoginRewardService] GetPreviewState -> " +
-                "Streak=" + streak +
-                " | NextDay=" + nextDayIndex +
-                " | CanClaim=" + canClaimNow +
-                " | LastClaimUnix=" + lastClaimUnix,
-                this);
+            DailyLoginClaimResult busyResult = DailyLoginClaimResult.Failed(GetPreview(), "Daily login is busy.");
+            ClaimCompleted?.Invoke(busyResult);
+            return busyResult;
         }
 
-        return preview;
+        if (profileService == null)
+        {
+            DailyLoginClaimResult failResult = DailyLoginClaimResult.Failed(default, "Profile service missing.");
+            ClaimCompleted?.Invoke(failResult);
+            return failResult;
+        }
+
+        isBusy = true;
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            ProfileSnapshot snapshot = GetCurrentSnapshot();
+            DailyLoginPreviewState previewBefore = BuildPreview(snapshot);
+
+            if (!previewBefore.isReady)
+            {
+                DailyLoginClaimResult notReady = DailyLoginClaimResult.Failed(previewBefore, "Daily login preview not ready.");
+                ClaimCompleted?.Invoke(notReady);
+                return notReady;
+            }
+
+            DailyLoginDayState? claimableState = GetClaimableState(previewBefore.days);
+            if (!claimableState.HasValue)
+            {
+                DailyLoginClaimResult alreadyClaimed = DailyLoginClaimResult.AlreadyClaimed(previewBefore);
+                ClaimCompleted?.Invoke(alreadyClaimed);
+                return alreadyClaimed;
+            }
+
+            DailyLoginRewardDefinition reward = claimableState.Value.reward;
+            RewardComputation computation = ComputeReward(snapshot, reward);
+            GrantNonProfileReward(reward, claimableState.Value.dayIndex);
+
+            long nowUnix = GetCurrentUnixSeconds();
+            string claimDateKey = GetRewardDateKey(nowUnix);
+            int updatedStreak = Mathf.Clamp(claimableState.Value.dayIndex, 1, 7);
+
+            ProfileSnapshot updatedSnapshot = snapshot
+                .WithCurrencies(computation.newSoftCurrency, computation.newPremiumCurrency)
+                .WithDailyLoginState(claimDateKey, updatedStreak);
+
+            updatedSnapshot = TryApplyLuckyShotTokenToSnapshot(updatedSnapshot, reward);
+
+            await profileService.ApplyAuthoritativeSnapshotAsync(updatedSnapshot, cancellationToken);
+
+            DailyLoginPreviewState previewAfter = BuildPreview(updatedSnapshot);
+
+            DailyLoginClaimResult result = new DailyLoginClaimResult
+            {
+                success = true,
+                alreadyClaimed = false,
+                claimedDay = claimableState.Value.dayIndex,
+                reward = reward,
+                newSoftCurrencyTotal = computation.newSoftCurrency,
+                newPremiumCurrencyTotal = computation.newPremiumCurrency,
+                claimedAtUnixSeconds = nowUnix,
+                previewAfterClaim = previewAfter,
+                failureReason = string.Empty
+            };
+
+            if (verboseLogs)
+            {
+                Debug.Log(
+                    "[DailyLoginRewardService] ClaimTodayAsync success -> " +
+                    "ClaimedDay=" + result.claimedDay +
+                    " | RewardType=" + reward.rewardType +
+                    " | Amount=" + reward.amount +
+                    " | ChestType=" + reward.chestType +
+                    " | NewSoft=" + result.newSoftCurrencyTotal +
+                    " | NewPremium=" + result.newPremiumCurrencyTotal +
+                    " | ClaimDateKey=" + claimDateKey,
+                    this);
+            }
+
+            PreviewUpdated?.Invoke(previewAfter);
+            ClaimCompleted?.Invoke(result);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[DailyLoginRewardService] ClaimTodayAsync failed -> " + ex, this);
+            DailyLoginClaimResult failResult = DailyLoginClaimResult.Failed(GetPreview(), ex.Message);
+            ClaimCompleted?.Invoke(failResult);
+            return failResult;
+        }
+        finally
+        {
+            isBusy = false;
+        }
     }
 
     public DailyLoginClaimResult ClaimTodayReward()
     {
-        DailyLoginPreviewState preview = GetPreviewState();
-
-        if (!preview.canClaimNow)
+        try
         {
-            return new DailyLoginClaimResult
-            {
-                success = false,
-                claimedDayIndex = preview.nextClaimDayIndex,
-                rewardType = DailyLoginRewardType.None,
-                amount = 0,
-                chestType = ChestType.Random,
-                customLabel = string.Empty,
-                updatedStreakDay = preview.currentStreakDay,
-                nextResetUnixSeconds = preview.nextResetUnixSeconds,
-                failureReason = "Reward already claimed today."
-            };
+            return ClaimTodayAsync().GetAwaiter().GetResult();
         }
-
-        DailyLoginRewardDefinition definition = GetDefinitionForDay(preview.nextClaimDayIndex);
-
-        GrantReward(definition);
-
-        int updatedStreak = Mathf.Clamp(preview.currentStreakDay + 1, 1, CycleLength);
-        long now = GetNowUnixSeconds();
-
-        PlayerPrefs.SetInt(LastClaimUnixKey, SafeUnixToInt(now));
-        PlayerPrefs.SetInt(CurrentStreakKey, updatedStreak);
-        PlayerPrefs.SetInt(LastClaimDayIndexKey, definition.dayIndex);
-        PlayerPrefs.Save();
-
-        if (verboseLogs)
+        catch (Exception ex)
         {
-            Debug.Log(
-                "[DailyLoginRewardService] ClaimTodayReward -> " +
-                "Day=" + definition.dayIndex +
-                " | Type=" + definition.rewardType +
-                " | Amount=" + definition.amount +
-                " | ChestType=" + definition.chestType +
-                " | UpdatedStreak=" + updatedStreak,
-                this);
+            Debug.LogError("[DailyLoginRewardService] ClaimTodayReward wrapper failed -> " + ex, this);
+            return DailyLoginClaimResult.Failed(GetPreview(), ex.Message);
         }
-
-        return new DailyLoginClaimResult
-        {
-            success = true,
-            claimedDayIndex = definition.dayIndex,
-            rewardType = definition.rewardType,
-            amount = definition.amount,
-            chestType = definition.chestType,
-            customLabel = definition.customLabel,
-            updatedStreakDay = updatedStreak,
-            nextResetUnixSeconds = GetNextUtcMidnightUnix(now),
-            failureReason = string.Empty
-        };
     }
 
     public void DebugResetDailyLogin()
     {
-        PlayerPrefs.DeleteKey(LastClaimUnixKey);
-        PlayerPrefs.DeleteKey(CurrentStreakKey);
-        PlayerPrefs.DeleteKey(LastClaimDayIndexKey);
-        PlayerPrefs.Save();
+        ResolveDependencies();
+        if (profileService == null || profileService.CurrentProfile == null)
+            return;
+
+        ProfileSnapshot resetSnapshot = profileService.CurrentProfile.WithDailyLoginState(string.Empty, 0);
+        _ = profileService.ApplyAuthoritativeSnapshotAsync(resetSnapshot);
 
         if (verboseLogs)
-            Debug.Log("[DailyLoginRewardService] DebugResetDailyLogin -> state cleared.", this);
+            Debug.Log("[DailyLoginRewardService] DebugResetDailyLogin -> backend daily login state cleared.", this);
     }
 
     public void DebugForceClaimAvailableToday()
     {
-        int streak = Mathf.Max(0, PlayerPrefs.GetInt(CurrentStreakKey, 0));
-        int previousDay = Mathf.Clamp(streak, 0, CycleLength - 1);
+        ResolveDependencies();
+        if (profileService == null || profileService.CurrentProfile == null)
+            return;
 
-        long fakeYesterdayUnix = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeSeconds();
-
-        PlayerPrefs.SetInt(LastClaimUnixKey, SafeUnixToInt(fakeYesterdayUnix));
-        PlayerPrefs.SetInt(CurrentStreakKey, previousDay);
-        PlayerPrefs.SetInt(LastClaimDayIndexKey, previousDay);
-        PlayerPrefs.Save();
+        ProfileSnapshot snapshot = profileService.CurrentProfile;
+        int currentStreak = Mathf.Clamp(snapshot.ConsecutiveLoginDays, 0, 7);
+        string previousWindowKey = GetRewardDateKey(GetCurrentUnixSeconds() - 86400L);
+        ProfileSnapshot forcedSnapshot = snapshot.WithDailyLoginState(previousWindowKey, currentStreak);
+        _ = profileService.ApplyAuthoritativeSnapshotAsync(forcedSnapshot);
 
         if (verboseLogs)
-        {
-            Debug.Log(
-                "[DailyLoginRewardService] DebugForceClaimAvailableToday -> " +
-                "LastClaimUnix=fakeYesterday | CurrentStreak=" + previousDay,
-                this);
-        }
+            Debug.Log("[DailyLoginRewardService] DebugForceClaimAvailableToday -> backend state moved to previous reward window.", this);
     }
 
     [ContextMenu("Debug/Reset Daily Login")]
@@ -238,275 +248,299 @@ public class DailyLoginRewardService : MonoBehaviour
         DebugForceClaimAvailableToday();
     }
 
-    private DailyLoginDayState[] BuildDayStates(int currentStreak, int nextClaimDayIndex, bool canClaimNow)
+    private DailyLoginPreviewState BuildPreview(ProfileSnapshot snapshot)
     {
-        DailyLoginDayState[] result = new DailyLoginDayState[CycleLength];
+        DailyLoginPreviewState preview = new DailyLoginPreviewState();
+        if (snapshot == null || !snapshot.IsValid())
+            return preview;
 
-        for (int i = 1; i <= CycleLength; i++)
+        long nowUnix = GetCurrentUnixSeconds();
+        string currentWindowKey = GetRewardDateKey(nowUnix);
+        string previousWindowKey = GetRewardDateKey(nowUnix - 86400L);
+
+        string lastClaimKey = string.IsNullOrWhiteSpace(snapshot.LastDailyLoginClaimDateUtc)
+            ? string.Empty
+            : snapshot.LastDailyLoginClaimDateUtc.Trim();
+
+        int storedStreak = Mathf.Clamp(snapshot.ConsecutiveLoginDays, 0, 7);
+        bool alreadyClaimedInCurrentWindow = string.Equals(lastClaimKey, currentWindowKey, StringComparison.Ordinal);
+        bool claimedInPreviousWindow = string.Equals(lastClaimKey, previousWindowKey, StringComparison.Ordinal);
+
+        int effectiveStreak = storedStreak;
+        if (!alreadyClaimedInCurrentWindow)
         {
-            DailyLoginRewardDefinition definition = GetDefinitionForDay(i);
+            if (!claimedInPreviousWindow && resetStreakIfOneDailyWindowIsMissed)
+                effectiveStreak = 0;
+        }
 
-            bool isClaimed = i <= currentStreak;
-            bool isToday = i == nextClaimDayIndex;
-            bool isClaimable = isToday && canClaimNow;
+        int nextClaimDay = NormalizeNextClaimDay(effectiveStreak);
+        List<DailyLoginRewardDefinition> normalizedRewards = GetNormalizedRewards();
+        DailyLoginDayState[] states = new DailyLoginDayState[normalizedRewards.Count];
 
-            result[i - 1] = new DailyLoginDayState
+        for (int i = 0; i < normalizedRewards.Count; i++)
+        {
+            DailyLoginRewardDefinition reward = normalizedRewards[i];
+
+            bool isClaimed = reward.dayIndex <= effectiveStreak;
+            bool isToday = reward.dayIndex == nextClaimDay;
+            bool isClaimable = isToday && !alreadyClaimedInCurrentWindow;
+            bool isMissed = reward.dayIndex > nextClaimDay;
+
+            states[i] = new DailyLoginDayState
             {
-                dayIndex = i,
-                rewardType = definition.rewardType,
-                amount = definition.amount,
-                chestType = definition.chestType,
-                customLabel = definition.customLabel,
+                dayIndex = reward.dayIndex,
+                reward = reward,
+                isClaimed = isClaimed,
                 isToday = isToday,
                 isClaimable = isClaimable,
-                isClaimed = isClaimed
+                isMissed = isMissed
             };
+        }
+
+        preview.isReady = true;
+        preview.currentStreakDay = effectiveStreak;
+        preview.nextClaimDay = nextClaimDay;
+        preview.nowUnixSeconds = nowUnix;
+        preview.nextResetUnixSeconds = GetNextResetUnixSeconds(nowUnix);
+        preview.days = states;
+
+        if (verboseLogs)
+        {
+            Debug.Log(
+                "[DailyLoginRewardService] BuildPreview -> " +
+                "Streak=" + effectiveStreak +
+                " | NextDay=" + nextClaimDay +
+                " | CanClaim=" + preview.canClaimNow +
+                " | LastClaimDateKey=" + lastClaimKey,
+                this);
+        }
+
+        return preview;
+    }
+
+    private DailyLoginDayState? GetClaimableState(DailyLoginDayState[] days)
+    {
+        if (days == null)
+            return null;
+
+        for (int i = 0; i < days.Length; i++)
+        {
+            if (days[i].isClaimable)
+                return days[i];
+        }
+
+        return null;
+    }
+
+    private List<DailyLoginRewardDefinition> GetNormalizedRewards()
+    {
+        List<DailyLoginRewardDefinition> list = new List<DailyLoginRewardDefinition>();
+
+        if (rewards != null)
+        {
+            for (int i = 0; i < rewards.Length; i++)
+            {
+                DailyLoginRewardDefinition def = rewards[i];
+                if (def.dayIndex <= 0)
+                    def.dayIndex = i + 1;
+                list.Add(def);
+            }
+        }
+
+        if (list.Count == 0)
+        {
+            for (int i = 0; i < 7; i++)
+            {
+                list.Add(new DailyLoginRewardDefinition
+                {
+                    dayIndex = i + 1,
+                    rewardType = DailyLoginRewardType.SoftCurrency,
+                    amount = 50,
+                    chestType = ChestType.Random,
+                    customLabel = "50 COINS"
+                });
+            }
+        }
+
+        list.Sort((a, b) => a.dayIndex.CompareTo(b.dayIndex));
+        return list;
+    }
+
+    private RewardComputation ComputeReward(ProfileSnapshot snapshot, DailyLoginRewardDefinition reward)
+    {
+        RewardComputation result = new RewardComputation
+        {
+            newSoftCurrency = snapshot.SoftCurrency,
+            newPremiumCurrency = snapshot.HardCurrency
+        };
+
+        switch (reward.rewardType)
+        {
+            case DailyLoginRewardType.SoftCurrency:
+                result.newSoftCurrency += Mathf.Max(0, reward.amount);
+                break;
+
+            case DailyLoginRewardType.PremiumCurrency:
+                result.newPremiumCurrency += Mathf.Max(0, reward.amount);
+                break;
         }
 
         return result;
     }
 
-    private DailyLoginRewardDefinition GetDefinitionForDay(int dayIndex)
+    private void GrantNonProfileReward(DailyLoginRewardDefinition reward, int claimedDay)
     {
-        for (int i = 0; i < rewardDefinitions.Length; i++)
+        switch (reward.rewardType)
         {
-            if (rewardDefinitions[i].dayIndex == dayIndex)
-                return rewardDefinitions[i];
-        }
-
-        return new DailyLoginRewardDefinition
-        {
-            dayIndex = dayIndex,
-            rewardType = DailyLoginRewardType.None,
-            amount = 0,
-            chestType = ChestType.Random,
-            customLabel = string.Empty
-        };
-    }
-
-    private void GrantReward(DailyLoginRewardDefinition definition)
-    {
-        switch (definition.rewardType)
-        {
-            case DailyLoginRewardType.SoftCurrency:
-                GrantSoftCurrency(definition.amount);
-                break;
-
-            case DailyLoginRewardType.PremiumCurrency:
-                GrantPremiumCurrency(definition.amount);
-                break;
-
             case DailyLoginRewardType.Chest:
-                GrantChest(definition.chestType, definition.amount);
+                GrantChestReward(reward, claimedDay);
                 break;
 
             case DailyLoginRewardType.FreeLuckyShot:
-                GrantFreeLuckyShot(definition.amount);
+                GrantLuckyShotReward(reward, claimedDay);
                 break;
         }
     }
 
-    private void GrantSoftCurrency(int amount)
+    private void GrantChestReward(DailyLoginRewardDefinition reward, int claimedDay)
     {
-        PlayerProfileManager profileManager = FindProfileManager();
-        if (profileManager == null)
+        ResolveDependencies();
+        if (playerChestSlotInventory == null)
         {
-            Debug.LogWarning("[DailyLoginRewardService] GrantSoftCurrency failed -> PlayerProfileManager not found.", this);
+            Debug.LogWarning("[DailyLoginRewardService] GrantChestReward skipped -> PlayerChestSlotInventory missing.", this);
             return;
         }
 
-        int safeAmount = Mathf.Max(0, amount);
-        if (safeAmount <= 0)
-            return;
-
-        profileManager.AddSoftCurrency(safeAmount);
+        int grantCount = Mathf.Max(1, reward.amount);
+        for (int i = 0; i < grantCount; i++)
+            playerChestSlotInventory.AwardChest(reward.chestType);
 
         if (verboseLogs)
-            Debug.Log("[DailyLoginRewardService] GrantSoftCurrency -> " + safeAmount, this);
+        {
+            Debug.Log(
+                "[DailyLoginRewardService] GrantChestReward -> " +
+                "Day=" + claimedDay +
+                " | Count=" + grantCount +
+                " | ChestType=" + reward.chestType,
+                this);
+        }
     }
 
-    private void GrantPremiumCurrency(int amount)
+    private void GrantLuckyShotReward(DailyLoginRewardDefinition reward, int claimedDay)
     {
-        PlayerProfileManager profileManager = FindProfileManager();
-        if (profileManager == null)
-        {
-            Debug.LogWarning("[DailyLoginRewardService] GrantPremiumCurrency failed -> PlayerProfileManager not found.", this);
-            return;
-        }
-
-        int safeAmount = Mathf.Max(0, amount);
-        if (safeAmount <= 0)
-            return;
-
-        profileManager.AddPremiumCurrency(safeAmount);
-
         if (verboseLogs)
-            Debug.Log("[DailyLoginRewardService] GrantPremiumCurrency -> " + safeAmount, this);
+        {
+            Debug.Log(
+                "[DailyLoginRewardService] GrantLuckyShotReward -> " +
+                "Day=" + claimedDay +
+                " | Amount=" + Mathf.Max(1, reward.amount) +
+                " | Backend token path=" + TryDescribeLuckyShotBackendPath(),
+                this);
+        }
     }
 
-    private void GrantChest(ChestType chestType, int amount)
+    private ProfileSnapshot TryApplyLuckyShotTokenToSnapshot(ProfileSnapshot snapshot, DailyLoginRewardDefinition reward)
     {
-        PlayerChestSlotInventory inventory = FindChestInventory();
-        if (inventory == null)
+        if (reward.rewardType != DailyLoginRewardType.FreeLuckyShot)
+            return snapshot;
+
+        int amount = Mathf.Max(1, reward.amount);
+        Type snapshotType = snapshot.GetType();
+
+        PropertyInfo currentValueProperty = snapshotType.GetProperty("LuckyShotTokens", BindingFlags.Public | BindingFlags.Instance);
+        MethodInfo withTokensMethod = snapshotType.GetMethod("WithLuckyShotTokens", BindingFlags.Public | BindingFlags.Instance);
+
+        if (currentValueProperty != null && currentValueProperty.PropertyType == typeof(int) && withTokensMethod != null)
         {
-            Debug.LogWarning("[DailyLoginRewardService] GrantChest failed -> PlayerChestSlotInventory not found.", this);
-            return;
+            int currentValue = (int)currentValueProperty.GetValue(snapshot);
+            object updated = withTokensMethod.Invoke(snapshot, new object[] { currentValue + amount });
+            if (updated is ProfileSnapshot typedSnapshot)
+                return typedSnapshot;
         }
 
-        int safeAmount = Mathf.Max(1, amount);
+        Debug.LogWarning(
+            "[DailyLoginRewardService] FreeLuckyShot granted logically, but backend profile has no LuckyShotTokens/WithLuckyShotTokens path yet. " +
+            "Add those to ProfileSnapshot before enabling this reward in production.",
+            this);
 
-        for (int i = 0; i < safeAmount; i++)
-        {
-            bool granted = TryInvokeChestGrant(inventory, chestType);
-
-            if (!granted)
-            {
-                Debug.LogWarning(
-                    "[DailyLoginRewardService] GrantChest failed -> no supported inventory method found for chest reward.",
-                    this);
-                return;
-            }
-        }
-
-        if (verboseLogs)
-            Debug.Log("[DailyLoginRewardService] GrantChest -> Type=" + chestType + " | Amount=" + safeAmount, this);
+        return snapshot;
     }
 
-    private bool TryInvokeChestGrant(PlayerChestSlotInventory inventory, ChestType chestType)
+    private string TryDescribeLuckyShotBackendPath()
     {
-        if (inventory == null)
-            return false;
+        ProfileSnapshot snapshot = GetCurrentSnapshot();
+        if (snapshot == null)
+            return "missing snapshot";
 
-        Type inventoryType = inventory.GetType();
+        Type snapshotType = snapshot.GetType();
+        PropertyInfo currentValueProperty = snapshotType.GetProperty("LuckyShotTokens", BindingFlags.Public | BindingFlags.Instance);
+        MethodInfo withTokensMethod = snapshotType.GetMethod("WithLuckyShotTokens", BindingFlags.Public | BindingFlags.Instance);
 
-        string[] candidateNames =
-        {
-            "TryAddRewardChestFromBackendOrSystem",
-            "TryAddRewardChest",
-            "TryAddChestReward",
-            "TryGrantChestReward",
-            "TryAddChest",
-            "AddChestReward",
-            "GrantChestReward"
-        };
+        if (currentValueProperty != null && withTokensMethod != null)
+            return "profile-supported";
 
-        object[] singleChestArgument = { chestType };
-        object[] singleChestAndAmountArgument = { chestType, 1 };
-
-        for (int i = 0; i < candidateNames.Length; i++)
-        {
-            try
-            {
-                MethodInfo method = inventoryType.GetMethod(
-                    candidateNames[i],
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-                if (method == null)
-                    continue;
-
-                ParameterInfo[] parameters = method.GetParameters();
-
-                if (parameters.Length == 1 && parameters[0].ParameterType == typeof(ChestType))
-                {
-                    object result = method.Invoke(inventory, singleChestArgument);
-
-                    if (method.ReturnType == typeof(bool))
-                        return result is bool b && b;
-
-                    return true;
-                }
-
-                if (parameters.Length == 2 &&
-                    parameters[0].ParameterType == typeof(ChestType) &&
-                    parameters[1].ParameterType == typeof(int))
-                {
-                    object result = method.Invoke(inventory, singleChestAndAmountArgument);
-
-                    if (method.ReturnType == typeof(bool))
-                        return result is bool b && b;
-
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning(
-                    "[DailyLoginRewardService] Chest grant reflection failed on method " +
-                    candidateNames[i] + " -> " + ex.Message,
-                    this);
-            }
-        }
-
-        return false;
+        return "not-yet-supported";
     }
 
-    private void GrantFreeLuckyShot(int amount)
+    private string GetRewardDateKey(long unixSeconds)
     {
-        int safeAmount = Mathf.Max(1, amount);
+        DateTimeOffset utc = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+        DateTime rewardDate = useUtcDay
+            ? utc.UtcDateTime.AddHours(-resetHourUtc).Date
+            : utc.LocalDateTime.AddHours(-resetHourUtc).Date;
 
-        if (verboseLogs)
-            Debug.Log("[DailyLoginRewardService] GrantFreeLuckyShot -> Amount=" + safeAmount + " (placeholder only).", this);
+        return rewardDate.ToString("yyyy-MM-dd");
     }
 
-    private PlayerProfileManager FindProfileManager()
+    private long GetNextResetUnixSeconds(long unixSeconds)
     {
-#if UNITY_2023_1_OR_NEWER
-        return FindFirstObjectByType<PlayerProfileManager>();
-#else
-        return FindObjectOfType<PlayerProfileManager>();
-#endif
+        DateTimeOffset utc = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+        DateTime now = useUtcDay ? utc.UtcDateTime : utc.LocalDateTime;
+        DateTime todayResetBase = now.Date.AddHours(resetHourUtc);
+        DateTime nextReset = now >= todayResetBase ? todayResetBase.AddDays(1) : todayResetBase;
+        DateTime resetUtc = useUtcDay ? nextReset : nextReset.ToUniversalTime();
+        return new DateTimeOffset(resetUtc).ToUnixTimeSeconds();
     }
 
-    private PlayerChestSlotInventory FindChestInventory()
-    {
-#if UNITY_2023_1_OR_NEWER
-        return FindFirstObjectByType<PlayerChestSlotInventory>();
-#else
-        return FindObjectOfType<PlayerChestSlotInventory>();
-#endif
-    }
-
-    private long GetNowUnixSeconds()
+    private long GetCurrentUnixSeconds()
     {
         return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     }
 
-    private long GetNextUtcMidnightUnix(long nowUnix)
+    private int NormalizeNextClaimDay(int effectiveStreak)
     {
-        DateTime utcNow = DateTimeOffset.FromUnixTimeSeconds(nowUnix).UtcDateTime;
-        DateTime nextMidnight = utcNow.Date.AddDays(1);
-        return new DateTimeOffset(nextMidnight, TimeSpan.Zero).ToUnixTimeSeconds();
+        if (effectiveStreak <= 0)
+            return 1;
+
+        if (effectiveStreak >= 7)
+            return 1;
+
+        return effectiveStreak + 1;
     }
 
-    private bool IsSameUtcDay(long unixA, long unixB)
+    private ProfileSnapshot GetCurrentSnapshot()
     {
-        if (unixA <= 0 || unixB <= 0)
-            return false;
-
-        DateTime a = DateTimeOffset.FromUnixTimeSeconds(unixA).UtcDateTime.Date;
-        DateTime b = DateTimeOffset.FromUnixTimeSeconds(unixB).UtcDateTime.Date;
-        return a == b;
+        ResolveDependencies();
+        return profileService != null ? profileService.CurrentProfile : null;
     }
 
-    private bool IsYesterdayUtcDay(long lastClaimUnix, long nowUnix)
+    private void ResolveDependencies()
     {
-        if (lastClaimUnix <= 0 || nowUnix <= 0)
-            return false;
+        if (profileService == null && GameCompositionRoot.Instance != null)
+            profileService = GameCompositionRoot.Instance.ProfileService;
 
-        DateTime last = DateTimeOffset.FromUnixTimeSeconds(lastClaimUnix).UtcDateTime.Date;
-        DateTime now = DateTimeOffset.FromUnixTimeSeconds(nowUnix).UtcDateTime.Date;
-
-        return last == now.AddDays(-1);
+#if UNITY_2023_1_OR_NEWER
+        if (playerChestSlotInventory == null)
+            playerChestSlotInventory = FindFirstObjectByType<PlayerChestSlotInventory>();
+#else
+        if (playerChestSlotInventory == null)
+            playerChestSlotInventory = FindObjectOfType<PlayerChestSlotInventory>();
+#endif
     }
 
-    private int SafeUnixToInt(long unix)
+    private struct RewardComputation
     {
-        if (unix <= 0)
-            return 0;
-
-        if (unix > int.MaxValue)
-            return int.MaxValue;
-
-        return (int)unix;
+        public int newSoftCurrency;
+        public int newPremiumCurrency;
     }
 }

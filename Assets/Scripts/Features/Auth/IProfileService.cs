@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using UncballArena.Core.Profile.Models;
 
@@ -26,6 +27,11 @@ namespace UncballArena.Core.Profile.Services
             int multiplayerWins,
             int rankedMatches,
             int rankedWins);
-        Task<ProfileSnapshot> ApplyAuthoritativeSnapshotAsync(ProfileSnapshot snapshot);
+        Task<ProfileSnapshot> SetCurrenciesAsync(int softCurrency, int hardCurrency);
+        Task<ProfileSnapshot> SetRankedLpAsync(int rankedLp);
+        Task<ProfileSnapshot> AddRankedLpAsync(int delta);
+        Task<ProfileSnapshot> SetDailyLoginStateAsync(string lastDailyLoginClaimDateUtc, int consecutiveLoginDays);
+        Task<ProfileSnapshot> SetProgressionAndDailyLoginAsync(int xp, int level, string lastDailyLoginClaimDateUtc, int consecutiveLoginDays);
+        Task<ProfileSnapshot> ApplyAuthoritativeSnapshotAsync(ProfileSnapshot snapshot, CancellationToken cancellationToken = default);
     }
 }

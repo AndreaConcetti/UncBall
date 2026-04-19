@@ -57,7 +57,6 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
     public void Show(DailyLoginClaimResult result)
     {
         BindButtons();
-
         suppressInitialHide = true;
 
         GameObject root = GetEffectiveRoot();
@@ -73,13 +72,12 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
             dayText.text = "DAY " + Mathf.Max(1, result.claimedDayIndex);
 
         if (rewardText != null)
-            rewardText.text = BuildRewardLabel(result);
+            rewardText.text = BuildRewardLabel(result.reward);
 
         if (amountText != null)
-            amountText.text = BuildAmountText(result);
+            amountText.text = BuildAmountText(result.reward);
 
-        ApplyIcon(result.rewardType);
-
+        ApplyIcon(result.reward);
         ForceCanvasRefresh();
 
         if (verboseLogs)
@@ -87,11 +85,10 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
             Debug.Log(
                 "[DailyLoginRewardPopupUI] Show -> " +
                 "Day=" + result.claimedDayIndex +
-                " | Type=" + result.rewardType +
-                " | Amount=" + result.amount +
-                " | ChestType=" + result.chestType +
-                " | Label=" + result.customLabel +
-                " | Root=" + GetName(root),
+                " | Type=" + result.reward.rewardType +
+                " | Amount=" + result.reward.amount +
+                " | ChestType=" + result.reward.chestType +
+                " | Label=" + result.reward.customLabel,
                 this);
         }
     }
@@ -136,10 +133,7 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
 
     private GameObject GetEffectiveRoot()
     {
-        if (panelRoot != null)
-            return panelRoot;
-
-        return gameObject;
+        return panelRoot != null ? panelRoot : gameObject;
     }
 
     private void ForceCanvasRefresh()
@@ -159,12 +153,12 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
             LayoutRebuilder.ForceRebuildLayoutImmediate(rewardIcon.transform as RectTransform);
     }
 
-    private void ApplyIcon(DailyLoginRewardType rewardType)
+    private void ApplyIcon(DailyLoginRewardDefinition reward)
     {
         if (rewardIcon == null)
             return;
 
-        DailyLoginPopupRewardVisualMapping mapping = FindMapping(rewardType);
+        DailyLoginPopupRewardVisualMapping mapping = FindMapping(reward.rewardType);
 
         if (mapping.sprite != null)
         {
@@ -179,47 +173,41 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
         }
     }
 
-    private string BuildRewardLabel(DailyLoginClaimResult result)
+    private string BuildRewardLabel(DailyLoginRewardDefinition reward)
     {
-        DailyLoginPopupRewardVisualMapping mapping = FindMapping(result.rewardType);
+        DailyLoginPopupRewardVisualMapping mapping = FindMapping(reward.rewardType);
 
         if (!string.IsNullOrWhiteSpace(mapping.labelOverride))
             return mapping.labelOverride.ToUpperInvariant();
 
-        if (!string.IsNullOrWhiteSpace(result.customLabel))
-            return result.customLabel.ToUpperInvariant();
+        if (!string.IsNullOrWhiteSpace(reward.customLabel))
+            return reward.customLabel.ToUpperInvariant();
 
-        switch (result.rewardType)
+        switch (reward.rewardType)
         {
             case DailyLoginRewardType.SoftCurrency:
                 return "COINS";
-
             case DailyLoginRewardType.PremiumCurrency:
                 return "GEMS";
-
             case DailyLoginRewardType.Chest:
                 return "CHEST";
-
             case DailyLoginRewardType.FreeLuckyShot:
                 return "FREE LUCKY SHOT";
-
             default:
                 return "REWARD";
         }
     }
 
-    private string BuildAmountText(DailyLoginClaimResult result)
+    private string BuildAmountText(DailyLoginRewardDefinition reward)
     {
-        switch (result.rewardType)
+        switch (reward.rewardType)
         {
             case DailyLoginRewardType.SoftCurrency:
             case DailyLoginRewardType.PremiumCurrency:
-                return "+" + Mathf.Max(0, result.amount);
-
+                return "+" + Mathf.Max(0, reward.amount);
             case DailyLoginRewardType.Chest:
             case DailyLoginRewardType.FreeLuckyShot:
-                return "X" + Mathf.Max(1, result.amount);
-
+                return "X" + Mathf.Max(1, reward.amount);
             default:
                 return string.Empty;
         }
@@ -237,10 +225,5 @@ public class DailyLoginRewardPopupUI : MonoBehaviour
         }
 
         return default;
-    }
-
-    private string GetName(UnityEngine.Object target)
-    {
-        return target == null ? "<null>" : target.name;
     }
 }

@@ -106,9 +106,7 @@ namespace UncballArena.Core.Profile.Services
 
             CurrentProfile = CurrentProfile.WithDisplayName(sanitized);
             await repository.SaveAsync(CurrentProfile);
-
             await SyncDisplayNameToAuthIfPossibleAsync(sanitized);
-
             RaiseProfileChanged();
             return CurrentProfile;
         }
@@ -118,7 +116,6 @@ namespace UncballArena.Core.Profile.Services
             EnsureProfileExists();
 
             string sanitized = string.IsNullOrWhiteSpace(skinId) ? string.Empty : skinId.Trim();
-
             if (string.Equals(CurrentProfile.EquippedBallSkinId, sanitized, StringComparison.Ordinal))
                 return CurrentProfile;
 
@@ -133,7 +130,6 @@ namespace UncballArena.Core.Profile.Services
             EnsureProfileExists();
 
             string sanitized = string.IsNullOrWhiteSpace(skinId) ? string.Empty : skinId.Trim();
-
             if (string.Equals(CurrentProfile.EquippedTableSkinId, sanitized, StringComparison.Ordinal))
                 return CurrentProfile;
 
@@ -193,8 +189,7 @@ namespace UncballArena.Core.Profile.Services
                 sanitizedMultiplayerMatches,
                 sanitizedMultiplayerWins,
                 sanitizedRankedMatches,
-                sanitizedRankedWins
-            );
+                sanitizedRankedWins);
 
             await repository.SaveAsync(CurrentProfile);
             RaiseProfileChanged();
@@ -208,11 +203,8 @@ namespace UncballArena.Core.Profile.Services
             int sanitizedSoft = Mathf.Max(0, softCurrency);
             int sanitizedHard = Mathf.Max(0, hardCurrency);
 
-            if (CurrentProfile.SoftCurrency == sanitizedSoft &&
-                CurrentProfile.HardCurrency == sanitizedHard)
-            {
+            if (CurrentProfile.SoftCurrency == sanitizedSoft && CurrentProfile.HardCurrency == sanitizedHard)
                 return CurrentProfile;
-            }
 
             CurrentProfile = CurrentProfile.WithCurrencies(sanitizedSoft, sanitizedHard);
             await repository.SaveAsync(CurrentProfile);
@@ -225,7 +217,6 @@ namespace UncballArena.Core.Profile.Services
             EnsureProfileExists();
 
             int sanitizedLp = Mathf.Max(0, rankedLp);
-
             if (CurrentProfile.RankedLp == sanitizedLp)
                 return CurrentProfile;
 
@@ -235,25 +226,21 @@ namespace UncballArena.Core.Profile.Services
             return CurrentProfile;
         }
 
-        public async Task<ProfileSnapshot> AddRankedLpAsync(int delta)
+        public Task<ProfileSnapshot> AddRankedLpAsync(int delta)
         {
             EnsureProfileExists();
-
             int target = Mathf.Max(0, CurrentProfile.RankedLp + delta);
-            return await SetRankedLpAsync(target);
+            return SetRankedLpAsync(target);
         }
 
-        public async Task<ProfileSnapshot> SetDailyLoginStateAsync(
-            string lastDailyLoginClaimDateUtc,
-            int consecutiveLoginDays)
+        public async Task<ProfileSnapshot> SetDailyLoginStateAsync(string lastDailyLoginClaimDateUtc, int consecutiveLoginDays)
         {
             EnsureProfileExists();
 
             string sanitizedDate = string.IsNullOrWhiteSpace(lastDailyLoginClaimDateUtc)
                 ? string.Empty
                 : lastDailyLoginClaimDateUtc.Trim();
-
-            int sanitizedStreak = Mathf.Max(0, consecutiveLoginDays);
+            int sanitizedStreak = Mathf.Clamp(consecutiveLoginDays, 0, 7);
 
             bool unchanged =
                 string.Equals(CurrentProfile.LastDailyLoginClaimDateUtc, sanitizedDate, StringComparison.Ordinal) &&
@@ -268,11 +255,7 @@ namespace UncballArena.Core.Profile.Services
             return CurrentProfile;
         }
 
-        public async Task<ProfileSnapshot> SetProgressionAndDailyLoginAsync(
-            int xp,
-            int level,
-            string lastDailyLoginClaimDateUtc,
-            int consecutiveLoginDays)
+        public async Task<ProfileSnapshot> SetProgressionAndDailyLoginAsync(int xp, int level, string lastDailyLoginClaimDateUtc, int consecutiveLoginDays)
         {
             EnsureProfileExists();
 
@@ -281,7 +264,7 @@ namespace UncballArena.Core.Profile.Services
             string sanitizedDate = string.IsNullOrWhiteSpace(lastDailyLoginClaimDateUtc)
                 ? string.Empty
                 : lastDailyLoginClaimDateUtc.Trim();
-            int sanitizedStreak = Mathf.Max(0, consecutiveLoginDays);
+            int sanitizedStreak = Mathf.Clamp(consecutiveLoginDays, 0, 7);
 
             bool unchanged =
                 CurrentProfile.Xp == sanitizedXp &&
@@ -303,13 +286,15 @@ namespace UncballArena.Core.Profile.Services
             return CurrentProfile;
         }
 
-        public async Task<ProfileSnapshot> ApplyAuthoritativeSnapshotAsync(ProfileSnapshot snapshot)
+        public async Task<ProfileSnapshot> ApplyAuthoritativeSnapshotAsync(ProfileSnapshot snapshot, CancellationToken cancellationToken = default)
         {
             if (snapshot == null || !snapshot.IsValid())
             {
                 Debug.LogError("[ProfileService] ApplyAuthoritativeSnapshotAsync failed: snapshot invalid or null.");
                 return CurrentProfile;
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             bool displayNameChanged =
                 CurrentProfile == null ||
@@ -356,10 +341,8 @@ namespace UncballArena.Core.Profile.Services
 
         private void EnsureProfileExists()
         {
-            if (CurrentProfile != null && CurrentProfile.IsValid())
-                return;
-
-            throw new InvalidOperationException("[ProfileService] CurrentProfile is null or invalid.");
+            if (CurrentProfile == null)
+                throw new InvalidOperationException("[ProfileService] CurrentProfile is null. InitializeAsync or LoadOrCreateProfileAsync must be called first.");
         }
 
         private void RaiseProfileChanged()
