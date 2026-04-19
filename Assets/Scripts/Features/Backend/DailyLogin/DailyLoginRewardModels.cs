@@ -3,11 +3,10 @@ using UnityEngine;
 
 public enum DailyLoginRewardType
 {
-    None = 0,
-    SoftCurrency = 1,
-    PremiumCurrency = 2,
-    Chest = 3,
-    FreeLuckyShot = 4
+    SoftCurrency = 0,
+    PremiumCurrency = 1,
+    Chest = 2,
+    FreeLuckyShot = 3
 }
 
 [Serializable]
@@ -24,22 +23,76 @@ public struct DailyLoginRewardDefinition
         get => customLabel;
         set => customLabel = value;
     }
+
+    public int claimedDay
+    {
+        get => dayIndex;
+        set => dayIndex = value;
+    }
 }
 
 [Serializable]
 public struct DailyLoginDayState
 {
     public int dayIndex;
-    public DailyLoginRewardDefinition reward;
-    public bool isToday;
-    public bool isClaimable;
+    public DailyLoginRewardType rewardType;
+    public int amount;
+    public ChestType chestType;
+    public string customLabel;
     public bool isClaimed;
+    public bool isClaimable;
+    public bool isToday;
     public bool isMissed;
 
-    public DailyLoginRewardType rewardType => reward.rewardType;
-    public int amount => reward.amount;
-    public ChestType chestType => reward.chestType;
-    public string customLabel => reward.customLabel;
+    public int dayNumber
+    {
+        get => dayIndex;
+        set => dayIndex = value;
+    }
+
+    public bool canClaim
+    {
+        get => isClaimable;
+        set => isClaimable = value;
+    }
+
+    public bool chestGranted
+    {
+        get => rewardType == DailyLoginRewardType.Chest;
+        set { }
+    }
+
+    public int softCurrency
+    {
+        get => rewardType == DailyLoginRewardType.SoftCurrency ? amount : 0;
+        set
+        {
+            if (value > 0)
+            {
+                rewardType = DailyLoginRewardType.SoftCurrency;
+                amount = value;
+            }
+        }
+    }
+
+    public int premiumCurrency
+    {
+        get => rewardType == DailyLoginRewardType.PremiumCurrency ? amount : 0;
+        set
+        {
+            if (value > 0)
+            {
+                rewardType = DailyLoginRewardType.PremiumCurrency;
+                amount = value;
+            }
+        }
+    }
+
+    public string label
+    {
+        get => customLabel;
+        set => customLabel = value;
+    }
 }
 
 [Serializable]
@@ -47,28 +100,35 @@ public struct DailyLoginPreviewState
 {
     public bool isReady;
     public int currentStreakDay;
-    public int nextClaimDay;
-    public long nowUnixSeconds;
+    public int nextClaimDayIndex;
+    public bool canClaimNow;
+    public bool alreadyClaimedToday;
+    public string lastClaimDateUtc;
     public long nextResetUnixSeconds;
     public DailyLoginDayState[] days;
 
-    public int nextClaimDayIndex => nextClaimDay;
-
-    public bool canClaimNow
+    public int todayDayIndex
     {
-        get
-        {
-            if (days == null)
-                return false;
+        get => nextClaimDayIndex;
+        set => nextClaimDayIndex = value;
+    }
 
-            for (int i = 0; i < days.Length; i++)
-            {
-                if (days[i].isClaimable)
-                    return true;
-            }
+    public int nextClaimDay
+    {
+        get => nextClaimDayIndex;
+        set => nextClaimDayIndex = value;
+    }
 
-            return false;
-        }
+    public bool canClaimToday
+    {
+        get => canClaimNow;
+        set => canClaimNow = value;
+    }
+
+    public long nowUnixSeconds
+    {
+        get => nextResetUnixSeconds;
+        set => nextResetUnixSeconds = value;
     }
 }
 
@@ -77,51 +137,112 @@ public struct DailyLoginClaimResult
 {
     public bool success;
     public bool alreadyClaimed;
-    public int claimedDay;
-    public DailyLoginRewardDefinition reward;
+    public string failureReason;
+
+    public int claimedDayIndex;
+    public DailyLoginRewardType rewardType;
+    public int amount;
+    public ChestType chestType;
+    public string customLabel;
+
     public int newSoftCurrencyTotal;
     public int newPremiumCurrencyTotal;
     public long claimedAtUnixSeconds;
+
     public DailyLoginPreviewState previewAfterClaim;
-    public string failureReason;
 
-    public int claimedDayIndex => claimedDay;
-    public DailyLoginRewardType rewardType => reward.rewardType;
-    public int amount => reward.amount;
-    public ChestType chestType => reward.chestType;
-    public string customLabel => reward.customLabel;
-    public int updatedStreakDay => previewAfterClaim.currentStreakDay;
-    public long nextResetUnixSeconds => previewAfterClaim.nextResetUnixSeconds;
+    public int claimedDay
+    {
+        get => claimedDayIndex;
+        set => claimedDayIndex = value;
+    }
 
-    public static DailyLoginClaimResult Failed(DailyLoginPreviewState preview, string reason = "Claim failed.")
+    public DailyLoginRewardDefinition reward
+    {
+        get
+        {
+            return new DailyLoginRewardDefinition
+            {
+                dayIndex = claimedDayIndex,
+                rewardType = rewardType,
+                amount = amount,
+                chestType = chestType,
+                customLabel = customLabel
+            };
+        }
+        set
+        {
+            claimedDayIndex = value.dayIndex;
+            rewardType = value.rewardType;
+            amount = value.amount;
+            chestType = value.chestType;
+            customLabel = value.customLabel;
+        }
+    }
+
+    public static DailyLoginClaimResult Success(
+        int claimedDayIndex,
+        DailyLoginRewardType rewardType,
+        int amount,
+        ChestType chestType,
+        string customLabel,
+        int newSoftCurrencyTotal,
+        int newPremiumCurrencyTotal,
+        long claimedAtUnixSeconds,
+        DailyLoginPreviewState previewAfterClaim)
+    {
+        return new DailyLoginClaimResult
+        {
+            success = true,
+            alreadyClaimed = false,
+            failureReason = string.Empty,
+            claimedDayIndex = claimedDayIndex,
+            rewardType = rewardType,
+            amount = amount,
+            chestType = chestType,
+            customLabel = customLabel ?? string.Empty,
+            newSoftCurrencyTotal = newSoftCurrencyTotal,
+            newPremiumCurrencyTotal = newPremiumCurrencyTotal,
+            claimedAtUnixSeconds = claimedAtUnixSeconds,
+            previewAfterClaim = previewAfterClaim
+        };
+    }
+
+    public static DailyLoginClaimResult Failed(DailyLoginPreviewState previewAfterClaim, string failureReason = "")
     {
         return new DailyLoginClaimResult
         {
             success = false,
             alreadyClaimed = false,
-            claimedDay = Mathf.Clamp(preview.nextClaimDay, 1, 7),
-            reward = default,
+            failureReason = failureReason ?? string.Empty,
+            claimedDayIndex = 0,
+            rewardType = DailyLoginRewardType.SoftCurrency,
+            amount = 0,
+            chestType = default,
+            customLabel = string.Empty,
             newSoftCurrencyTotal = 0,
             newPremiumCurrencyTotal = 0,
-            claimedAtUnixSeconds = 0,
-            previewAfterClaim = preview,
-            failureReason = string.IsNullOrWhiteSpace(reason) ? "Claim failed." : reason
+            claimedAtUnixSeconds = 0L,
+            previewAfterClaim = previewAfterClaim
         };
     }
 
-    public static DailyLoginClaimResult AlreadyClaimed(DailyLoginPreviewState preview)
+    public static DailyLoginClaimResult AlreadyClaimed(DailyLoginPreviewState previewAfterClaim)
     {
         return new DailyLoginClaimResult
         {
             success = false,
             alreadyClaimed = true,
-            claimedDay = Mathf.Clamp(preview.nextClaimDay, 1, 7),
-            reward = default,
+            failureReason = string.Empty,
+            claimedDayIndex = 0,
+            rewardType = DailyLoginRewardType.SoftCurrency,
+            amount = 0,
+            chestType = default,
+            customLabel = string.Empty,
             newSoftCurrencyTotal = 0,
             newPremiumCurrencyTotal = 0,
-            claimedAtUnixSeconds = 0,
-            previewAfterClaim = preview,
-            failureReason = "Reward already claimed today."
+            claimedAtUnixSeconds = 0L,
+            previewAfterClaim = previewAfterClaim
         };
     }
 }

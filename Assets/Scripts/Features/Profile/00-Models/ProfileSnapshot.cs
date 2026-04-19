@@ -1,3 +1,4 @@
+
 using System;
 using UnityEngine;
 
@@ -36,6 +37,11 @@ namespace UncballArena.Core.Profile.Models
         [SerializeField] private string lastDailyLoginClaimDateUtc;
         [SerializeField] private int consecutiveLoginDays;
 
+        [Header("Lucky Shot")]
+        [SerializeField] private int luckyShotTokens;
+        [SerializeField] private int luckyShotTotalPlays;
+        [SerializeField] private int luckyShotBestScore;
+
         [Header("Metadata")]
         [SerializeField] private long createdAtUnixSeconds;
         [SerializeField] private long updatedAtUnixSeconds;
@@ -64,18 +70,16 @@ namespace UncballArena.Core.Profile.Models
         public string LastDailyLoginClaimDateUtc => lastDailyLoginClaimDateUtc;
         public int ConsecutiveLoginDays => consecutiveLoginDays;
 
+        public int LuckyShotTokens => luckyShotTokens;
+        public int LuckyShotTotalPlays => luckyShotTotalPlays;
+        public int LuckyShotBestScore => luckyShotBestScore;
+
         public long CreatedAtUnixSeconds => createdAtUnixSeconds;
         public long UpdatedAtUnixSeconds => updatedAtUnixSeconds;
 
         public float TotalWinRate => totalMatches > 0 ? (float)totalWins / totalMatches : 0f;
         public float MultiplayerWinRate => multiplayerMatches > 0 ? (float)multiplayerWins / multiplayerMatches : 0f;
         public float RankedWinRate => rankedMatches > 0 ? (float)rankedWins / rankedMatches : 0f;
-
-        public bool hasData => IsValid();
-        public int premiumCurrency => HardCurrency;
-        public int dailyLoginStreakDay => ConsecutiveLoginDays;
-        public int lastDailyRewardDayIndex => string.IsNullOrWhiteSpace(lastDailyLoginClaimDateUtc) ? 0 : 1;
-        public long lastDailyRewardClaimUnixSeconds => TryParseClaimDateUtcToUnix(lastDailyLoginClaimDateUtc);
 
         public ProfileSnapshot(
             string profileId,
@@ -96,6 +100,9 @@ namespace UncballArena.Core.Profile.Models
             int rankedLp,
             string lastDailyLoginClaimDateUtc,
             int consecutiveLoginDays,
+            int luckyShotTokens,
+            int luckyShotTotalPlays,
+            int luckyShotBestScore,
             long createdAtUnixSeconds,
             long updatedAtUnixSeconds)
         {
@@ -125,8 +132,60 @@ namespace UncballArena.Core.Profile.Models
             this.lastDailyLoginClaimDateUtc = Sanitize(lastDailyLoginClaimDateUtc);
             this.consecutiveLoginDays = Mathf.Clamp(consecutiveLoginDays, 0, 7);
 
+            this.luckyShotTokens = Mathf.Max(0, luckyShotTokens);
+            this.luckyShotTotalPlays = Mathf.Max(0, luckyShotTotalPlays);
+            this.luckyShotBestScore = Mathf.Max(0, luckyShotBestScore);
+
             this.createdAtUnixSeconds = Math.Max(0, createdAtUnixSeconds);
             this.updatedAtUnixSeconds = Math.Max(0, updatedAtUnixSeconds);
+        }
+
+        public ProfileSnapshot(
+            string profileId,
+            string playerId,
+            string displayName,
+            int xp,
+            int level,
+            int totalMatches,
+            int totalWins,
+            int multiplayerMatches,
+            int multiplayerWins,
+            int rankedMatches,
+            int rankedWins,
+            string equippedBallSkinId,
+            string equippedTableSkinId,
+            int softCurrency,
+            int hardCurrency,
+            int rankedLp,
+            string lastDailyLoginClaimDateUtc,
+            int consecutiveLoginDays,
+            long createdAtUnixSeconds,
+            long updatedAtUnixSeconds)
+            : this(
+                profileId,
+                playerId,
+                displayName,
+                xp,
+                level,
+                totalMatches,
+                totalWins,
+                multiplayerMatches,
+                multiplayerWins,
+                rankedMatches,
+                rankedWins,
+                equippedBallSkinId,
+                equippedTableSkinId,
+                softCurrency,
+                hardCurrency,
+                rankedLp,
+                lastDailyLoginClaimDateUtc,
+                consecutiveLoginDays,
+                luckyShotTokens: 0,
+                luckyShotTotalPlays: 0,
+                luckyShotBestScore: 0,
+                createdAtUnixSeconds: createdAtUnixSeconds,
+                updatedAtUnixSeconds: updatedAtUnixSeconds)
+        {
         }
 
         public ProfileSnapshot(
@@ -163,11 +222,14 @@ namespace UncballArena.Core.Profile.Models
                 equippedTableSkinId,
                 softCurrency,
                 hardCurrency,
-                1000,
-                string.Empty,
-                0,
-                createdAtUnixSeconds,
-                updatedAtUnixSeconds)
+                rankedLp: 1000,
+                lastDailyLoginClaimDateUtc: string.Empty,
+                consecutiveLoginDays: 0,
+                luckyShotTokens: 0,
+                luckyShotTotalPlays: 0,
+                luckyShotBestScore: 0,
+                createdAtUnixSeconds: createdAtUnixSeconds,
+                updatedAtUnixSeconds: updatedAtUnixSeconds)
         {
         }
 
@@ -194,18 +256,33 @@ namespace UncballArena.Core.Profile.Models
                 rankedLp: 1000,
                 lastDailyLoginClaimDateUtc: string.Empty,
                 consecutiveLoginDays: 0,
+                luckyShotTokens: 0,
+                luckyShotTotalPlays: 0,
+                luckyShotBestScore: 0,
                 createdAtUnixSeconds: now,
                 updatedAtUnixSeconds: now);
         }
 
         public ProfileSnapshot WithDisplayName(string newDisplayName)
         {
-            return CreateCopy(displayName: newDisplayName);
+            return new ProfileSnapshot(
+                profileId, playerId, newDisplayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
         public ProfileSnapshot WithProgression(int newXp, int newLevel)
         {
-            return CreateCopy(xp: newXp, level: newLevel);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, newXp, newLevel, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
         public ProfileSnapshot WithStats(
@@ -216,40 +293,68 @@ namespace UncballArena.Core.Profile.Models
             int newRankedMatches,
             int newRankedWins)
         {
-            return CreateCopy(
-                totalMatches: newTotalMatches,
-                totalWins: newTotalWins,
-                multiplayerMatches: newMultiplayerMatches,
-                multiplayerWins: newMultiplayerWins,
-                rankedMatches: newRankedMatches,
-                rankedWins: newRankedWins);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, newTotalMatches, newTotalWins,
+                newMultiplayerMatches, newMultiplayerWins, newRankedMatches, newRankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
         public ProfileSnapshot WithEquippedBallSkin(string newSkinId)
         {
-            return CreateCopy(equippedBallSkinId: newSkinId);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                newSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
         public ProfileSnapshot WithEquippedTableSkin(string newSkinId)
         {
-            return CreateCopy(equippedTableSkinId: newSkinId);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, newSkinId, softCurrency, hardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
         public ProfileSnapshot WithCurrencies(int newSoftCurrency, int newHardCurrency)
         {
-            return CreateCopy(softCurrency: newSoftCurrency, hardCurrency: newHardCurrency);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, newSoftCurrency, newHardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
         public ProfileSnapshot WithRankedLp(int newRankedLp)
         {
-            return CreateCopy(rankedLp: newRankedLp);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, newRankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
         public ProfileSnapshot WithDailyLoginState(string newLastDailyLoginClaimDateUtc, int newConsecutiveLoginDays)
         {
-            return CreateCopy(
-                lastDailyLoginClaimDateUtc: newLastDailyLoginClaimDateUtc,
-                consecutiveLoginDays: newConsecutiveLoginDays);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                newLastDailyLoginClaimDateUtc, newConsecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
         public ProfileSnapshot WithProgressionAndDailyLogin(
@@ -258,93 +363,90 @@ namespace UncballArena.Core.Profile.Models
             string newLastDailyLoginClaimDateUtc,
             int newConsecutiveLoginDays)
         {
-            return CreateCopy(
-                xp: newXp,
-                level: newLevel,
-                lastDailyLoginClaimDateUtc: newLastDailyLoginClaimDateUtc,
-                consecutiveLoginDays: newConsecutiveLoginDays);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, newXp, newLevel, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                newLastDailyLoginClaimDateUtc, newConsecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
         }
 
-        public ProfileSnapshot WithCurrenciesAndDailyLogin(
+        public ProfileSnapshot WithCurrenciesRankedLpAndDailyLogin(
             int newSoftCurrency,
-            int newPremiumCurrency,
-            int newDailyLoginStreakDay,
-            long newLastDailyRewardClaimUnixSeconds,
-            int newLastDailyRewardDayIndex)
+            int newHardCurrency,
+            int newRankedLp,
+            string newLastDailyLoginClaimDateUtc,
+            int newConsecutiveLoginDays)
         {
-            string claimDate = UnixToRewardDateString(newLastDailyRewardClaimUnixSeconds);
-            return CreateCopy(
-                softCurrency: newSoftCurrency,
-                hardCurrency: newPremiumCurrency,
-                lastDailyLoginClaimDateUtc: claimDate,
-                consecutiveLoginDays: newDailyLoginStreakDay);
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, newSoftCurrency, newHardCurrency, newRankedLp,
+                newLastDailyLoginClaimDateUtc, newConsecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
+        }
+
+        public ProfileSnapshot WithLuckyShotState(
+            int newLuckyShotTokens,
+            int newLuckyShotTotalPlays,
+            int newLuckyShotBestScore)
+        {
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                newLuckyShotTokens, newLuckyShotTotalPlays, newLuckyShotBestScore,
+                createdAtUnixSeconds, Now());
+        }
+
+        public ProfileSnapshot WithLuckyShotTokens(int newLuckyShotTokens)
+        {
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                newLuckyShotTokens, luckyShotTotalPlays, luckyShotBestScore,
+                createdAtUnixSeconds, Now());
+        }
+
+        public ProfileSnapshot WithLuckyShotPlayRecorded(int score)
+        {
+            int nextBest = Mathf.Max(luckyShotBestScore, Mathf.Max(0, score));
+
+            return new ProfileSnapshot(
+                profileId, playerId, displayName, xp, level, totalMatches, totalWins,
+                multiplayerMatches, multiplayerWins, rankedMatches, rankedWins,
+                equippedBallSkinId, equippedTableSkinId, softCurrency, hardCurrency, rankedLp,
+                lastDailyLoginClaimDateUtc, consecutiveLoginDays,
+                luckyShotTokens, luckyShotTotalPlays + 1, nextBest,
+                createdAtUnixSeconds, Now());
         }
 
         public bool IsValid()
         {
             if (string.IsNullOrWhiteSpace(profileId))
                 return false;
-
             if (string.IsNullOrWhiteSpace(playerId))
                 return false;
-
             if (level <= 0)
                 return false;
-
             if (xp < 0)
                 return false;
-
             return true;
         }
 
         public override string ToString()
         {
-            return $"ProfileSnapshot(ProfileId={profileId}, PlayerId={playerId}, DisplayName={displayName}, XP={xp}, Level={level}, TotalMatches={totalMatches}, TotalWins={totalWins})";
-        }
-
-        private ProfileSnapshot CreateCopy(
-            string profileId = null,
-            string playerId = null,
-            string displayName = null,
-            int? xp = null,
-            int? level = null,
-            int? totalMatches = null,
-            int? totalWins = null,
-            int? multiplayerMatches = null,
-            int? multiplayerWins = null,
-            int? rankedMatches = null,
-            int? rankedWins = null,
-            string equippedBallSkinId = null,
-            string equippedTableSkinId = null,
-            int? softCurrency = null,
-            int? hardCurrency = null,
-            int? rankedLp = null,
-            string lastDailyLoginClaimDateUtc = null,
-            int? consecutiveLoginDays = null,
-            long? createdAtUnixSeconds = null,
-            long? updatedAtUnixSeconds = null)
-        {
-            return new ProfileSnapshot(
-                profileId ?? this.profileId,
-                playerId ?? this.playerId,
-                displayName ?? this.displayName,
-                xp ?? this.xp,
-                level ?? this.level,
-                totalMatches ?? this.totalMatches,
-                totalWins ?? this.totalWins,
-                multiplayerMatches ?? this.multiplayerMatches,
-                multiplayerWins ?? this.multiplayerWins,
-                rankedMatches ?? this.rankedMatches,
-                rankedWins ?? this.rankedWins,
-                equippedBallSkinId ?? this.equippedBallSkinId,
-                equippedTableSkinId ?? this.equippedTableSkinId,
-                softCurrency ?? this.softCurrency,
-                hardCurrency ?? this.hardCurrency,
-                rankedLp ?? this.rankedLp,
-                lastDailyLoginClaimDateUtc ?? this.lastDailyLoginClaimDateUtc,
-                consecutiveLoginDays ?? this.consecutiveLoginDays,
-                createdAtUnixSeconds ?? this.createdAtUnixSeconds,
-                updatedAtUnixSeconds ?? Now());
+            return
+                $"ProfileSnapshot(" +
+                $"ProfileId={profileId}, PlayerId={playerId}, DisplayName={displayName}, " +
+                $"XP={xp}, Level={level}, Soft={softCurrency}, Hard={hardCurrency}, RankedLp={rankedLp}, " +
+                $"DailyDate={lastDailyLoginClaimDateUtc}, Streak={consecutiveLoginDays}, " +
+                $"LuckyShotTokens={luckyShotTokens}, LuckyShotTotalPlays={luckyShotTotalPlays}, LuckyShotBestScore={luckyShotBestScore})";
         }
 
         private static string Sanitize(string value)
@@ -355,26 +457,6 @@ namespace UncballArena.Core.Profile.Models
         private static long Now()
         {
             return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        }
-
-        private static string UnixToRewardDateString(long unixSeconds)
-        {
-            if (unixSeconds <= 0)
-                return string.Empty;
-
-            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime.ToString("yyyy-MM-dd");
-        }
-
-        private static long TryParseClaimDateUtcToUnix(string claimDate)
-        {
-            if (string.IsNullOrWhiteSpace(claimDate))
-                return 0;
-
-            if (!DateTime.TryParse(claimDate, out DateTime parsed))
-                return 0;
-
-            DateTime utc = DateTime.SpecifyKind(parsed.Date, DateTimeKind.Utc);
-            return new DateTimeOffset(utc).ToUnixTimeSeconds();
         }
     }
 }

@@ -1,3 +1,4 @@
+
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -100,7 +101,6 @@ namespace UncballArena.Core.Profile.Services
             EnsureProfileExists();
 
             string sanitized = SanitizeDisplayName(displayName);
-
             if (string.Equals(CurrentProfile.DisplayName, sanitized, StringComparison.Ordinal))
                 return CurrentProfile;
 
@@ -233,7 +233,9 @@ namespace UncballArena.Core.Profile.Services
             return SetRankedLpAsync(target);
         }
 
-        public async Task<ProfileSnapshot> SetDailyLoginStateAsync(string lastDailyLoginClaimDateUtc, int consecutiveLoginDays)
+        public async Task<ProfileSnapshot> SetDailyLoginStateAsync(
+            string lastDailyLoginClaimDateUtc,
+            int consecutiveLoginDays)
         {
             EnsureProfileExists();
 
@@ -255,7 +257,11 @@ namespace UncballArena.Core.Profile.Services
             return CurrentProfile;
         }
 
-        public async Task<ProfileSnapshot> SetProgressionAndDailyLoginAsync(int xp, int level, string lastDailyLoginClaimDateUtc, int consecutiveLoginDays)
+        public async Task<ProfileSnapshot> SetProgressionAndDailyLoginAsync(
+            int xp,
+            int level,
+            string lastDailyLoginClaimDateUtc,
+            int consecutiveLoginDays)
         {
             EnsureProfileExists();
 
@@ -283,6 +289,99 @@ namespace UncballArena.Core.Profile.Services
 
             await repository.SaveAsync(CurrentProfile);
             RaiseProfileChanged();
+            return CurrentProfile;
+        }
+
+        public async Task<ProfileSnapshot> SetLuckyShotStateAsync(
+            int luckyShotTokens,
+            int luckyShotTotalPlays,
+            int luckyShotBestScore)
+        {
+            EnsureProfileExists();
+
+            int sanitizedTokens = Mathf.Max(0, luckyShotTokens);
+            int sanitizedTotalPlays = Mathf.Max(0, luckyShotTotalPlays);
+            int sanitizedBestScore = Mathf.Max(0, luckyShotBestScore);
+
+            bool unchanged =
+                CurrentProfile.LuckyShotTokens == sanitizedTokens &&
+                CurrentProfile.LuckyShotTotalPlays == sanitizedTotalPlays &&
+                CurrentProfile.LuckyShotBestScore == sanitizedBestScore;
+
+            if (unchanged)
+                return CurrentProfile;
+
+            CurrentProfile = CurrentProfile.WithLuckyShotState(
+                sanitizedTokens,
+                sanitizedTotalPlays,
+                sanitizedBestScore);
+
+            await repository.SaveAsync(CurrentProfile);
+            RaiseProfileChanged();
+            return CurrentProfile;
+        }
+
+        public async Task<ProfileSnapshot> AddLuckyShotTokensAsync(int amount)
+        {
+            EnsureProfileExists();
+
+            if (amount <= 0)
+                return CurrentProfile;
+
+            int targetTokens = CurrentProfile.LuckyShotTokens + amount;
+
+            CurrentProfile = CurrentProfile.WithLuckyShotState(
+                targetTokens,
+                CurrentProfile.LuckyShotTotalPlays,
+                CurrentProfile.LuckyShotBestScore);
+
+            await repository.SaveAsync(CurrentProfile);
+            RaiseProfileChanged();
+
+            Debug.Log($"[ProfileService] AddLuckyShotTokensAsync -> Added={amount} | NewTotal={CurrentProfile.LuckyShotTokens}");
+            return CurrentProfile;
+        }
+
+        public async Task<bool> TryConsumeLuckyShotTokenAsync()
+        {
+            EnsureProfileExists();
+
+            if (CurrentProfile.LuckyShotTokens <= 0)
+            {
+                Debug.Log("[ProfileService] TryConsumeLuckyShotTokenAsync -> No tokens available.");
+                return false;
+            }
+
+            CurrentProfile = CurrentProfile.WithLuckyShotState(
+                CurrentProfile.LuckyShotTokens - 1,
+                CurrentProfile.LuckyShotTotalPlays,
+                CurrentProfile.LuckyShotBestScore);
+
+            await repository.SaveAsync(CurrentProfile);
+            RaiseProfileChanged();
+
+            Debug.Log($"[ProfileService] TryConsumeLuckyShotTokenAsync -> Consumed 1 | Remaining={CurrentProfile.LuckyShotTokens}");
+            return true;
+        }
+
+        public async Task<ProfileSnapshot> RegisterLuckyShotPlayAsync(int score)
+        {
+            EnsureProfileExists();
+
+            int sanitizedScore = Mathf.Max(0, score);
+
+            CurrentProfile = CurrentProfile.WithLuckyShotState(
+                CurrentProfile.LuckyShotTokens,
+                CurrentProfile.LuckyShotTotalPlays + 1,
+                Mathf.Max(CurrentProfile.LuckyShotBestScore, sanitizedScore));
+
+            await repository.SaveAsync(CurrentProfile);
+            RaiseProfileChanged();
+
+            Debug.Log(
+                $"[ProfileService] RegisterLuckyShotPlayAsync -> Score={sanitizedScore} | " +
+                $"TotalPlays={CurrentProfile.LuckyShotTotalPlays} | Best={CurrentProfile.LuckyShotBestScore}");
+
             return CurrentProfile;
         }
 
