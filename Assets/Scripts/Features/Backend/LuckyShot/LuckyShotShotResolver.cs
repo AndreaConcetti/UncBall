@@ -1,4 +1,5 @@
 using UnityEngine;
+using static LuckyShotSlotRegistry;
 
 public sealed class LuckyShotShotResolver : MonoBehaviour
 {
@@ -47,7 +48,10 @@ public sealed class LuckyShotShotResolver : MonoBehaviour
     {
         ResolveReferences();
 
-        if (sessionRuntime == null || slotRegistry == null || ball == null)
+        if (sessionRuntime == null || slotRegistry == null)
+            return;
+
+        if (ball == null)
             return;
 
         if (hasResolvedCurrentBall)
@@ -58,27 +62,40 @@ public sealed class LuckyShotShotResolver : MonoBehaviour
 
         hasResolvedCurrentBall = true;
 
-        string slotId = LuckyShotSlotRegistry.BuildSlotId(boardNumber, slotIndex);
-        LuckyShotSlotRegistry.LuckyShotRegisteredSlot registeredSlot = slotRegistry.GetSlot(boardNumber, slotId);
-        string resolvedSlotId = registeredSlot != null ? registeredSlot.slotId : slotId;
+        string fallbackSlotId = "slot_" + (slotIndex + 1).ToString("00");
+        LuckyShotRegisteredSlot registeredSlot = slotRegistry.GetSlot(boardNumber, fallbackSlotId);
+
+        if (registeredSlot == null && slotTransform != null)
+        {
+            for (int i = 0; i < slotRegistry.Slots.Count; i++)
+            {
+                LuckyShotRegisteredSlot candidate = slotRegistry.Slots[i];
+                if (candidate != null && candidate.boardNumber == boardNumber && candidate.slotTransform == slotTransform)
+                {
+                    registeredSlot = candidate;
+                    break;
+                }
+            }
+        }
+
+        string resolvedSlotId = registeredSlot != null ? registeredSlot.slotId : fallbackSlotId;
 
         if (verboseLogs)
         {
             Debug.Log(
-                "[LuckyShotShotResolver] NotifySlotEntered -> " +
-                "Board=" + boardNumber +
+                "[LuckyShotShotResolver] NotifySlotEntered -> Board=" + boardNumber +
                 " | SlotIndex=" + slotIndex +
                 " | SlotId=" + resolvedSlotId,
                 this);
         }
 
-        await sessionRuntime.ResolveHitAsync(boardNumber, resolvedSlotId);
+        LuckyShotResolvedResult result = await sessionRuntime.ResolveHitAsync(boardNumber, resolvedSlotId);
 
         if (gameplayController != null)
+        {
+            gameplayController.NotifyHitResolved(result);
             gameplayController.NotifyHitResolved(ball);
-
-        if (ball != null)
-            Destroy(ball.gameObject);
+        }
     }
 
     private void ResolveReferences()

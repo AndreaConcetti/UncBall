@@ -31,15 +31,22 @@ public struct LuckyShotActiveSession
     public string sessionId;
     public string sessionDateUtc;
     public LuckyShotLaunchSide launchSide;
+
     public string board1WinningSlotId;
     public string board2WinningSlotId;
     public string board3WinningSlotId;
+
     public int remainingShots;
     public bool extraAdShotUsed;
     public bool shotAlreadyTaken;
     public bool rewardGranted;
+
     public int lastHitBoardNumber;
     public string lastHitSlotId;
+
+    // Nuovo: snapshot dei token disponibili SUBITO DOPO la creazione/consumo sessione.
+    // Serve per capire se, successivamente, il player ha guadagnato altri token.
+    public int availableTokensSnapshotAfterConsume;
 
     public bool HasAnyWinningSlot()
     {
@@ -64,11 +71,17 @@ public struct LuckyShotResolvedResult
     public bool success;
     public bool isWin;
     public bool rewardGranted;
+
     public int hitBoardNumber;
     public string hitSlotId;
+
     public int rewardWeight;
     public string rewardLabel;
+
     public int remainingShotsAfterResolve;
+    public bool canRetry;
+    public bool isFinalResolution;
+
     public LuckyShotActiveSession sessionAfterResolve;
 }
 
@@ -78,9 +91,11 @@ public struct LuckyShotSessionPreview
     public bool hasActiveSession;
     public bool canPlayNow;
     public bool canWatchAdForExtraShot;
+
     public int remainingShots;
     public LuckyShotLaunchSide launchSide;
     public string sessionDateUtc;
+
     public string board1WinningSlotId;
     public string board2WinningSlotId;
     public string board3WinningSlotId;

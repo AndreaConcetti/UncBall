@@ -3173,7 +3173,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LuckyShotEntryService
   luckyShotSceneName: LuckyShot
-  loadLuckyShotSceneOnConsume: 0
+  loadLuckyShotSceneOnConsume: 1
   dontDestroyOnLoad: 1
   verboseLogs: 1
 --- !u!114 &150351274
@@ -3189,6 +3189,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LuckyShotBackendService
   dontDestroyOnLoad: 1
+  dailyFreeTokenAmount: 1
+  verboseLogs: 1
 --- !u!1 &150457578
 GameObject:
   m_ObjectHideFlags: 0
@@ -5279,7 +5281,7 @@ MonoBehaviour:
   feedbackText: {fileID: 0}
   playButton: {fileID: 595490512}
   closeButton: {fileID: 1076991967}
-  refreshButton: {fileID: 0}
+  refreshButton: {fileID: 523254828}
   debugGrantTokenButton: {fileID: 962776627}
   debugGrantAmount: 1
   refreshOnEnable: 1
@@ -24809,7 +24811,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1076991968}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1091108378}
+        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
+        m_MethodName: SetActive
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 1
+        m_CallState: 2
 --- !u!114 &1076991968
 MonoBehaviour:
   m_ObjectHideFlags: 0

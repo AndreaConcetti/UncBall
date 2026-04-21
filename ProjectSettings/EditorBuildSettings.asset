@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Gameplay.unity
     guid: 1cce383fadb9e134a81ddc8497e3be97
+  - enabled: 1
+    path: Assets/Scenes/LuckyShot.unity
+    guid: 14348e69f55f2cc4db30306e4b737ea8
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0

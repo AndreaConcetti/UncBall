@@ -44,7 +44,7 @@ public class StarPlate : MonoBehaviour
         { 3, 5 }
     };
 
-    void Awake()
+    private void Awake()
     {
         EnsureInitialized();
     }
@@ -134,13 +134,15 @@ public class StarPlate : MonoBehaviour
         int totalThisShot = shotPoints + fullStarExtra;
         Vector3 slotWorldPosition = slotTransform != null ? slotTransform.position : transform.position;
 
-        if (LuckyShotShotResolver.Instance != null)
-        {
+        bool isLuckyShotFlow = LuckyShotShotResolver.Instance != null;
+
+        if (isLuckyShotFlow)
             LuckyShotShotResolver.Instance.NotifySlotEntered(plateNumber, slotIndex, ball, slotTransform);
-        }
 
         ScoreManager scoreManager = ScoreManager.Instance;
-        if (scoreManager != null)
+        bool canUseStandardScoreManager = scoreManager != null && scoreManager.MatchActive;
+
+        if (canUseStandardScoreManager)
         {
             scoreManager.AddPoints(
                 owner,
@@ -151,7 +153,7 @@ public class StarPlate : MonoBehaviour
                 slotWorldPosition
             );
         }
-        else
+        else if (!isLuckyShotFlow)
         {
             Debug.LogWarning($"[StarPlate {plateNumber}] ScoreManager.Instance nullo.", this);
         }

@@ -23,11 +23,15 @@ public class BallLauncher : MonoBehaviour
     [Header("Offline Bot")]
     [SerializeField] private OfflineBotMatchController offlineBotMatchController;
 
+    [Header("Standalone Offline Mode")]
+    [SerializeField] private bool allowStandaloneOfflineLaunch = false;
+
     [Header("Shot Debug")]
     [SerializeField] private PlayerShotDebugRecorder playerShotDebugRecorder;
 
     [Header("Optional UI Lock")]
     [SerializeField] private SettingsPanelUI settingsPanelUI;
+
 
     [Header("Placement")]
     public BoxCollider activePlacementArea;
@@ -151,6 +155,14 @@ public class BallLauncher : MonoBehaviour
 #endif
 
         EnhancedTouchSupport.Disable();
+    }
+
+    public void SetStandaloneOfflineLaunchEnabled(bool enabled)
+    {
+        allowStandaloneOfflineLaunch = enabled;
+
+        if (debugLogs)
+            Debug.Log("[BallLauncher] SetStandaloneOfflineLaunchEnabled -> " + enabled, this);
     }
 
     void Update()
@@ -324,7 +336,7 @@ public class BallLauncher : MonoBehaviour
 
     private void SyncOnlineCurrentBallBinding()
     {
-        if (IsOfflineBotSessionActive())
+        if (IsOfflineBotSessionActive() || allowStandaloneOfflineLaunch)
             return;
 
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
@@ -496,6 +508,9 @@ public class BallLauncher : MonoBehaviour
             return;
         }
 
+        if (allowStandaloneOfflineLaunch)
+            return;
+
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
             return;
 
@@ -642,7 +657,6 @@ public class BallLauncher : MonoBehaviour
             if (Mouse.current.leftButton.wasPressedThisFrame)
             {
                 Vector2 ballScreen = gameplayCamera.WorldToScreenPoint(ball.transform.position);
-
                 bool confirmedByDoubleClick = false;
 
                 if (allowDoubleTapConfirm)
@@ -706,13 +720,7 @@ public class BallLauncher : MonoBehaviour
                 mouseAimDragging = false;
 
                 if (IsSwipeValidForLaunch(swipe))
-                {
-                    Vector3 previewDir = LaunchDirection.normalized;
-                    previewDir.y = 0f;
-                    float previewForce = Mathf.Lerp(minForce, maxForce, ChargeRatio);
-                    LogLaunchDebug("MouseLaunchPreview", swipe, previewDir, previewForce);
                     DoLaunch(swipe);
-                }
                 else
                     CancelAimState();
             }
@@ -802,7 +810,10 @@ public class BallLauncher : MonoBehaviour
         else
             ball.transform.position = targetWorld;
 
-        if (!IsOfflineBotSessionActive() && cachedController != null && cachedController.IsNetworkStateReadable)
+        if (!IsOfflineBotSessionActive() &&
+            !allowStandaloneOfflineLaunch &&
+            cachedController != null &&
+            cachedController.IsNetworkStateReadable)
         {
             if (!hasLastRequestedPlacement ||
                 Vector3.SqrMagnitude(targetWorld - lastRequestedPlacementWorld) >= placementNetworkSendThreshold * placementNetworkSendThreshold)
@@ -816,7 +827,11 @@ public class BallLauncher : MonoBehaviour
 
     void EndPlacementDrag()
     {
-        if (!IsOfflineBotSessionActive() && ball != null && cachedController != null && cachedController.IsNetworkStateReadable)
+        if (!IsOfflineBotSessionActive() &&
+            !allowStandaloneOfflineLaunch &&
+            ball != null &&
+            cachedController != null &&
+            cachedController.IsNetworkStateReadable)
         {
             Vector3 finalWorld = ball.transform.position;
 
@@ -836,7 +851,11 @@ public class BallLauncher : MonoBehaviour
 
     void EndMousePlacementDrag()
     {
-        if (!IsOfflineBotSessionActive() && ball != null && cachedController != null && cachedController.IsNetworkStateReadable)
+        if (!IsOfflineBotSessionActive() &&
+            !allowStandaloneOfflineLaunch &&
+            ball != null &&
+            cachedController != null &&
+            cachedController.IsNetworkStateReadable)
         {
             Vector3 finalWorld = ball.transform.position;
 
@@ -939,7 +958,9 @@ public class BallLauncher : MonoBehaviour
             DoLaunch(swipe);
         }
         else
+        {
             CancelAimState();
+        }
     }
 
     void CancelAimState()
@@ -991,6 +1012,21 @@ public class BallLauncher : MonoBehaviour
             RefreshBallVisualRollReference();
 
             offlineBotMatchController.RequestLaunchCurrentBall(impulseDir, force);
+            cameraController?.OnBallLaunched();
+            return;
+        }
+
+        if (allowStandaloneOfflineLaunch)
+        {
+            LogLaunchDebug("StandaloneOfflineDoLaunch", swipeUsed, impulseDir, force);
+
+            hasLaunched = true;
+            CurrentPhase = LaunchPhase.Launched;
+
+            RefreshBallVisualRollReference();
+
+            ball.Activate();
+            ball.Launch(impulseDir * force);
             cameraController?.OnBallLaunched();
             return;
         }
@@ -1116,6 +1152,17 @@ public class BallLauncher : MonoBehaviour
             return false;
         }
 
+        if (allowStandaloneOfflineLaunch)
+        {
+            if (ball == null)
+                return true;
+
+            if (!IsCurrentBallOwnedByLocalPlayer())
+                return true;
+
+            return false;
+        }
+
         if (onlineAuthority == null || !onlineAuthority.IsOnlineSession)
             return true;
 
@@ -1161,18 +1208,28 @@ public class BallLauncher : MonoBehaviour
         if (targetBall == null)
             return PlayerID.None;
 
-        if (IsOfflineBotSessionActive())
+        BallOwnership ownership = targetBall.GetComponent<BallOwnership>();
+
+        if (allowStandaloneOfflineLaunch || IsOfflineBotSessionActive())
         {
-            BallOwnership offlineOwnership = targetBall.GetComponent<BallOwnership>();
-            if (offlineOwnership != null)
-                return offlineOwnership.Owner;
+            if (ownership != null)
+                return ownership.Owner;
         }
 
         FusionNetworkBall fusionBall = targetBall.GetComponent<FusionNetworkBall>();
         if (fusionBall != null)
-            return fusionBall.OwnerPlayerId;
+        {
+            try
+            {
+                return fusionBall.OwnerPlayerId;
+            }
+            catch
+            {
+                if (ownership != null)
+                    return ownership.Owner;
+            }
+        }
 
-        BallOwnership ownership = targetBall.GetComponent<BallOwnership>();
         if (ownership != null)
             return ownership.Owner;
 

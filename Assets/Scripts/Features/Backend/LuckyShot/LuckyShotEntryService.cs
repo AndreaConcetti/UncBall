@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UncballArena.Core.Profile.Models;
 
 public sealed class LuckyShotEntryService : MonoBehaviour
 {
@@ -10,12 +11,17 @@ public sealed class LuckyShotEntryService : MonoBehaviour
 
     public event Action<int> TokensChanged;
     public event Action<bool> BusyStateChanged;
+
+    // Compatibilità con UI legacy
     public event Action<string> FeedbackRaised;
     public event Action EntryConsumedAndGameplayStarted;
 
+    // Evento nuovo
+    public event Action EntryStarted;
+
     [Header("Scene")]
     [SerializeField] private string luckyShotSceneName = "LuckyShot";
-    [SerializeField] private bool loadLuckyShotSceneOnConsume = false;
+    [SerializeField] private bool loadLuckyShotSceneOnConsume = true;
     [SerializeField] private bool dontDestroyOnLoad = true;
 
     [Header("Debug")]
@@ -38,17 +44,17 @@ public sealed class LuckyShotEntryService : MonoBehaviour
 
         Instance = this;
 
-        if (dontDestroyOnLoad)
+        if (dontDestroyOnLoad && transform.parent == null)
             DontDestroyOnLoad(gameObject);
 
         ResolveBackendService();
-        RefreshTokens();
+        _ = RefreshTokens();
 
         if (verboseLogs)
         {
             Debug.Log(
                 "[LuckyShotEntryService] Awake -> " +
-                "BackendReady=" + (backendService != null) +
+                "BackendReady=" + (backendService != null && backendService.IsReady) +
                 " | CachedTokens=" + CachedTokens +
                 " | LoadSceneOnConsume=" + loadLuckyShotSceneOnConsume +
                 " | SceneName=" + luckyShotSceneName,
@@ -69,21 +75,30 @@ public sealed class LuckyShotEntryService : MonoBehaviour
             Instance = null;
     }
 
-    public void RefreshTokens()
+    public Task<int> RefreshTokens(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ResolveBackendService();
 
-        CachedTokens = backendService != null ? Mathf.Max(0, backendService.GetAvailableTokens()) : 0;
+        if (backendService == null)
+        {
+            CachedTokens = 0;
+            TokensChanged?.Invoke(CachedTokens);
+            return Task.FromResult(CachedTokens);
+        }
+
+        CachedTokens = Mathf.Max(0, backendService.GetAvailableTokens());
         TokensChanged?.Invoke(CachedTokens);
 
         if (verboseLogs)
             Debug.Log("[LuckyShotEntryService] RefreshTokens -> " + CachedTokens, this);
+
+        return Task.FromResult(CachedTokens);
     }
 
     public bool CanEnter()
     {
-        RefreshTokens();
-        return CachedTokens > 0 && !isBusy;
+        return !isBusy && CachedTokens > 0;
     }
 
     public async Task<bool> TryEnterLuckyShotAsync(CancellationToken cancellationToken = default)
@@ -102,7 +117,7 @@ public sealed class LuckyShotEntryService : MonoBehaviour
             return false;
         }
 
-        RefreshTokens();
+        await RefreshTokens(cancellationToken);
 
         if (CachedTokens <= 0)
         {
@@ -124,7 +139,7 @@ public sealed class LuckyShotEntryService : MonoBehaviour
         {
             bool consumed = await backendService.TryConsumeEntryTokenAsync(consumeCts.Token);
 
-            RefreshTokens();
+            await RefreshTokens(consumeCts.Token);
 
             if (!consumed)
             {
@@ -139,12 +154,13 @@ public sealed class LuckyShotEntryService : MonoBehaviour
                     this);
             }
 
+            RaiseFeedback("Lucky Shot start acknowledged.");
+
+            EntryStarted?.Invoke();
             EntryConsumedAndGameplayStarted?.Invoke();
 
             if (loadLuckyShotSceneOnConsume && !string.IsNullOrWhiteSpace(luckyShotSceneName))
-            {
-                SceneManager.LoadScene(luckyShotSceneName);
-            }
+                await LoadLuckyShotSceneAsync(consumeCts.Token);
 
             return true;
         }
@@ -165,19 +181,46 @@ public sealed class LuckyShotEntryService : MonoBehaviour
         }
     }
 
+    // Compatibilità con EntryPanelUI legacy
     public async Task DebugGrantTokensAsync(int amount, CancellationToken cancellationToken = default)
+    {
+        await GrantDebugTokensAsync(amount, cancellationToken);
+    }
+
+    public async Task<bool> GrantDebugTokensAsync(int amount, CancellationToken cancellationToken = default)
     {
         ResolveBackendService();
 
         if (backendService == null)
         {
             RaiseFeedback("Lucky Shot backend missing.");
-            return;
+            return false;
         }
 
-        await backendService.GrantTokensAsync(Mathf.Max(1, amount), cancellationToken);
-        RefreshTokens();
-        RaiseFeedback("Lucky Shot tokens granted.");
+        ProfileSnapshot snapshot = await backendService.GrantTokensAsync(Mathf.Max(1, amount), cancellationToken);
+        bool ok = snapshot != null;
+
+        await RefreshTokens(cancellationToken);
+
+        if (ok)
+            RaiseFeedback("Lucky Shot tokens granted.");
+        else
+            RaiseFeedback("Failed to grant Lucky Shot tokens.");
+
+        return ok;
+    }
+
+    private async Task LoadLuckyShotSceneAsync(CancellationToken cancellationToken)
+    {
+        AsyncOperation operation = SceneManager.LoadSceneAsync(luckyShotSceneName, LoadSceneMode.Single);
+        if (operation == null)
+            return;
+
+        while (!operation.isDone)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Yield();
+        }
     }
 
     private void ResolveBackendService()
@@ -209,7 +252,7 @@ public sealed class LuckyShotEntryService : MonoBehaviour
     {
         FeedbackRaised?.Invoke(message);
 
-        if (verboseLogs)
+        if (verboseLogs && !string.IsNullOrWhiteSpace(message))
             Debug.Log("[LuckyShotEntryService] Feedback -> " + message, this);
     }
 }

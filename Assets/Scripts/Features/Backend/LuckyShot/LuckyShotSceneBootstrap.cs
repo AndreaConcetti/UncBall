@@ -8,6 +8,8 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
     [SerializeField] private LuckyShotSessionRuntime sessionRuntime;
     [SerializeField] private LuckyShotHighlightController highlightController;
     [SerializeField] private LuckyShotSlotRegistry slotRegistry;
+    [SerializeField] private BallLauncher ballLauncher;
+    [SerializeField] private PlayerSkinLoadout playerSkinLoadout;
 
     [Header("Optional UI")]
     [SerializeField] private TMP_Text shotsLeftText;
@@ -89,6 +91,7 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 
             ApplySideVisuals(session.launchSide);
             ApplySessionTexts(session);
+            ApplySkinToCurrentLuckyShotBall();
 
             if (clearFeedbackOnSuccess)
                 SetFeedback(string.Empty);
@@ -113,6 +116,11 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
     {
         ApplySideVisuals(session.launchSide);
         ApplySessionTexts(session);
+
+        if (highlightController != null)
+            highlightController.ApplySession(session);
+
+        ApplySkinToCurrentLuckyShotBall();
     }
 
     private void HandleSessionPreviewChanged(LuckyShotSessionPreview preview)
@@ -125,6 +133,8 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 
         if (sessionDateText != null)
             sessionDateText.text = preview.sessionDateUtc;
+
+        ApplySideVisuals(preview.launchSide);
     }
 
     private void HandleFeedbackRaised(string message)
@@ -155,6 +165,61 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
             sessionDateText.text = session.sessionDateUtc ?? string.Empty;
     }
 
+    public void ApplySkinToCurrentLuckyShotBall()
+    {
+        ResolveReferences();
+
+        if (playerSkinLoadout == null || ballLauncher == null || ballLauncher.ball == null)
+            return;
+
+        BallPhysics targetBall = ballLauncher.ball;
+        BallSkinData skin = playerSkinLoadout.GetEquippedSkinForPlayer1();
+
+        if (skin == null)
+        {
+            if (verboseLogs)
+            {
+                Debug.Log(
+                    "[LuckyShotSceneBootstrap] ApplySkinToCurrentLuckyShotBall -> Ball=" + targetBall.name +
+                    " | Applied=False | Skin=none",
+                    this);
+            }
+
+            return;
+        }
+
+        BallSkinApplier applier = targetBall.GetComponent<BallSkinApplier>();
+        if (applier == null)
+            applier = targetBall.GetComponentInChildren<BallSkinApplier>(true);
+
+        if (applier == null)
+        {
+            if (verboseLogs)
+                Debug.LogWarning("[LuckyShotSceneBootstrap] BallSkinApplier missing on Lucky Shot ball.", targetBall);
+
+            return;
+        }
+
+        if (playerSkinLoadout.Database == null)
+        {
+            if (verboseLogs)
+                Debug.LogWarning("[LuckyShotSceneBootstrap] PlayerSkinLoadout database missing.", this);
+
+            return;
+        }
+
+        bool applied = applier.ApplySkinData(playerSkinLoadout.Database, skin);
+
+        if (verboseLogs)
+        {
+            Debug.Log(
+                "[LuckyShotSceneBootstrap] ApplySkinToCurrentLuckyShotBall -> Ball=" + targetBall.name +
+                " | Applied=" + applied +
+                " | SkinId=" + (skin.skinUniqueId ?? "null"),
+                this);
+        }
+    }
+
     private void SetFeedback(string message)
     {
         if (feedbackText != null)
@@ -178,6 +243,14 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 
         if (slotRegistry == null)
             slotRegistry = FindFirstObjectByType<LuckyShotSlotRegistry>();
+
+        if (ballLauncher == null)
+            ballLauncher = FindFirstObjectByType<BallLauncher>();
+
+        if (playerSkinLoadout == null)
+            playerSkinLoadout = PlayerSkinLoadout.Instance != null
+                ? PlayerSkinLoadout.Instance
+                : FindFirstObjectByType<PlayerSkinLoadout>();
 #else
         if (sessionRuntime == null)
             sessionRuntime = FindObjectOfType<LuckyShotSessionRuntime>();
@@ -187,6 +260,14 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 
         if (slotRegistry == null)
             slotRegistry = FindObjectOfType<LuckyShotSlotRegistry>();
+
+        if (ballLauncher == null)
+            ballLauncher = FindObjectOfType<BallLauncher>();
+
+        if (playerSkinLoadout == null)
+            playerSkinLoadout = PlayerSkinLoadout.Instance != null
+                ? PlayerSkinLoadout.Instance
+                : FindObjectOfType<PlayerSkinLoadout>();
 #endif
     }
 

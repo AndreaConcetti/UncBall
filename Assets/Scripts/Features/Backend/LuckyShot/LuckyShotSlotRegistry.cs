@@ -36,11 +36,6 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
 
     public IReadOnlyList<LuckyShotRegisteredSlot> Slots => slots;
 
-    public static string BuildSlotId(int boardNumber, int slotIndex)
-    {
-        return "slot_" + Mathf.Max(0, slotIndex + 1).ToString("00");
-    }
-
     private void Awake()
     {
         if (autoScanOnAwake)
@@ -113,10 +108,14 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
 
     public LuckyShotRegisteredSlot GetRandomSlotForBoard(int boardNumber)
     {
-        if (!byBoard.TryGetValue(boardNumber, out List<LuckyShotRegisteredSlot> list) || list == null || list.Count == 0)
+        if (!byBoard.TryGetValue(boardNumber, out List<LuckyShotRegisteredSlot> list))
             return null;
 
-        return list[UnityEngine.Random.Range(0, list.Count)];
+        if (list == null || list.Count == 0)
+            return null;
+
+        int index = UnityEngine.Random.Range(0, list.Count);
+        return list[index];
     }
 
     public int GetBoardCount(int boardNumber)
@@ -134,7 +133,7 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
 
         int boardNumber = MapBoardTier(target.BoardTier);
         string finalSlotId = string.IsNullOrWhiteSpace(target.SlotId)
-            ? BuildSlotId(boardNumber, target.SlotOrderInBoard)
+            ? ("slot_" + (target.SlotOrderInBoard + 1).ToString("00"))
             : target.SlotId.Trim();
 
         int slotIndex = Mathf.Max(0, target.SlotOrderInBoard);
@@ -144,6 +143,9 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
             ? target.HighlightAnchor
             : FindChildRecursive(slotTransform, highlightAnchorChildName);
 
+        Collider hit3D = target.HitCollider3D != null ? target.HitCollider3D : target.GetComponent<Collider>();
+        Collider2D hit2D = target.HitCollider2D != null ? target.HitCollider2D : target.GetComponent<Collider2D>();
+
         LuckyShotRegisteredSlot slot = new LuckyShotRegisteredSlot
         {
             boardNumber = boardNumber,
@@ -151,8 +153,8 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
             slotIndex = slotIndex,
             slotTransform = slotTransform,
             highlightAnchor = highlightAnchor != null ? highlightAnchor : slotTransform,
-            hitCollider3D = target.HitCollider3D != null ? target.HitCollider3D : target.GetComponent<Collider>(),
-            hitCollider2D = target.HitCollider2D != null ? target.HitCollider2D : target.GetComponent<Collider2D>(),
+            hitCollider3D = hit3D,
+            hitCollider2D = hit2D,
             slotScorer = target.GetComponent<SlotScorer>(),
             slotTarget = target
         };
@@ -170,14 +172,17 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
 
         int boardNumber = plate != null ? plate.plateNumber : InferBoardNumberFromHierarchy(slotTransform);
         int slotIndex = InferSlotIndexFromName(slotTransform.name);
+        string finalSlotId = "slot_" + (slotIndex + 1).ToString("00");
+
+        Transform highlightAnchor = FindChildRecursive(slotTransform, highlightAnchorChildName);
 
         LuckyShotRegisteredSlot slot = new LuckyShotRegisteredSlot
         {
             boardNumber = boardNumber,
-            slotId = BuildSlotId(boardNumber, slotIndex),
+            slotId = finalSlotId,
             slotIndex = slotIndex,
             slotTransform = slotTransform,
-            highlightAnchor = FindChildRecursive(slotTransform, highlightAnchorChildName) ?? slotTransform,
+            highlightAnchor = highlightAnchor != null ? highlightAnchor : slotTransform,
             hitCollider3D = scorer.GetComponent<Collider>(),
             hitCollider2D = scorer.GetComponent<Collider2D>(),
             slotScorer = scorer,
@@ -189,12 +194,21 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
 
     private void AddSlot(LuckyShotRegisteredSlot slot)
     {
-        if (slot == null || slot.boardNumber <= 0)
+        if (slot == null)
             return;
+
+        if (slot.boardNumber <= 0)
+        {
+            Debug.LogWarning("[LuckyShotSlotRegistry] AddSlot skipped -> invalid board number for " + GetTransformName(slot.slotTransform), this);
+            return;
+        }
 
         string key = BuildKey(slot.boardNumber, slot.slotId);
         if (byBoardAndId.ContainsKey(key))
+        {
+            Debug.LogWarning("[LuckyShotSlotRegistry] Duplicate slot skipped -> " + key, this);
             return;
+        }
 
         slots.Add(slot);
         byBoardAndId.Add(key, slot);
