@@ -1,47 +1,38 @@
+using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 
 public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 {
-    [Header("Runtime References")]
+    [Header("Core References")]
     [SerializeField] private LuckyShotSessionRuntime sessionRuntime;
-    [SerializeField] private LuckyShotHighlightController highlightController;
-    [SerializeField] private LuckyShotSlotRegistry slotRegistry;
+    [SerializeField] private LuckyShotGameplayController gameplayController;
     [SerializeField] private BallLauncher ballLauncher;
     [SerializeField] private PlayerSkinLoadout playerSkinLoadout;
+    [SerializeField] private MonoBehaviour highlightController;
 
-    [Header("Optional UI")]
-    [SerializeField] private TMP_Text shotsLeftText;
-    [SerializeField] private TMP_Text launchSideText;
-    [SerializeField] private TMP_Text sessionDateText;
+    [Header("Optional HUD")]
     [SerializeField] private TMP_Text feedbackText;
-
-    [Header("Optional side state roots")]
-    [SerializeField] private GameObject leftSideRoot;
-    [SerializeField] private GameObject rightSideRoot;
-
-    [Header("Startup")]
-    [SerializeField] private bool bootstrapOnEnable = true;
-    [SerializeField] private bool clearFeedbackOnSuccess = true;
 
     [Header("Debug")]
     [SerializeField] private bool verboseLogs = true;
 
-    private bool isBootstrapping;
+    private bool bootstrapped;
 
     private void Awake()
     {
         ResolveReferences();
+        EnsureStandaloneOfflineLauncherMode();
     }
 
     private void OnEnable()
     {
         ResolveReferences();
+        EnsureStandaloneOfflineLauncherMode();
         Subscribe();
-
-        if (bootstrapOnEnable)
-            BootstrapNow();
+        BootstrapNow();
     }
 
     private void OnDisable()
@@ -51,7 +42,7 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 
     public void BootstrapNow()
     {
-        if (isBootstrapping)
+        if (bootstrapped)
             return;
 
         _ = BootstrapAsync();
@@ -59,82 +50,71 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 
     private async Task BootstrapAsync()
     {
-        ResolveReferences();
+        bootstrapped = true;
+
+        EnsureStandaloneOfflineLauncherMode();
+        SetFeedback("Loading Lucky Shot session...");
 
         if (sessionRuntime == null)
         {
-            SetFeedback("Lucky Shot session runtime missing.");
+            SetFeedback("Lucky Shot runtime missing.");
             return;
         }
 
-        if (slotRegistry == null)
+        LuckyShotActiveSession session = await sessionRuntime.EnsureSessionLoadedAsync(CancellationToken.None);
+        if (!session.IsValid())
         {
-            SetFeedback("Lucky Shot slot registry missing.");
+            SetFeedback("Failed to create Lucky Shot session.");
             return;
         }
 
-        isBootstrapping = true;
-        SetFeedback("Loading Lucky Shot session...");
+        ApplySkinToCurrentLuckyShotBall();
+        ApplyHighlightTargets(session);
 
-        try
+        SetFeedback($"Shots: {session.remainingShots} | Side: {session.launchSide}");
+
+        if (verboseLogs)
         {
-            LuckyShotActiveSession session = await sessionRuntime.EnsureSessionLoadedAsync();
-
-            if (!session.IsValid())
-            {
-                SetFeedback("Lucky Shot session invalid.");
-                return;
-            }
-
-            if (highlightController != null)
-                highlightController.ApplySession(session);
-
-            ApplySideVisuals(session.launchSide);
-            ApplySessionTexts(session);
-            ApplySkinToCurrentLuckyShotBall();
-
-            if (clearFeedbackOnSuccess)
-                SetFeedback(string.Empty);
-
-            if (verboseLogs)
-            {
-                Debug.Log(
-                    "[LuckyShotSceneBootstrap] BootstrapAsync -> " +
-                    "SessionId=" + session.sessionId +
-                    " | Side=" + session.launchSide +
-                    " | RemainingShots=" + session.remainingShots,
-                    this);
-            }
-        }
-        finally
-        {
-            isBootstrapping = false;
+            Debug.Log(
+                "[LuckyShotSceneBootstrap] BootstrapAsync -> SessionId=" + session.sessionId +
+                " | Side=" + session.launchSide +
+                " | RemainingShots=" + session.remainingShots,
+                this);
         }
     }
 
     private void HandleSessionLoaded(LuckyShotActiveSession session)
     {
-        ApplySideVisuals(session.launchSide);
-        ApplySessionTexts(session);
-
-        if (highlightController != null)
-            highlightController.ApplySession(session);
-
         ApplySkinToCurrentLuckyShotBall();
+        ApplyHighlightTargets(session);
     }
 
     private void HandleSessionPreviewChanged(LuckyShotSessionPreview preview)
     {
-        if (shotsLeftText != null)
-            shotsLeftText.text = "SHOTS LEFT: " + Mathf.Max(0, preview.remainingShots);
+        if (!preview.hasActiveSession)
+            return;
 
-        if (launchSideText != null)
-            launchSideText.text = preview.launchSide == LuckyShotLaunchSide.Left ? "SHOOT FROM LEFT" : "SHOOT FROM RIGHT";
+        SetFeedback($"Shots: {preview.remainingShots} | Side: {preview.launchSide}");
+    }
 
-        if (sessionDateText != null)
-            sessionDateText.text = preview.sessionDateUtc;
+    private void HandleSessionResolved(LuckyShotResolvedResult result)
+    {
+        if (!result.success)
+            return;
 
-        ApplySideVisuals(preview.launchSide);
+        if (result.isWin)
+        {
+            SetFeedback($"Target hit on Board {result.hitBoardNumber}. Reward weight: {result.rewardWeight}");
+            TriggerHighlightHitEffect(result.hitBoardNumber, result.hitSlotId);
+        }
+        else if (result.canRetry)
+        {
+            SetFeedback($"Miss on Board {Mathf.Max(1, result.hitBoardNumber)}. Try again.");
+        }
+        else
+        {
+            SetFeedback("Lucky Shot finished.");
+        }
     }
 
     private void HandleFeedbackRaised(string message)
@@ -142,40 +122,75 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
         SetFeedback(message);
     }
 
-    private void ApplySideVisuals(LuckyShotLaunchSide side)
+    private void EnsureStandaloneOfflineLauncherMode()
     {
-        bool isLeft = side == LuckyShotLaunchSide.Left;
+        if (ballLauncher == null)
+            return;
 
-        if (leftSideRoot != null)
-            leftSideRoot.SetActive(isLeft);
+        ballLauncher.SetStandaloneOfflineLaunchEnabled(true);
 
-        if (rightSideRoot != null)
-            rightSideRoot.SetActive(!isLeft);
+        if (verboseLogs)
+            Debug.Log("[LuckyShotSceneBootstrap] Standalone offline launch enabled for Lucky Shot.", this);
     }
 
-    private void ApplySessionTexts(LuckyShotActiveSession session)
+    private void ApplyHighlightTargets(LuckyShotActiveSession session)
     {
-        if (shotsLeftText != null)
-            shotsLeftText.text = "SHOTS LEFT: " + Mathf.Max(0, session.remainingShots);
+        if (!session.IsValid() || highlightController == null)
+            return;
 
-        if (launchSideText != null)
-            launchSideText.text = session.launchSide == LuckyShotLaunchSide.Left ? "SHOOT FROM LEFT" : "SHOOT FROM RIGHT";
+        bool handled = false;
+        handled = TryInvokeHighlightMethod("ApplySession", session) || handled;
+        handled = TryInvokeHighlightMethod("ApplySelections", session) || handled;
+        handled = TryInvokeHighlightMethod("RefreshFromSession", session) || handled;
 
-        if (sessionDateText != null)
-            sessionDateText.text = session.sessionDateUtc ?? string.Empty;
+        if (!handled && verboseLogs)
+            Debug.Log("[LuckyShotSceneBootstrap] ApplyHighlightTargets -> no compatible method found.", this);
+    }
+
+    private void TriggerHighlightHitEffect(int boardNumber, string slotId)
+    {
+        if (highlightController == null)
+            return;
+
+        bool handled = false;
+        handled = TryInvokeHighlightMethod("PlayHitEffect", boardNumber, slotId) || handled;
+        handled = TryInvokeHighlightMethod("NotifyTargetHit", boardNumber, slotId) || handled;
+
+        if (!handled && verboseLogs)
+            Debug.Log("[LuckyShotSceneBootstrap] TriggerHighlightHitEffect -> no compatible method found.", this);
+    }
+
+    private bool TryInvokeHighlightMethod(string methodName, params object[] args)
+    {
+        if (highlightController == null)
+            return false;
+
+        MethodInfo method = highlightController.GetType().GetMethod(
+            methodName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        if (method == null)
+            return false;
+
+        try
+        {
+            method.Invoke(highlightController, args);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void ApplySkinToCurrentLuckyShotBall()
     {
-        ResolveReferences();
-
-        if (playerSkinLoadout == null || ballLauncher == null || ballLauncher.ball == null)
+        BallPhysics targetBall = ResolveCurrentLuckyShotBall();
+        if (targetBall == null || playerSkinLoadout == null)
             return;
 
-        BallPhysics targetBall = ballLauncher.ball;
-        BallSkinData skin = playerSkinLoadout.GetEquippedSkinForPlayer1();
-
-        if (skin == null)
+        BallSkinData equippedSkin = playerSkinLoadout.GetEquippedSkinForPlayer1();
+        if (equippedSkin == null)
         {
             if (verboseLogs)
             {
@@ -184,6 +199,15 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
                     " | Applied=False | Skin=none",
                     this);
             }
+
+            return;
+        }
+
+        BallSkinDatabase database = playerSkinLoadout.Database;
+        if (database == null)
+        {
+            if (verboseLogs)
+                Debug.LogWarning("[LuckyShotSceneBootstrap] Skin database missing in PlayerSkinLoadout.", this);
 
             return;
         }
@@ -200,24 +224,43 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
             return;
         }
 
-        if (playerSkinLoadout.Database == null)
-        {
-            if (verboseLogs)
-                Debug.LogWarning("[LuckyShotSceneBootstrap] PlayerSkinLoadout database missing.", this);
-
-            return;
-        }
-
-        bool applied = applier.ApplySkinData(playerSkinLoadout.Database, skin);
+        bool applied = applier.ApplySkinData(database, equippedSkin);
 
         if (verboseLogs)
         {
             Debug.Log(
                 "[LuckyShotSceneBootstrap] ApplySkinToCurrentLuckyShotBall -> Ball=" + targetBall.name +
                 " | Applied=" + applied +
-                " | SkinId=" + (skin.skinUniqueId ?? "null"),
+                " | SkinId=" + equippedSkin.skinUniqueId,
                 this);
         }
+    }
+
+    private BallPhysics ResolveCurrentLuckyShotBall()
+    {
+        if (ballLauncher != null && ballLauncher.ball != null)
+            return ballLauncher.ball;
+
+#if UNITY_2023_1_OR_NEWER
+        BallPhysics[] allBalls = FindObjectsByType<BallPhysics>(FindObjectsSortMode.None);
+#else
+        BallPhysics[] allBalls = FindObjectsOfType<BallPhysics>();
+#endif
+
+        if (allBalls == null || allBalls.Length == 0)
+            return null;
+
+        for (int i = allBalls.Length - 1; i >= 0; i--)
+        {
+            if (allBalls[i] == null)
+                continue;
+
+            BallOwnership ownership = allBalls[i].GetComponent<BallOwnership>();
+            if (ownership != null && ownership.Owner == PlayerID.Player1)
+                return allBalls[i];
+        }
+
+        return allBalls[allBalls.Length - 1];
     }
 
     private void SetFeedback(string message)
@@ -234,40 +277,39 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
         if (sessionRuntime == null)
             sessionRuntime = LuckyShotSessionRuntime.Instance;
 
+        if (gameplayController == null)
+            gameplayController = LuckyShotGameplayController.Instance;
+
 #if UNITY_2023_1_OR_NEWER
         if (sessionRuntime == null)
             sessionRuntime = FindFirstObjectByType<LuckyShotSessionRuntime>();
 
-        if (highlightController == null)
-            highlightController = FindFirstObjectByType<LuckyShotHighlightController>();
-
-        if (slotRegistry == null)
-            slotRegistry = FindFirstObjectByType<LuckyShotSlotRegistry>();
+        if (gameplayController == null)
+            gameplayController = FindFirstObjectByType<LuckyShotGameplayController>();
 
         if (ballLauncher == null)
-            ballLauncher = FindFirstObjectByType<BallLauncher>();
+            ballLauncher = FindFirstObjectByType<BallLauncher>(FindObjectsInactive.Include);
 
         if (playerSkinLoadout == null)
-            playerSkinLoadout = PlayerSkinLoadout.Instance != null
-                ? PlayerSkinLoadout.Instance
-                : FindFirstObjectByType<PlayerSkinLoadout>();
+            playerSkinLoadout = FindFirstObjectByType<PlayerSkinLoadout>(FindObjectsInactive.Include);
+
+        if (highlightController == null)
+            highlightController = FindFirstObjectByType<LuckyShotHighlightController>(FindObjectsInactive.Include);
 #else
         if (sessionRuntime == null)
             sessionRuntime = FindObjectOfType<LuckyShotSessionRuntime>();
 
-        if (highlightController == null)
-            highlightController = FindObjectOfType<LuckyShotHighlightController>();
-
-        if (slotRegistry == null)
-            slotRegistry = FindObjectOfType<LuckyShotSlotRegistry>();
+        if (gameplayController == null)
+            gameplayController = FindObjectOfType<LuckyShotGameplayController>();
 
         if (ballLauncher == null)
-            ballLauncher = FindObjectOfType<BallLauncher>();
+            ballLauncher = FindObjectOfType<BallLauncher>(true);
 
         if (playerSkinLoadout == null)
-            playerSkinLoadout = PlayerSkinLoadout.Instance != null
-                ? PlayerSkinLoadout.Instance
-                : FindObjectOfType<PlayerSkinLoadout>();
+            playerSkinLoadout = FindObjectOfType<PlayerSkinLoadout>(true);
+
+        if (highlightController == null)
+            highlightController = FindObjectOfType<LuckyShotHighlightController>(true);
 #endif
     }
 
@@ -282,6 +324,9 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
         sessionRuntime.SessionPreviewChanged -= HandleSessionPreviewChanged;
         sessionRuntime.SessionPreviewChanged += HandleSessionPreviewChanged;
 
+        sessionRuntime.SessionResolved -= HandleSessionResolved;
+        sessionRuntime.SessionResolved += HandleSessionResolved;
+
         sessionRuntime.FeedbackRaised -= HandleFeedbackRaised;
         sessionRuntime.FeedbackRaised += HandleFeedbackRaised;
     }
@@ -293,6 +338,7 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 
         sessionRuntime.SessionLoaded -= HandleSessionLoaded;
         sessionRuntime.SessionPreviewChanged -= HandleSessionPreviewChanged;
+        sessionRuntime.SessionResolved -= HandleSessionResolved;
         sessionRuntime.FeedbackRaised -= HandleFeedbackRaised;
     }
 }

@@ -14,8 +14,7 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
     [Header("Lucky Shot Rules")]
     [SerializeField] private PlayerID localLuckyShotPlayer = PlayerID.Player1;
     [SerializeField] private bool autoSpawnBallOnSessionLoaded = true;
-    [SerializeField] private bool respawnBallAfterAdExtraShot = true;
-    [SerializeField] private float retryRespawnDelaySeconds = 0.9f;
+    [SerializeField] private float retryRespawnDelaySeconds = 1.1f;
 
     [Header("Runtime State")]
     [SerializeField] private BallPhysics currentBall;
@@ -81,6 +80,12 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
 
     public void EnsurePlayableStateFromSession(LuckyShotActiveSession session)
     {
+        if (sessionRuntime == null)
+            return;
+
+        if (!sessionRuntime.HasActiveSession)
+            return;
+
         if (!session.IsValid())
             return;
 
@@ -118,11 +123,6 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         {
             ClearLauncherBindingOnly();
 
-            ballTurnSpawner.ClearAllBallsInScene();
-            currentBall = null;
-            shotLaunchObserved = false;
-            shotResolutionPending = false;
-
             BallPhysics spawned = ballTurnSpawner.SpawnOfflineBallForOwner(localLuckyShotPlayer);
             if (spawned == null)
             {
@@ -130,9 +130,13 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
                 return;
             }
 
+            currentBall = spawned;
+            shotLaunchObserved = false;
+            shotResolutionPending = false;
+
+            await Task.Yield();
             await Task.Yield();
 
-            currentBall = spawned;
             BindCurrentBall();
 
             if (shotResolver != null)
@@ -169,10 +173,12 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         if (verboseLogs)
             Debug.Log("[LuckyShotGameplayController] NotifyBallLost -> resolving miss.", this);
 
+        CleanupCurrentBallReference();
+
         if (sessionRuntime != null)
             await sessionRuntime.ResolveMissAsync();
 
-        CleanupCurrentBallReference();
+        TryScheduleRetryBallSpawn();
     }
 
     public void NotifyHitResolved(BallPhysics resolvedBall)
@@ -181,12 +187,7 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             return;
 
         if (currentBall == resolvedBall)
-        {
             CleanupCurrentBallReference();
-
-            if (verboseLogs)
-                Debug.Log("[LuckyShotGameplayController] NotifyHitResolved(Ball) -> current ball cleared.", this);
-        }
     }
 
     public void NotifyHitResolved(LuckyShotResolvedResult result)
@@ -197,10 +198,14 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
                 "[LuckyShotGameplayController] NotifyHitResolved(Result) -> " +
                 "Success=" + result.success +
                 " | Win=" + result.isWin +
-                " | CanRetry=" + result.canRetry +
+                " | RewardGranted=" + result.rewardGranted +
+                " | Remaining=" + result.remainingShotsAfterResolve +
                 " | Final=" + result.isFinalResolution,
                 this);
         }
+
+        if (result.success && result.canRetry && !result.isFinalResolution)
+            TryScheduleRetryBallSpawn();
     }
 
     private async Task MarkShotConsumedAsync()
@@ -209,6 +214,128 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             return;
 
         await sessionRuntime.MarkShotConsumedAsync();
+    }
+
+    private void HandleSessionLoaded(LuckyShotActiveSession session)
+    {
+        EnsurePlayableStateFromSession(session);
+    }
+
+    private void HandleSessionPreviewChanged(LuckyShotSessionPreview preview)
+    {
+        if (!preview.hasActiveSession)
+            return;
+
+        ConfigureLaunchSide(preview.launchSide);
+
+        if (verboseLogs)
+        {
+            Debug.Log(
+                "[LuckyShotGameplayController] HandleSessionPreviewChanged -> " +
+                "Remaining=" + preview.remainingShots +
+                " | HasCurrentBall=" + (currentBall != null) +
+                " | SpawnInProgress=" + spawnInProgress +
+                " | RetryScheduled=" + retryRespawnScheduled,
+                this);
+        }
+
+        if (preview.remainingShots > 0 &&
+            currentBall == null &&
+            !shotResolutionPending &&
+            !spawnInProgress &&
+            !retryRespawnScheduled)
+        {
+            _ = SpawnFreshBallAsync();
+        }
+    }
+
+    private void HandleSessionResolved(LuckyShotResolvedResult result)
+    {
+        CleanupCurrentBallReference();
+
+        if (result.success && result.canRetry && !result.isFinalResolution)
+            TryScheduleRetryBallSpawn();
+    }
+
+    private void ConfigureLaunchSide(LuckyShotLaunchSide side)
+    {
+        if (ballTurnSpawner == null)
+            return;
+
+        bool player1OnLeft = side == LuckyShotLaunchSide.Left;
+        ballTurnSpawner.SetPlayer1Side(player1OnLeft);
+
+        if (verboseLogs)
+            Debug.Log("[LuckyShotGameplayController] ConfigureLaunchSide -> " + side, this);
+    }
+
+    private void BindCurrentBall()
+    {
+        if (ballTurnSpawner == null || ballLauncher == null || currentBall == null)
+            return;
+
+        ballTurnSpawner.TryBindCurrentOfflineBallForLocalControl(currentBall, localLuckyShotPlayer, localLuckyShotPlayer);
+
+        ballLauncher.ball = currentBall;
+        ballLauncher.SetActivePlacementArea(ballTurnSpawner.GetPlacementAreaForOwner(localLuckyShotPlayer));
+        ballLauncher.ResetLaunch();
+        ballLauncher.enabled = true;
+        ballLauncher.SetStandaloneOfflineLaunchEnabled(true);
+
+        if (verboseLogs)
+        {
+            Debug.Log(
+                "[LuckyShotGameplayController] BindCurrentBall -> " +
+                "Ball=" + currentBall.name +
+                " | Owner=" + localLuckyShotPlayer,
+                this);
+        }
+    }
+
+    private void CleanupCurrentBallReference()
+    {
+        currentBall = null;
+        shotLaunchObserved = false;
+        shotResolutionPending = false;
+
+        ClearLauncherBindingOnly();
+    }
+
+    private void ClearLauncherBindingOnly()
+    {
+        if (ballLauncher == null)
+            return;
+
+        ballLauncher.ball = null;
+        ballLauncher.SetActivePlacementArea(null);
+        ballLauncher.ResetLaunch();
+        ballLauncher.enabled = true;
+        ballLauncher.SetStandaloneOfflineLaunchEnabled(true);
+    }
+
+    private void TryScheduleRetryBallSpawn()
+    {
+        if (retryRespawnScheduled)
+            return;
+
+        if (spawnInProgress)
+            return;
+
+        if (currentBall != null)
+            return;
+
+        if (sessionRuntime == null || !sessionRuntime.HasActiveSession)
+            return;
+
+        LuckyShotActiveSession session = sessionRuntime.CurrentSession;
+        if (!session.IsValid())
+            return;
+
+        if (session.remainingShots <= 0)
+            return;
+
+        retryRespawnScheduled = true;
+        _ = SpawnNextBallDelayedAsync();
     }
 
     private async Task SpawnNextBallDelayedAsync()
@@ -234,86 +361,6 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         await SpawnFreshBallAsync();
     }
 
-    private void HandleSessionLoaded(LuckyShotActiveSession session)
-    {
-        EnsurePlayableStateFromSession(session);
-    }
-
-    private void HandleSessionPreviewChanged(LuckyShotSessionPreview preview)
-    {
-        if (!preview.hasActiveSession)
-            return;
-
-        if (preview.remainingShots > 0 && currentBall == null && !shotResolutionPending && !retryRespawnScheduled)
-        {
-            _ = SpawnFreshBallAsync();
-        }
-    }
-
-    private void HandleSessionResolved(LuckyShotResolvedResult result)
-    {
-        if (result.canRetry)
-        {
-            CleanupCurrentBallReference();
-
-            if (!retryRespawnScheduled)
-            {
-                retryRespawnScheduled = true;
-                _ = SpawnNextBallDelayedAsync();
-            }
-
-            return;
-        }
-
-        CleanupCurrentBallReference();
-    }
-
-    private void ConfigureLaunchSide(LuckyShotLaunchSide side)
-    {
-        if (ballTurnSpawner == null)
-            return;
-
-        bool player1OnLeft = side == LuckyShotLaunchSide.Left;
-        ballTurnSpawner.SetPlayer1Side(player1OnLeft);
-
-        if (verboseLogs)
-            Debug.Log("[LuckyShotGameplayController] ConfigureLaunchSide -> " + side, this);
-    }
-
-    private void BindCurrentBall()
-    {
-        if (ballTurnSpawner == null || ballLauncher == null || currentBall == null)
-            return;
-
-        ballTurnSpawner.TryBindCurrentOfflineBallForLocalControl(currentBall, localLuckyShotPlayer, localLuckyShotPlayer);
-        ballLauncher.ball = currentBall;
-        ballLauncher.SetActivePlacementArea(ballTurnSpawner.GetPlacementAreaForOwner(localLuckyShotPlayer));
-        ballLauncher.ResetLaunch();
-        ballLauncher.SetStandaloneOfflineLaunchEnabled(true);
-
-        if (verboseLogs)
-            Debug.Log("[LuckyShotGameplayController] BindCurrentBall -> Ball=" + currentBall.name, this);
-    }
-
-    private void CleanupCurrentBallReference()
-    {
-        currentBall = null;
-        shotLaunchObserved = false;
-        shotResolutionPending = false;
-        ClearLauncherBindingOnly();
-    }
-
-    private void ClearLauncherBindingOnly()
-    {
-        if (ballLauncher == null)
-            return;
-
-        ballLauncher.ball = null;
-        ballLauncher.SetActivePlacementArea(null);
-        ballLauncher.ResetLaunch();
-        ballLauncher.SetStandaloneOfflineLaunchEnabled(true);
-    }
-
     private void ResolveReferences()
     {
         if (sessionRuntime == null)
@@ -327,10 +374,10 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             shotResolver = FindFirstObjectByType<LuckyShotShotResolver>();
 
         if (ballTurnSpawner == null)
-            ballTurnSpawner = FindFirstObjectByType<BallTurnSpawner>();
+            ballTurnSpawner = FindFirstObjectByType<BallTurnSpawner>(FindObjectsInactive.Include);
 
         if (ballLauncher == null)
-            ballLauncher = FindFirstObjectByType<BallLauncher>();
+            ballLauncher = FindFirstObjectByType<BallLauncher>(FindObjectsInactive.Include);
 #else
         if (sessionRuntime == null)
             sessionRuntime = FindObjectOfType<LuckyShotSessionRuntime>();
@@ -339,10 +386,10 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             shotResolver = FindObjectOfType<LuckyShotShotResolver>();
 
         if (ballTurnSpawner == null)
-            ballTurnSpawner = FindObjectOfType<BallTurnSpawner>();
+            ballTurnSpawner = FindObjectOfType<BallTurnSpawner>(true);
 
         if (ballLauncher == null)
-            ballLauncher = FindObjectOfType<BallLauncher>();
+            ballLauncher = FindObjectOfType<BallLauncher>(true);
 #endif
     }
 

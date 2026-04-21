@@ -11,8 +11,6 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
     public event Action<LuckyShotSessionPreview> SessionPreviewChanged;
     public event Action<LuckyShotActiveSession> SessionLoaded;
     public event Action<LuckyShotResolvedResult> SessionResolved;
-    public event Action<LuckyShotResolvedResult> TargetResolved;
-    public event Action<LuckyShotActiveSession> SessionFinalized;
     public event Action<string> FeedbackRaised;
 
     [Header("Scene References")]
@@ -35,7 +33,7 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
     private bool resolveLocked;
 
     public bool IsBusy => isBusy;
-    public bool HasActiveSession => currentSession.IsValid();
+    public bool HasActiveSession => currentSession.hasActiveSession && currentSession.IsValid();
     public LuckyShotActiveSession CurrentSession => currentSession;
     public LuckyShotLaunchSide CurrentLaunchSide => HasActiveSession ? currentSession.launchSide : LuckyShotLaunchSide.Left;
 
@@ -73,7 +71,8 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
         if (verboseLogs)
         {
             Debug.Log(
-                "[LuckyShotSessionRuntime] Awake -> BackendService=" + (backendService != null) +
+                "[LuckyShotSessionRuntime] Awake -> " +
+                "BackendService=" + (backendService != null) +
                 " | EntryService=" + (entryService != null) +
                 " | SlotRegistry=" + (slotRegistry != null) +
                 " | LaunchLeft=" + GetName(launchZoneLeft) +
@@ -95,29 +94,6 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
             : (launchZoneLeft != null ? launchZoneLeft : launchZoneRight);
     }
 
-    public bool TryGetWinningSlotForBoard(int boardNumber, out LuckyShotRegisteredSlot slot)
-    {
-        slot = null;
-
-        if (slotRegistry == null || !HasActiveSession)
-            return false;
-
-        switch (boardNumber)
-        {
-            case 1:
-                slot = slotRegistry.GetSlot(1, currentSession.board1WinningSlotId);
-                break;
-            case 2:
-                slot = slotRegistry.GetSlot(2, currentSession.board2WinningSlotId);
-                break;
-            case 3:
-                slot = slotRegistry.GetSlot(3, currentSession.board3WinningSlotId);
-                break;
-        }
-
-        return slot != null;
-    }
-
     public void RefreshPreview()
     {
         LuckyShotSessionPreview preview = BuildPreview(currentSession);
@@ -126,7 +102,8 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
         if (verboseLogs)
         {
             Debug.Log(
-                "[LuckyShotSessionRuntime] RefreshPreview -> HasActiveSession=" + preview.hasActiveSession +
+                "[LuckyShotSessionRuntime] RefreshPreview -> " +
+                "HasActiveSession=" + preview.hasActiveSession +
                 " | RemainingShots=" + preview.remainingShots +
                 " | LaunchSide=" + preview.launchSide,
                 this);
@@ -166,7 +143,7 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
                     if (verboseLogs)
                     {
                         Debug.Log(
-                            "[LuckyShotSessionRuntime] EnsureSessionLoadedAsync -> loaded persisted session " +
+                            "[LuckyShotSessionRuntime] EnsureSessionLoadedAsync -> Loaded existing session " +
                             currentSession.sessionId +
                             " | Side=" + currentSession.launchSide +
                             " | RemainingShots=" + currentSession.remainingShots,
@@ -181,7 +158,7 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
                 if (verboseLogs)
                 {
                     Debug.Log(
-                        "[LuckyShotSessionRuntime] EnsureSessionLoadedAsync -> discarding persisted session " +
+                        "[LuckyShotSessionRuntime] EnsureSessionLoadedAsync -> Discarding persisted session " +
                         loaded.sessionId +
                         " | SessionDate=" + loaded.sessionDateUtc +
                         " | Today=" + DateTime.UtcNow.ToString("yyyy-MM-dd") +
@@ -202,7 +179,7 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
             if (verboseLogs)
             {
                 Debug.Log(
-                    "[LuckyShotSessionRuntime] EnsureSessionLoadedAsync -> created new session " +
+                    "[LuckyShotSessionRuntime] EnsureSessionLoadedAsync -> Created new session " +
                     currentSession.sessionId +
                     " | Side=" + currentSession.launchSide +
                     " | B1=" + currentSession.board1WinningSlotId +
@@ -285,82 +262,86 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
 
     public async Task<LuckyShotResolvedResult> ResolveHitAsync(int hitBoardNumber, string hitSlotId, CancellationToken cancellationToken = default)
     {
-        LuckyShotResolvedResult result = CreateIgnoredResult(hitBoardNumber, hitSlotId, "No active session.");
-
         if (resolveLocked)
-            return CreateIgnoredResult(hitBoardNumber, hitSlotId, "Resolve locked.");
+            return CreateIgnoredResult("Resolve locked.");
 
         if (!HasActiveSession)
         {
             RaiseFeedback("No active Lucky Shot session.");
-            return result;
+            return CreateIgnoredResult("No active session.");
         }
 
         resolveLocked = true;
 
         try
         {
-            currentSession.lastHitBoardNumber = hitBoardNumber;
-            currentSession.lastHitSlotId = hitSlotId ?? string.Empty;
+            bool isWinningHit = IsWinningHit(hitBoardNumber, hitSlotId);
+            int rewardWeight = CalculateRewardWeight(hitBoardNumber, hitSlotId);
+
+            bool hadRewardAlready = currentSession.rewardGranted;
+            int previousWinningBoard = currentSession.lastHitBoardNumber;
+            string previousWinningSlot = currentSession.lastHitSlotId ?? string.Empty;
+
+            if (isWinningHit)
+            {
+                currentSession.rewardGranted = true;
+                currentSession.lastHitBoardNumber = hitBoardNumber;
+                currentSession.lastHitSlotId = hitSlotId ?? string.Empty;
+            }
+            else
+            {
+                currentSession.rewardGranted = hadRewardAlready;
+                currentSession.lastHitBoardNumber = hadRewardAlready ? previousWinningBoard : 0;
+                currentSession.lastHitSlotId = hadRewardAlready ? previousWinningSlot : string.Empty;
+            }
+
             currentSession.shotAlreadyTaken = false;
 
-            bool isWin = IsWinningHit(hitBoardNumber, hitSlotId);
-            int rewardWeight = isWin ? CalculateRewardWeight(hitBoardNumber, hitSlotId) : 0;
-            bool canRetry = !isWin && currentSession.remainingShots > 0;
-
-            currentSession.rewardGranted = isWin;
-
-            if (!isWin && !canRetry)
-                currentSession.hasActiveSession = false;
-
-            if (isWin)
-                currentSession.hasActiveSession = false;
+            bool canRetry = currentSession.remainingShots > 0;
+            currentSession.hasActiveSession = canRetry;
 
             bool saveOk = await SaveSessionToBackendAsync(currentSession, cancellationToken);
             if (!saveOk)
                 RaiseFeedback("Unable to save Lucky Shot result.");
 
-            if (!currentSession.hasActiveSession)
+            if (!canRetry)
             {
-                await RegisterPlayResultInternalAsync(isWin ? Mathf.Max(1, rewardWeight) : 0, cancellationToken);
+                int finalScore = currentSession.rewardGranted ? GetFinalRewardWeightForSession() : 0;
+                await RegisterPlayResultInternalAsync(finalScore, cancellationToken);
                 await ClearActiveSessionInBackendAsync(cancellationToken);
             }
 
-            result = new LuckyShotResolvedResult
+            LuckyShotResolvedResult result = new LuckyShotResolvedResult
             {
                 success = saveOk,
-                isWin = isWin,
-                rewardGranted = isWin,
-                hitBoardNumber = hitBoardNumber,
-                hitSlotId = hitSlotId ?? string.Empty,
-                rewardWeight = rewardWeight,
-                rewardLabel = BuildRewardLabel(hitBoardNumber, rewardWeight, isWin),
+                isWin = isWinningHit,
+                rewardGranted = currentSession.rewardGranted,
+                hitBoardNumber = isWinningHit ? hitBoardNumber : 0,
+                hitSlotId = isWinningHit ? (hitSlotId ?? string.Empty) : string.Empty,
+                rewardWeight = isWinningHit ? rewardWeight : 0,
+                rewardLabel = BuildRewardLabel(isWinningHit, hitBoardNumber, rewardWeight, canRetry),
                 remainingShotsAfterResolve = currentSession.remainingShots,
                 canRetry = canRetry,
                 isFinalResolution = !canRetry,
                 sessionAfterResolve = currentSession
             };
 
-            TargetResolved?.Invoke(result);
-            SessionResolved?.Invoke(result);
-
-            if (result.isFinalResolution)
-                SessionFinalized?.Invoke(currentSession);
-
-            RefreshPreview();
-
             if (verboseLogs)
             {
                 Debug.Log(
-                    "[LuckyShotSessionRuntime] ResolveHitAsync -> Board=" + hitBoardNumber +
-                    " | SlotId=" + (hitSlotId ?? string.Empty) +
-                    " | IsWin=" + isWin +
+                    "[LuckyShotSessionRuntime] ResolveHitAsync -> " +
+                    "Board=" + hitBoardNumber +
+                    " | SlotId=" + hitSlotId +
+                    " | IsWinningHit=" + isWinningHit +
                     " | RewardWeight=" + rewardWeight +
-                    " | Remaining=" + currentSession.remainingShots +
-                    " | CanRetry=" + canRetry,
+                    " | RemainingShots=" + currentSession.remainingShots +
+                    " | RewardGrantedInSession=" + currentSession.rewardGranted +
+                    " | HasActiveSession=" + currentSession.hasActiveSession,
                     this);
             }
 
+            SessionResolved?.Invoke(result);
+            RefreshPreview();
             return result;
         }
         finally
@@ -372,26 +353,22 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
     public async Task<LuckyShotResolvedResult> ResolveMissAsync(CancellationToken cancellationToken = default)
     {
         if (resolveLocked)
-            return CreateIgnoredResult(0, string.Empty, "Resolve locked.");
+            return CreateIgnoredResult("Resolve locked.");
 
         if (!HasActiveSession)
         {
             RaiseFeedback("No active Lucky Shot session.");
-            return CreateIgnoredResult(0, string.Empty, "No active session.");
+            return CreateIgnoredResult("No active session.");
         }
 
         resolveLocked = true;
 
         try
         {
-            currentSession.lastHitBoardNumber = 0;
-            currentSession.lastHitSlotId = string.Empty;
             currentSession.shotAlreadyTaken = false;
-            currentSession.rewardGranted = false;
 
             bool canRetry = currentSession.remainingShots > 0;
-            if (!canRetry)
-                currentSession.hasActiveSession = false;
+            currentSession.hasActiveSession = canRetry;
 
             bool saveOk = await SaveSessionToBackendAsync(currentSession, cancellationToken);
             if (!saveOk)
@@ -399,7 +376,8 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
 
             if (!canRetry)
             {
-                await RegisterPlayResultInternalAsync(0, cancellationToken);
+                int finalScore = currentSession.rewardGranted ? GetFinalRewardWeightForSession() : 0;
+                await RegisterPlayResultInternalAsync(finalScore, cancellationToken);
                 await ClearActiveSessionInBackendAsync(cancellationToken);
             }
 
@@ -407,7 +385,7 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
             {
                 success = saveOk,
                 isWin = false,
-                rewardGranted = false,
+                rewardGranted = currentSession.rewardGranted,
                 hitBoardNumber = 0,
                 hitSlotId = string.Empty,
                 rewardWeight = 0,
@@ -418,21 +396,18 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
                 sessionAfterResolve = currentSession
             };
 
-            SessionResolved?.Invoke(result);
-
-            if (result.isFinalResolution)
-                SessionFinalized?.Invoke(currentSession);
-
-            RefreshPreview();
-
             if (verboseLogs)
             {
                 Debug.Log(
-                    "[LuckyShotSessionRuntime] ResolveMissAsync -> RemainingShots=" + currentSession.remainingShots +
+                    "[LuckyShotSessionRuntime] ResolveMissAsync -> " +
+                    "RemainingShots=" + currentSession.remainingShots +
+                    " | RewardGrantedInSession=" + currentSession.rewardGranted +
                     " | CanRetry=" + canRetry,
                     this);
             }
 
+            SessionResolved?.Invoke(result);
+            RefreshPreview();
             return result;
         }
         finally
@@ -441,17 +416,17 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
         }
     }
 
-    private LuckyShotResolvedResult CreateIgnoredResult(int hitBoardNumber, string hitSlotId, string label)
+    private LuckyShotResolvedResult CreateIgnoredResult(string message)
     {
         return new LuckyShotResolvedResult
         {
             success = false,
             isWin = false,
-            rewardGranted = false,
-            hitBoardNumber = hitBoardNumber,
-            hitSlotId = hitSlotId ?? string.Empty,
+            rewardGranted = currentSession.rewardGranted,
+            hitBoardNumber = 0,
+            hitSlotId = string.Empty,
             rewardWeight = 0,
-            rewardLabel = label ?? string.Empty,
+            rewardLabel = "Ignored",
             remainingShotsAfterResolve = currentSession.remainingShots,
             canRetry = false,
             isFinalResolution = false,
@@ -517,37 +492,8 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
             shotAlreadyTaken = false,
             rewardGranted = false,
             lastHitBoardNumber = 0,
-            lastHitSlotId = string.Empty,
-            availableTokensSnapshotAfterConsume = Mathf.Max(0, GetAvailableTokensNow())
+            lastHitSlotId = string.Empty
         };
-    }
-
-    private bool ShouldDiscardPersistedSession(LuckyShotActiveSession loaded)
-    {
-        string todayUtc = DateTime.UtcNow.ToString("yyyy-MM-dd");
-
-        if (!string.Equals(loaded.sessionDateUtc, todayUtc, StringComparison.Ordinal))
-            return true;
-
-        int availableTokensNow = GetAvailableTokensNow();
-
-        if (availableTokensNow > loaded.availableTokensSnapshotAfterConsume)
-            return true;
-
-        return false;
-    }
-
-    private int GetAvailableTokensNow()
-    {
-        ResolveServices();
-
-        if (entryService != null)
-            return Mathf.Max(0, entryService.CachedTokens);
-
-        if (backendService != null)
-            return Mathf.Max(0, backendService.GetAvailableTokens());
-
-        return 0;
     }
 
     private bool IsWinningHit(int boardNumber, string hitSlotId)
@@ -593,12 +539,61 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
         return baseWeight + Mathf.RoundToInt(distance * 10f);
     }
 
-    private string BuildRewardLabel(int boardNumber, int rewardWeight, bool isWin)
+    private int GetFinalRewardWeightForSession()
     {
-        if (!isWin)
-            return "Miss";
+        if (!currentSession.rewardGranted)
+            return 0;
 
-        return "Board " + boardNumber + " Reward " + rewardWeight;
+        return CalculateRewardWeight(currentSession.lastHitBoardNumber, currentSession.lastHitSlotId);
+    }
+
+    private string BuildRewardLabel(bool isWinningHit, int boardNumber, int rewardWeight, bool canRetry)
+    {
+        if (isWinningHit)
+            return "Board " + boardNumber + " Reward " + rewardWeight;
+
+        return canRetry ? "Retry" : "Miss";
+    }
+
+    private bool ShouldDiscardPersistedSession(LuckyShotActiveSession loaded)
+    {
+        string todayUtc = DateTime.UtcNow.ToString("yyyy-MM-dd");
+
+        if (!string.Equals(loaded.sessionDateUtc, todayUtc, StringComparison.Ordinal))
+            return true;
+
+        int availableTokensNow = GetAvailableTokensNow();
+
+        if (availableTokensNow > 0)
+            return true;
+
+        return false;
+    }
+
+    private int GetAvailableTokensNow()
+    {
+        ResolveServices();
+
+        if (entryService != null)
+        {
+            entryService.RefreshTokens();
+            return Mathf.Max(0, entryService.CachedTokens);
+        }
+
+        if (backendService != null)
+            return Mathf.Max(0, backendService.GetAvailableTokens());
+
+        return 0;
+    }
+
+    private async Task RegisterPlayResultInternalAsync(int score, CancellationToken cancellationToken)
+    {
+        ResolveServices();
+
+        if (backendService == null)
+            return;
+
+        await backendService.RegisterPlayResultAsync(score, cancellationToken);
     }
 
     private async Task<LuckyShotActiveSession> TryLoadActiveSessionFromBackendAsync(CancellationToken cancellationToken)
@@ -628,17 +623,8 @@ public sealed class LuckyShotSessionRuntime : MonoBehaviour
         if (backendService == null)
             return false;
 
-        return await backendService.ClearActiveSessionAsync(cancellationToken);
-    }
-
-    private async Task RegisterPlayResultInternalAsync(int score, CancellationToken cancellationToken)
-    {
-        ResolveServices();
-
-        if (backendService == null)
-            return;
-
-        await backendService.RegisterPlayResultAsync(score, cancellationToken);
+        LuckyShotActiveSession cleared = default;
+        return await backendService.SaveActiveSessionAsync(cleared, cancellationToken);
     }
 
     private void ResolveServices()

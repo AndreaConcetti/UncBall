@@ -1414,7 +1414,6 @@ MonoBehaviour:
   ballLauncher: {fileID: 472537353}
   localLuckyShotPlayer: 1
   autoSpawnBallOnSessionLoaded: 1
-  respawnBallAfterAdExtraShot: 1
   retryRespawnDelaySeconds: 0.5
   currentBall: {fileID: 0}
   shotLaunchObserved: 0
@@ -1435,18 +1434,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LuckyShotSceneBootstrap
   sessionRuntime: {fileID: 330605306}
-  highlightController: {fileID: 330605307}
-  slotRegistry: {fileID: 330605305}
+  gameplayController: {fileID: 0}
   ballLauncher: {fileID: 472537353}
   playerSkinLoadout: {fileID: 0}
-  shotsLeftText: {fileID: 0}
-  launchSideText: {fileID: 0}
-  sessionDateText: {fileID: 0}
+  highlightController: {fileID: 330605307}
   feedbackText: {fileID: 0}
-  leftSideRoot: {fileID: 0}
-  rightSideRoot: {fileID: 0}
-  bootstrapOnEnable: 1
-  clearFeedbackOnSuccess: 1
   verboseLogs: 1
 --- !u!1 &355121815
 GameObject:
@@ -3412,6 +3404,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 596191364}
+  - component: {fileID: 596191365}
   m_Layer: 0
   m_Name: ManagerUI
   m_TagString: Untagged
@@ -3434,6 +3427,36 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1106984856}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &596191365
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 596191360}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4be4c97b5fd33ce46b3fdf6a23a00c6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotEndPanelUI
+  panelRoot: {fileID: 0}
+  resultsPageRoot: {fileID: 0}
+  rewardsPageRoot: {fileID: 0}
+  resultsTitleText: {fileID: 0}
+  board1ResultText: {fileID: 0}
+  board2ResultText: {fileID: 0}
+  board3ResultText: {fileID: 0}
+  resultsInfoText: {fileID: 0}
+  watchAdButton: {fileID: 0}
+  watchAdButtonText: {fileID: 0}
+  nextButton: {fileID: 0}
+  rewardsTitleText: {fileID: 0}
+  rewardsBodyText: {fileID: 0}
+  backToMenuButton: {fileID: 0}
+  feedbackText: {fileID: 0}
+  mainMenuSceneName: MainMenu
+  autoGrantExtraShotInEditor: 1
+  verboseLogs: 1
 --- !u!1 &630407896
 GameObject:
   m_ObjectHideFlags: 0
