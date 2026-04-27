@@ -62,21 +62,31 @@ public sealed class LuckyShotShotResolver : MonoBehaviour
 
         hasResolvedCurrentBall = true;
 
-        string fallbackSlotId = "slot_" + (slotIndex + 1).ToString("00");
-        LuckyShotRegisteredSlot registeredSlot = slotRegistry.GetSlot(boardNumber, fallbackSlotId);
+        LuckyShotRegisteredSlot registeredSlot = null;
 
-        if (registeredSlot == null && slotTransform != null)
+        if (slotTransform != null)
         {
             for (int i = 0; i < slotRegistry.Slots.Count; i++)
             {
                 LuckyShotRegisteredSlot candidate = slotRegistry.Slots[i];
-                if (candidate != null && candidate.boardNumber == boardNumber && candidate.slotTransform == slotTransform)
+                if (candidate == null)
+                    continue;
+
+                if (candidate.boardNumber != boardNumber)
+                    continue;
+
+                if (candidate.slotTransform == slotTransform)
                 {
                     registeredSlot = candidate;
                     break;
                 }
             }
         }
+
+        string fallbackSlotId = "slot_" + Mathf.Max(0, slotIndex).ToString("00");
+
+        if (registeredSlot == null)
+            registeredSlot = slotRegistry.GetSlot(boardNumber, fallbackSlotId);
 
         string resolvedSlotId = registeredSlot != null ? registeredSlot.slotId : fallbackSlotId;
 

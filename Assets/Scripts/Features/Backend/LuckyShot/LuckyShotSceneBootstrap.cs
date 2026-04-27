@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using TMPro;
+using UnityEngine.SceneManagement;
 using UnityEngine;
 
 public sealed class LuckyShotSceneBootstrap : MonoBehaviour
@@ -38,6 +39,15 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
     private void OnDisable()
     {
         Unsubscribe();
+
+        // FIX: resetta il flag in modo che se la scena viene ricaricata
+        // (es. secondo ingresso dopo reward), il bootstrap parta di nuovo.
+        bootstrapped = false;
+    }
+
+    private void OnDestroy()
+    {
+        bootstrapped = false;
     }
 
     public void BootstrapNow()
@@ -60,6 +70,11 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
             SetFeedback("Lucky Shot runtime missing.");
             return;
         }
+
+        // FIX: notifica il runtime che siamo in una nuova scena,
+        // così può accettare una nuova sessione anche se l'istanza
+        // è sopravvissuta al cambio scena via DontDestroyOnLoad.
+        sessionRuntime.NotifySceneReloaded();
 
         LuckyShotActiveSession session = await sessionRuntime.EnsureSessionLoadedAsync(CancellationToken.None);
         if (!session.IsValid())
@@ -274,45 +289,46 @@ public sealed class LuckyShotSceneBootstrap : MonoBehaviour
 
     private void ResolveReferences()
     {
+        sessionRuntime = ResolveSceneComponent(sessionRuntime);
+        gameplayController = ResolveSceneComponent(gameplayController);
+        ballLauncher = ResolveSceneComponent(ballLauncher);
+        playerSkinLoadout = ResolveSceneComponent(playerSkinLoadout);
+        highlightController = ResolveSceneComponent(highlightController as LuckyShotHighlightController);
+
         if (sessionRuntime == null)
             sessionRuntime = LuckyShotSessionRuntime.Instance;
 
         if (gameplayController == null)
             gameplayController = LuckyShotGameplayController.Instance;
-
-#if UNITY_2023_1_OR_NEWER
-        if (sessionRuntime == null)
-            sessionRuntime = FindFirstObjectByType<LuckyShotSessionRuntime>();
-
-        if (gameplayController == null)
-            gameplayController = FindFirstObjectByType<LuckyShotGameplayController>();
-
-        if (ballLauncher == null)
-            ballLauncher = FindFirstObjectByType<BallLauncher>(FindObjectsInactive.Include);
-
-        if (playerSkinLoadout == null)
-            playerSkinLoadout = FindFirstObjectByType<PlayerSkinLoadout>(FindObjectsInactive.Include);
-
-        if (highlightController == null)
-            highlightController = FindFirstObjectByType<LuckyShotHighlightController>(FindObjectsInactive.Include);
-#else
-        if (sessionRuntime == null)
-            sessionRuntime = FindObjectOfType<LuckyShotSessionRuntime>();
-
-        if (gameplayController == null)
-            gameplayController = FindObjectOfType<LuckyShotGameplayController>();
-
-        if (ballLauncher == null)
-            ballLauncher = FindObjectOfType<BallLauncher>(true);
-
-        if (playerSkinLoadout == null)
-            playerSkinLoadout = FindObjectOfType<PlayerSkinLoadout>(true);
-
-        if (highlightController == null)
-            highlightController = FindObjectOfType<LuckyShotHighlightController>(true);
-#endif
     }
 
+    private T ResolveSceneComponent<T>(T current) where T : Component
+    {
+        if (current != null && current.gameObject.scene == gameObject.scene)
+            return current;
+
+#if UNITY_2023_1_OR_NEWER
+        T[] all = FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+        T[] all = FindObjectsOfType<T>(true);
+#endif
+
+        if (all == null)
+            return null;
+
+        Scene myScene = gameObject.scene;
+        for (int i = 0; i < all.Length; i++)
+        {
+            T candidate = all[i];
+            if (candidate == null)
+                continue;
+
+            if (candidate.gameObject.scene == myScene)
+                return candidate;
+        }
+
+        return current;
+    }
     private void Subscribe()
     {
         if (sessionRuntime == null)

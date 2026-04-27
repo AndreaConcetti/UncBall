@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -23,7 +23,7 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
     [SerializeField] private Transform scanRoot;
     [SerializeField] private bool includeInactive = true;
 
-    [Header("Naming fallback")]
+    [Header("Naming")]
     [SerializeField] private string highlightAnchorChildName = "HighlightAnchor";
 
     [Header("Debug")]
@@ -132,8 +132,11 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
             return;
 
         int boardNumber = MapBoardTier(target.BoardTier);
+
+        // Se LuckyShotSlotTarget ha già uno slotId esplicito lo usa direttamente,
+        // altrimenti lo costruisce dall'indice (che ora parte da 0).
         string finalSlotId = string.IsNullOrWhiteSpace(target.SlotId)
-            ? ("slot_" + (target.SlotOrderInBoard + 1).ToString("00"))
+            ? BuildSlotId(target.SlotOrderInBoard)
             : target.SlotId.Trim();
 
         int slotIndex = Mathf.Max(0, target.SlotOrderInBoard);
@@ -171,8 +174,12 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
         StarPlate plate = scorer.GetComponentInParent<StarPlate>(true);
 
         int boardNumber = plate != null ? plate.plateNumber : InferBoardNumberFromHierarchy(slotTransform);
+
+        // FIX: InferSlotIndexFromName ora gestisce nomi che partono da 0 (Slot0, Slot1...).
         int slotIndex = InferSlotIndexFromName(slotTransform.name);
-        string finalSlotId = "slot_" + (slotIndex + 1).ToString("00");
+
+        // L'id corrisponde direttamente all'indice estratto dal nome.
+        string finalSlotId = BuildSlotId(slotIndex);
 
         Transform highlightAnchor = FindChildRecursive(slotTransform, highlightAnchorChildName);
 
@@ -254,6 +261,15 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
         return boardNumber + "|" + (slotId ?? string.Empty).Trim();
     }
 
+    /// <summary>
+    /// Costruisce lo slotId dall'indice (che ora parte da 0).
+    /// Slot0 → "slot_00", Slot1 → "slot_01", ecc.
+    /// </summary>
+    private static string BuildSlotId(int index)
+    {
+        return "slot_" + Mathf.Max(0, index).ToString("00");
+    }
+
     private static int MapBoardTier(LuckyShotBoardTier tier)
     {
         switch (tier)
@@ -280,6 +296,11 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
         return 0;
     }
 
+    /// <summary>
+    /// Estrae il numero dal nome dell'oggetto e lo restituisce come indice base-0.
+    /// Slot0 → 0, Slot1 → 1, Slot6 → 6.
+    /// Non fa più la sottrazione di 1 perché i nomi ora partono già da 0.
+    /// </summary>
     private int InferSlotIndexFromName(string objectName)
     {
         if (string.IsNullOrWhiteSpace(objectName))
@@ -299,7 +320,8 @@ public sealed class LuckyShotSlotRegistry : MonoBehaviour
         if (!int.TryParse(digits, out int parsed))
             return 0;
 
-        return Mathf.Max(0, parsed - 1);
+        // I nomi partono da 0, quindi l'indice è direttamente il numero estratto.
+        return Mathf.Max(0, parsed);
     }
 
     private Transform FindChildRecursive(Transform root, string childName)

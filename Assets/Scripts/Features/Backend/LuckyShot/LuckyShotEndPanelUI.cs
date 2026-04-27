@@ -92,7 +92,11 @@ public sealed class LuckyShotEndPanelUI : MonoBehaviour
         lastResolvedSession = result.sessionAfterResolve;
         hasResolvedResult = true;
 
-        bool shouldOpenEndPanel = result.success && (result.isFinalResolution || result.isWin || !result.canRetry);
+        // FIX: il panel si apre SOLO quando la sessione è terminata del tutto
+        // (isFinalResolution o !canRetry). Non aprirlo su win a metà partita,
+        // perché il giocatore potrebbe ancora avere tiri rimanenti.
+        bool shouldOpenEndPanel = result.success && result.isFinalResolution;
+
         if (!shouldOpenEndPanel)
             return;
 
@@ -364,8 +368,6 @@ public sealed class LuckyShotEndPanelUI : MonoBehaviour
             return true;
         }
 #endif
-        // Qui collegherai il tuo vero Rewarded Ads SDK.
-        // Per ora rimane comportamento dev-safe.
         await Task.Delay(150);
         return true;
     }

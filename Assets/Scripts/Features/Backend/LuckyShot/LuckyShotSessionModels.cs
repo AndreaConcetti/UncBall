@@ -44,9 +44,14 @@ public struct LuckyShotActiveSession
     public int lastHitBoardNumber;
     public string lastHitSlotId;
 
-    // Nuovo: snapshot dei token disponibili SUBITO DOPO la creazione/consumo sessione.
-    // Serve per capire se, successivamente, il player ha guadagnato altri token.
+    // Snapshot dei token disponibili subito dopo la creazione/consumo sessione.
     public int availableTokensSnapshotAfterConsume;
+
+    // Versione del layout degli slot. Se non corrisponde alla versione corrente
+    // definita in LuckyShotSessionRuntime.CurrentSlotLayoutVersion, la sessione
+    // viene scartata e ricreata automaticamente.
+    // Incrementa CurrentSlotLayoutVersion ogni volta che rinomini/riorganizzi gli slot.
+    public int slotLayoutVersion;
 
     public bool HasAnyWinningSlot()
     {
