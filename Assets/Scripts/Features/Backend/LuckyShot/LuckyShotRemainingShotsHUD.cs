@@ -15,20 +15,21 @@ public sealed class LuckyShotRemainingShotsHUD : MonoBehaviour
     [SerializeField] private int maxShots = 3;
     [SerializeField] private bool verboseLogs;
 
-    private int currentRemainingShots = 3;
+    private int displayedRemainingShots;
+    private bool subscribed;
 
     private void Awake()
     {
         ResolveReferences();
         ApplyTitle();
-        ApplyRemainingShots(maxShots);
+        ApplyRemainingShots(maxShots, "Awake");
     }
 
     private void OnEnable()
     {
         ResolveReferences();
         Subscribe();
-        RefreshFromCurrentSession();
+        RefreshFromLoadedSessionOnly();
     }
 
     private void OnDisable()
@@ -38,8 +39,10 @@ public sealed class LuckyShotRemainingShotsHUD : MonoBehaviour
 
     private void ResolveReferences()
     {
-        if (sessionRuntime == null)
-            sessionRuntime = LuckyShotSessionRuntime.Instance;
+        if (sessionRuntime != null)
+            return;
+
+        sessionRuntime = LuckyShotSessionRuntime.Instance;
 
 #if UNITY_2023_1_OR_NEWER
         if (sessionRuntime == null)
@@ -52,34 +55,46 @@ public sealed class LuckyShotRemainingShotsHUD : MonoBehaviour
 
     private void Subscribe()
     {
-        if (sessionRuntime == null)
+        if (sessionRuntime == null || subscribed)
             return;
 
         sessionRuntime.SessionLoaded -= HandleSessionLoaded;
         sessionRuntime.SessionLoaded += HandleSessionLoaded;
 
-        sessionRuntime.SessionPreviewChanged -= HandleSessionPreviewChanged;
-        sessionRuntime.SessionPreviewChanged += HandleSessionPreviewChanged;
-
         sessionRuntime.SessionResolved -= HandleSessionResolved;
         sessionRuntime.SessionResolved += HandleSessionResolved;
+
+        /*
+         * IMPORTANTISSIMO:
+         * Non ascoltiamo SessionPreviewChanged per aggiornare il testo.
+         *
+         * SessionPreviewChanged viene emesso anche quando parte il tiro,
+         * perché MarkShotConsumedAsync scala subito RemainingShots nel backend.
+         *
+         * Il comportamento richiesto invece è:
+         * - il valore resta invariato mentre la ball è in movimento;
+         * - il valore scala solo quando il tiro si conclude.
+         */
+
+        subscribed = true;
     }
 
     private void Unsubscribe()
     {
-        if (sessionRuntime == null)
+        if (sessionRuntime == null || !subscribed)
             return;
 
         sessionRuntime.SessionLoaded -= HandleSessionLoaded;
-        sessionRuntime.SessionPreviewChanged -= HandleSessionPreviewChanged;
         sessionRuntime.SessionResolved -= HandleSessionResolved;
+
+        subscribed = false;
     }
 
-    private void RefreshFromCurrentSession()
+    private void RefreshFromLoadedSessionOnly()
     {
         if (sessionRuntime == null)
         {
-            ApplyRemainingShots(maxShots);
+            ApplyRemainingShots(maxShots, "NoRuntime");
             return;
         }
 
@@ -87,33 +102,22 @@ public sealed class LuckyShotRemainingShotsHUD : MonoBehaviour
 
         if (!session.IsValid() || !session.hasActiveSession)
         {
-            ApplyRemainingShots(maxShots);
+            ApplyRemainingShots(maxShots, "NoActiveSession");
             return;
         }
 
-        ApplyRemainingShots(session.remainingShots);
+        ApplyRemainingShots(session.remainingShots, "RefreshFromLoadedSessionOnly");
     }
 
     private void HandleSessionLoaded(LuckyShotActiveSession session)
     {
         if (!session.IsValid() || !session.hasActiveSession)
         {
-            ApplyRemainingShots(maxShots);
+            ApplyRemainingShots(maxShots, "SessionLoaded_NoActiveSession");
             return;
         }
 
-        ApplyRemainingShots(session.remainingShots);
-    }
-
-    private void HandleSessionPreviewChanged(LuckyShotSessionPreview preview)
-    {
-        if (!preview.hasActiveSession)
-        {
-            ApplyRemainingShots(maxShots);
-            return;
-        }
-
-        ApplyRemainingShots(preview.remainingShots);
+        ApplyRemainingShots(session.remainingShots, "SessionLoaded");
     }
 
     private void HandleSessionResolved(LuckyShotResolvedResult result)
@@ -121,7 +125,11 @@ public sealed class LuckyShotRemainingShotsHUD : MonoBehaviour
         if (!result.success)
             return;
 
-        ApplyRemainingShots(result.remainingShotsAfterResolve);
+        /*
+         * Questo evento arriva quando il tiro è stato risolto da uno slot.
+         * Quindi qui il numero può aggiornarsi.
+         */
+        ApplyRemainingShots(result.remainingShotsAfterResolve, "SessionResolved");
     }
 
     private void ApplyTitle()
@@ -130,18 +138,19 @@ public sealed class LuckyShotRemainingShotsHUD : MonoBehaviour
             titleText.text = titleLabel;
     }
 
-    private void ApplyRemainingShots(int remainingShots)
+    private void ApplyRemainingShots(int remainingShots, string reason)
     {
-        currentRemainingShots = Mathf.Clamp(remainingShots, 0, maxShots);
+        displayedRemainingShots = Mathf.Clamp(remainingShots, 0, maxShots);
 
         if (remainingShotsText != null)
-            remainingShotsText.text = currentRemainingShots + "/" + maxShots;
+            remainingShotsText.text = displayedRemainingShots + "/" + maxShots;
 
         if (verboseLogs)
         {
             Debug.Log(
                 "[LuckyShotRemainingShotsHUD] ApplyRemainingShots -> " +
-                currentRemainingShots + "/" + maxShots,
+                displayedRemainingShots + "/" + maxShots +
+                " | Reason=" + reason,
                 this);
         }
     }

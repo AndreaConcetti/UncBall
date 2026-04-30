@@ -1,3 +1,5 @@
+using System;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -10,38 +12,25 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
     [SerializeField] private LuckyShotShotResolver shotResolver;
     [SerializeField] private BallTurnSpawner ballTurnSpawner;
     [SerializeField] private BallLauncher ballLauncher;
+    [SerializeField] private LuckyShotHighlightController highlightController;
+
+    [Header("Lucky Shot Highlight Roots")]
+    [SerializeField] private Transform winningHighlightBoard1;
+    [SerializeField] private Transform winningHighlightBoard2;
+    [SerializeField] private Transform winningHighlightBoard3;
 
     [Header("Lucky Shot Rules")]
     [SerializeField] private PlayerID localLuckyShotPlayer = PlayerID.Player1;
     [SerializeField] private bool autoSpawnBallOnSessionLoaded = true;
-
-    [Tooltip("Delay solo visivo/pratico tra una ball risolta e lo spawn della successiva. Non controlla la fine sessione.")]
     [SerializeField] private float retryRespawnDelaySeconds = 1.1f;
 
-    [Header("Ball Settlement Watchdog")]
-    [Tooltip("Abilita il controllo fisico della ball lanciata. Serve per risolvere una ball ferma/stuck senza usare un delay cieco.")]
-    [SerializeField] private bool useBallSettlementWatchdog = true;
-
-    [Tooltip("Tempo minimo dopo il lancio prima di considerare valida la valutazione di ball ferma.")]
-    [SerializeField] private float minSecondsAfterLaunchBeforeSettlementCheck = 0.35f;
-
-    [Tooltip("La ball deve restare sotto le soglie fisiche per questo tempo continuo prima di essere considerata ferma.")]
-    [SerializeField] private float requiredStableSeconds = 0.75f;
-
-    [Tooltip("Velocità lineare massima per considerare la ball ferma.")]
-    [SerializeField] private float linearVelocityThreshold = 0.08f;
-
-    [Tooltip("Velocità angolare massima per considerare la ball ferma.")]
-    [SerializeField] private float angularVelocityThreshold = 0.35f;
-
-    [Tooltip("Movimento massimo tra due frame per considerare la ball stabile.")]
-    [SerializeField] private float positionDeltaThreshold = 0.0125f;
-
-    [Tooltip("Se true, Rigidbody.IsSleeping viene considerato come segnale forte di ball stabile.")]
-    [SerializeField] private bool acceptRigidbodySleepAsStable = true;
-
-    [Tooltip("Se true, quando la ball risulta stabile ma non è entrata in slot/death zone, il tiro viene risolto come miss.")]
-    [SerializeField] private bool resolveSettledBallAsMiss = true;
+    [Header("Intro Reveal")]
+    [SerializeField] private bool waitForIntroRevealBeforeFirstSpawn = true;
+    [SerializeField] private bool playIntroRevealOnlyOncePerSession = true;
+    [SerializeField] private float revealInitialDelaySeconds = 0.25f;
+    [SerializeField] private float revealStepDelaySeconds = 0.55f;
+    [SerializeField] private float revealAfterAllLightsDelaySeconds = 0.35f;
+    [SerializeField] private bool keepHighlightsVisibleAfterIntro = true;
 
     [Header("Runtime State")]
     [SerializeField] private BallPhysics currentBall;
@@ -49,14 +38,8 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
     [SerializeField] private bool shotResolutionPending;
     [SerializeField] private bool spawnInProgress;
     [SerializeField] private bool retryRespawnScheduled;
-    [SerializeField] private bool currentBallAlreadyResolved;
-
-    [Header("Settlement Runtime")]
-    [SerializeField] private Rigidbody currentBallRigidbody;
-    [SerializeField] private float launchedElapsedSeconds;
-    [SerializeField] private float stableElapsedSeconds;
-    [SerializeField] private Vector3 lastObservedBallPosition;
-    [SerializeField] private bool hasLastObservedBallPosition;
+    [SerializeField] private bool introRevealInProgress;
+    [SerializeField] private bool introRevealCompleted;
 
     [Header("Debug")]
     [SerializeField] private bool verboseLogs = true;
@@ -65,6 +48,11 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
     public bool HasActiveBall => currentBall != null;
     public bool ShotLaunchObserved => shotLaunchObserved;
     public bool ShotResolutionPending => shotResolutionPending;
+    public bool IntroRevealInProgress => introRevealInProgress;
+    public bool IntroRevealCompleted => introRevealCompleted;
+
+    private string introSessionId;
+    private CancellationTokenSource introRevealCancellation;
 
     private void Awake()
     {
@@ -76,61 +64,47 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
 
         Instance = this;
         ResolveReferences();
+        ForceSetAllHighlightRootsVisible(false);
     }
 
     private void OnEnable()
     {
         ResolveReferences();
-        ResetControllerStateForSceneEntry();
         Subscribe();
 
         if (sessionRuntime != null && sessionRuntime.HasActiveSession && autoSpawnBallOnSessionLoaded)
-            EnsurePlayableStateFromSession(sessionRuntime.CurrentSession);
+            BeginIntroRevealThenEnsurePlayableState(sessionRuntime.CurrentSession);
     }
 
     private void OnDisable()
     {
         Unsubscribe();
+        CancelIntroRevealFlow();
     }
 
     private void OnDestroy()
     {
         if (Instance == this)
             Instance = null;
+
+        CancelIntroRevealFlow();
     }
 
     private void Update()
     {
+        MaintainHighlightVisibilityAfterIntro();
+
         if (ballLauncher == null || sessionRuntime == null || currentBall == null)
             return;
 
         if (!shotLaunchObserved && ballLauncher.CurrentPhase == BallLauncher.LaunchPhase.Launched)
         {
             shotLaunchObserved = true;
-            ResetSettlementRuntimeForCurrentBall();
-
             _ = MarkShotConsumedAsync();
 
             if (verboseLogs)
                 Debug.Log("[LuckyShotGameplayController] Launch observed for current Lucky Shot ball.", this);
         }
-
-        TickBallSettlementWatchdog();
-    }
-
-    [ContextMenu("Lucky Shot/Force Finish Current Session As Miss")]
-    private void InspectorForceFinishCurrentSessionAsMiss()
-    {
-        _ = DebugForceFinishCurrentSessionAsMissAsync();
-    }
-
-    [ContextMenu("Lucky Shot/Reset Local Gameplay Controller State")]
-    private void InspectorResetLocalGameplayControllerState()
-    {
-        ResetControllerStateForSceneEntry();
-
-        if (verboseLogs)
-            Debug.Log("[LuckyShotGameplayController] InspectorResetLocalGameplayControllerState", this);
     }
 
     public void EnsurePlayableStateFromSession(LuckyShotActiveSession session)
@@ -146,10 +120,10 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
 
         ConfigureLaunchSide(session.launchSide);
 
-        bool shouldHaveBall =
-            session.remainingShots > 0 &&
-            !shotResolutionPending &&
-            !retryRespawnScheduled;
+        bool shouldHaveBall = session.remainingShots > 0 &&
+                              !shotResolutionPending &&
+                              !retryRespawnScheduled &&
+                              !introRevealInProgress;
 
         if (!shouldHaveBall)
             return;
@@ -163,6 +137,50 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         _ = SpawnFreshBallAsync();
     }
 
+    public void BeginIntroRevealThenEnsurePlayableState(LuckyShotActiveSession session)
+    {
+        if (!autoSpawnBallOnSessionLoaded)
+            return;
+
+        if (!session.IsValid())
+            return;
+
+        ConfigureLaunchSide(session.launchSide);
+
+        if (!waitForIntroRevealBeforeFirstSpawn)
+        {
+            introRevealCompleted = true;
+            ForceSetAllHighlightRootsVisible(true);
+            EnsurePlayableStateFromSession(session);
+            return;
+        }
+
+        string currentSessionId = string.IsNullOrWhiteSpace(session.sessionId) ? "NO_SESSION_ID" : session.sessionId;
+
+        if (playIntroRevealOnlyOncePerSession && introRevealCompleted && string.Equals(introSessionId, currentSessionId, StringComparison.Ordinal))
+        {
+            ForceSetAllHighlightRootsVisible(true);
+            EnsurePlayableStateFromSession(session);
+            return;
+        }
+
+        if (introRevealInProgress)
+        {
+            if (verboseLogs)
+            {
+                Debug.Log(
+                    "[LuckyShotGameplayController] BeginIntroRevealThenEnsurePlayableState -> intro already running. " +
+                    "SessionId=" + currentSessionId,
+                    this);
+            }
+
+            return;
+        }
+
+        introSessionId = currentSessionId;
+        _ = PlayIntroRevealThenSpawnAsync(session);
+    }
+
     public async Task SpawnFreshBallAsync()
     {
         ResolveReferences();
@@ -170,20 +188,25 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         if (spawnInProgress)
             return;
 
+        if (introRevealInProgress)
+        {
+            if (verboseLogs)
+                Debug.Log("[LuckyShotGameplayController] SpawnFreshBallAsync -> blocked because intro reveal is in progress.", this);
+
+            return;
+        }
+
         if (ballTurnSpawner == null || ballLauncher == null)
         {
             Debug.LogError("[LuckyShotGameplayController] Missing BallTurnSpawner or BallLauncher.", this);
             return;
         }
 
-        if (sessionRuntime != null)
+        if (sessionRuntime != null && sessionRuntime.HasActiveSession)
         {
-            if (!sessionRuntime.HasActiveSession)
-                return;
-
             LuckyShotActiveSession session = sessionRuntime.CurrentSession;
-            if (!session.IsValid() || session.remainingShots <= 0)
-                return;
+            if (session.IsValid())
+                ConfigureLaunchSide(session.launchSide);
         }
 
         spawnInProgress = true;
@@ -200,13 +223,8 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             }
 
             currentBall = spawned;
-            currentBallRigidbody = ResolveBallRigidbody(currentBall);
-
             shotLaunchObserved = false;
             shotResolutionPending = false;
-            currentBallAlreadyResolved = false;
-
-            ResetSettlementRuntimeForCurrentBall();
 
             await Task.Yield();
             await Task.Yield();
@@ -216,13 +234,14 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             if (shotResolver != null)
                 shotResolver.PrepareForNewBall(spawned);
 
+            ForceSetAllHighlightRootsVisible(true);
+
             if (verboseLogs)
             {
                 Debug.Log(
                     "[LuckyShotGameplayController] SpawnFreshBallAsync -> Spawned new Lucky Shot ball. " +
                     "Owner=" + localLuckyShotPlayer +
-                    " | Ball=" + currentBall.name +
-                    " | Rigidbody=" + (currentBallRigidbody != null),
+                    " | Ball=" + currentBall.name,
                     this);
             }
         }
@@ -238,18 +257,7 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             return;
 
         if (currentBall == null || lostBall != currentBall)
-        {
-            if (verboseLogs)
-            {
-                Debug.Log(
-                    "[LuckyShotGameplayController] NotifyBallLost ignored -> not current logical ball. " +
-                    "Lost=" + lostBall.name +
-                    " | Current=" + (currentBall != null ? currentBall.name : "<null>"),
-                    this);
-            }
-
             return;
-        }
 
         if (shotResolutionPending)
             return;
@@ -257,17 +265,12 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         shotResolutionPending = true;
 
         if (verboseLogs)
-            Debug.Log("[LuckyShotGameplayController] NotifyBallLost -> resolving miss by death zone.", this);
+            Debug.Log("[LuckyShotGameplayController] NotifyBallLost -> resolving miss.", this);
 
         CleanupCurrentBallReference();
 
-        LuckyShotResolvedResult result = default;
-
         if (sessionRuntime != null)
-            result = await sessionRuntime.ResolveMissAsync();
-
-        if (result.success && result.isFinalResolution)
-            return;
+            await sessionRuntime.ResolveMissAsync();
 
         TryScheduleRetryBallSpawn();
     }
@@ -278,7 +281,7 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             return;
 
         if (currentBall == resolvedBall)
-            currentBallAlreadyResolved = true;
+            CleanupCurrentBallReference();
     }
 
     public void NotifyHitResolved(LuckyShotResolvedResult result)
@@ -295,29 +298,105 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
                 this);
         }
 
-        if (!result.success)
-            return;
-
-        if (currentBall != null)
+        if (result.isFinalResolution || !result.canRetry)
         {
-            currentBallAlreadyResolved = true;
+            CleanupCurrentBallReference();
+            return;
+        }
+
+        if (result.success && result.canRetry && !result.isFinalResolution)
+            TryScheduleRetryBallSpawn();
+    }
+
+    private async Task PlayIntroRevealThenSpawnAsync(LuckyShotActiveSession session)
+    {
+        CancelIntroRevealFlow();
+
+        introRevealCancellation = new CancellationTokenSource();
+        CancellationToken cancellationToken = introRevealCancellation.Token;
+
+        introRevealInProgress = true;
+        introRevealCompleted = false;
+
+        try
+        {
+            ResolveReferences();
+            ClearLauncherBindingOnly();
+            TryApplySessionToHighlightController(session);
 
             if (verboseLogs)
             {
                 Debug.Log(
-                    "[LuckyShotGameplayController] NotifyHitResolved(Result) -> detaching resolved ball without destroying it. " +
-                    "Ball=" + currentBall.name,
+                    "[LuckyShotGameplayController] PlayIntroRevealThenSpawnAsync -> forced intro reveal started. " +
+                    "SessionId=" + session.sessionId +
+                    " | RemainingShots=" + session.remainingShots +
+                    " | Side=" + session.launchSide +
+                    " | HighlightController=" + (highlightController != null) +
+                    " | B1=" + (winningHighlightBoard1 != null) +
+                    " | B2=" + (winningHighlightBoard2 != null) +
+                    " | B3=" + (winningHighlightBoard3 != null),
                     this);
             }
 
-            CleanupCurrentBallReference();
+            await PlayHardIntroRevealSequenceAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            introRevealCompleted = true;
+            introRevealInProgress = false;
+
+            ForceSetAllHighlightRootsVisible(true);
+
+            if (verboseLogs)
+                Debug.Log("[LuckyShotGameplayController] PlayIntroRevealThenSpawnAsync -> forced intro reveal completed. Gameplay unlocked.", this);
+
+            EnsurePlayableStateFromSession(session);
         }
+        catch (OperationCanceledException)
+        {
+            introRevealInProgress = false;
 
-        if (result.isFinalResolution)
-            return;
+            if (verboseLogs)
+                Debug.Log("[LuckyShotGameplayController] PlayIntroRevealThenSpawnAsync -> cancelled.", this);
+        }
+        catch (Exception exception)
+        {
+            introRevealInProgress = false;
+            introRevealCompleted = true;
 
-        if (result.canRetry && result.remainingShotsAfterResolve > 0)
-            TryScheduleRetryBallSpawn();
+            Debug.LogError("[LuckyShotGameplayController] PlayIntroRevealThenSpawnAsync -> failed. Spawning ball anyway.\n" + exception, this);
+            ForceSetAllHighlightRootsVisible(true);
+            EnsurePlayableStateFromSession(session);
+        }
+    }
+
+    private async Task PlayHardIntroRevealSequenceAsync(CancellationToken cancellationToken)
+    {
+        ResolveHighlightRoots();
+        ForceSetAllHighlightRootsVisible(false);
+
+        if (revealInitialDelaySeconds > 0f)
+            await DelaySecondsAsync(revealInitialDelaySeconds, cancellationToken);
+
+        ForceSetBoardHighlightVisible(1, true);
+        if (verboseLogs)
+            Debug.Log("[LuckyShotGameplayController] HardIntroReveal -> Board 1 highlight enabled.", this);
+
+        if (revealStepDelaySeconds > 0f)
+            await DelaySecondsAsync(revealStepDelaySeconds, cancellationToken);
+
+        ForceSetBoardHighlightVisible(2, true);
+        if (verboseLogs)
+            Debug.Log("[LuckyShotGameplayController] HardIntroReveal -> Board 2 highlight enabled.", this);
+
+        if (revealStepDelaySeconds > 0f)
+            await DelaySecondsAsync(revealStepDelaySeconds, cancellationToken);
+
+        ForceSetBoardHighlightVisible(3, true);
+        if (verboseLogs)
+            Debug.Log("[LuckyShotGameplayController] HardIntroReveal -> Board 3 highlight enabled.", this);
+
+        if (revealAfterAllLightsDelaySeconds > 0f)
+            await DelaySecondsAsync(revealAfterAllLightsDelaySeconds, cancellationToken);
     }
 
     private async Task MarkShotConsumedAsync()
@@ -325,226 +404,26 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         if (sessionRuntime == null)
             return;
 
-        bool consumed = await sessionRuntime.MarkShotConsumedAsync();
-        if (!consumed)
-            return;
-
-        if (verboseLogs && sessionRuntime.CurrentSession.IsValid())
-        {
-            Debug.Log(
-                "[LuckyShotGameplayController] MarkShotConsumedAsync -> RemainingShots=" +
-                sessionRuntime.CurrentSession.remainingShots,
-                this);
-        }
-    }
-
-    private void TickBallSettlementWatchdog()
-    {
-        if (!useBallSettlementWatchdog)
-            return;
-
-        if (!resolveSettledBallAsMiss)
-            return;
-
-        if (sessionRuntime == null)
-            return;
-
-        if (currentBall == null)
-            return;
-
-        if (!shotLaunchObserved)
-            return;
-
-        if (shotResolutionPending)
-            return;
-
-        if (currentBallAlreadyResolved)
-            return;
-
-        if (!sessionRuntime.HasActiveSession)
-            return;
-
-        LuckyShotActiveSession session = sessionRuntime.CurrentSession;
-        if (!session.IsValid())
-            return;
-
-        launchedElapsedSeconds += Time.deltaTime;
-
-        if (launchedElapsedSeconds < Mathf.Max(0f, minSecondsAfterLaunchBeforeSettlementCheck))
-            return;
-
-        bool stable = IsCurrentBallPhysicallyStable();
-
-        if (stable)
-        {
-            stableElapsedSeconds += Time.deltaTime;
-        }
-        else
-        {
-            stableElapsedSeconds = 0f;
-        }
-
-        if (stableElapsedSeconds < Mathf.Max(0.05f, requiredStableSeconds))
-            return;
-
-        if (verboseLogs)
-        {
-            Debug.Log(
-                "[LuckyShotGameplayController] TickBallSettlementWatchdog -> ball settled without slot/death-zone resolution. " +
-                "Ball=" + currentBall.name +
-                " | RemainingShots=" + session.remainingShots +
-                " | StableElapsed=" + stableElapsedSeconds.ToString("0.00"),
-                this);
-        }
-
-        _ = ResolveCurrentSettledBallAsMissAsync();
-    }
-
-    private bool IsCurrentBallPhysicallyStable()
-    {
-        if (currentBall == null)
-            return false;
-
-        if (currentBallRigidbody == null)
-            currentBallRigidbody = ResolveBallRigidbody(currentBall);
-
-        Vector3 currentPosition = currentBall.transform.position;
-
-        float positionDelta = 0f;
-        if (hasLastObservedBallPosition)
-            positionDelta = Vector3.Distance(lastObservedBallPosition, currentPosition);
-
-        lastObservedBallPosition = currentPosition;
-        hasLastObservedBallPosition = true;
-
-        if (currentBallRigidbody == null)
-        {
-            return positionDelta <= Mathf.Max(0.0001f, positionDeltaThreshold);
-        }
-
-        float linearVelocity = currentBallRigidbody.linearVelocity.magnitude;
-        float angularVelocity = currentBallRigidbody.angularVelocity.magnitude;
-
-        bool sleeping = acceptRigidbodySleepAsStable && currentBallRigidbody.IsSleeping();
-
-        bool belowVelocityThresholds =
-            linearVelocity <= Mathf.Max(0.0001f, linearVelocityThreshold) &&
-            angularVelocity <= Mathf.Max(0.0001f, angularVelocityThreshold);
-
-        bool belowPositionDelta =
-            positionDelta <= Mathf.Max(0.0001f, positionDeltaThreshold);
-
-        return sleeping || (belowVelocityThresholds && belowPositionDelta);
-    }
-
-    private async Task ResolveCurrentSettledBallAsMissAsync()
-    {
-        if (shotResolutionPending)
-            return;
-
-        if (currentBall == null)
-            return;
-
-        if (sessionRuntime == null)
-            return;
-
-        if (!sessionRuntime.HasActiveSession)
-            return;
-
-        shotResolutionPending = true;
-
-        BallPhysics settledBall = currentBall;
-
-        if (verboseLogs)
-        {
-            Debug.Log(
-                "[LuckyShotGameplayController] ResolveCurrentSettledBallAsMissAsync -> resolving settled/stuck ball as miss. " +
-                "Ball=" + settledBall.name,
-                this);
-        }
-
-        CleanupCurrentBallReference();
-
-        LuckyShotResolvedResult result = await sessionRuntime.ResolveMissAsync();
-
-        if (verboseLogs)
-        {
-            Debug.Log(
-                "[LuckyShotGameplayController] ResolveCurrentSettledBallAsMissAsync -> Result " +
-                "Success=" + result.success +
-                " | Final=" + result.isFinalResolution +
-                " | CanRetry=" + result.canRetry +
-                " | Remaining=" + result.remainingShotsAfterResolve,
-                this);
-        }
-
-        if (result.success && result.isFinalResolution)
-            return;
-
-        TryScheduleRetryBallSpawn();
-    }
-
-    private async Task DebugForceFinishCurrentSessionAsMissAsync()
-    {
-        ResolveReferences();
-
-        if (sessionRuntime == null)
-        {
-            Debug.LogWarning("[LuckyShotGameplayController] DebugForceFinishCurrentSessionAsMissAsync -> SessionRuntime missing.", this);
-            return;
-        }
-
-        if (!sessionRuntime.CurrentSession.IsValid())
-        {
-            Debug.LogWarning("[LuckyShotGameplayController] DebugForceFinishCurrentSessionAsMissAsync -> No valid session.", this);
-            return;
-        }
-
-        CleanupCurrentBallReference();
-
-        int guard = 0;
-
-        while (sessionRuntime.CurrentSession.IsValid() &&
-               sessionRuntime.CurrentSession.hasActiveSession &&
-               sessionRuntime.CurrentSession.remainingShots > 0 &&
-               guard < 10)
-        {
-            guard++;
-
-            await sessionRuntime.MarkShotConsumedAsync();
-
-            LuckyShotResolvedResult partial = await sessionRuntime.ResolveMissAsync();
-
-            if (partial.success && partial.isFinalResolution)
-                break;
-        }
-
-        if (sessionRuntime.CurrentSession.IsValid() &&
-            sessionRuntime.CurrentSession.hasActiveSession &&
-            sessionRuntime.CurrentSession.remainingShots <= 0)
-        {
-            await sessionRuntime.ResolveMissAsync();
-        }
-
-        if (verboseLogs)
-        {
-            Debug.Log(
-                "[LuckyShotGameplayController] DebugForceFinishCurrentSessionAsMissAsync -> completed. Guard=" + guard,
-                this);
-        }
+        await sessionRuntime.MarkShotConsumedAsync();
     }
 
     private void HandleSessionLoaded(LuckyShotActiveSession session)
     {
-        EnsurePlayableStateFromSession(session);
+        BeginIntroRevealThenEnsurePlayableState(session);
     }
 
     private void HandleSessionPreviewChanged(LuckyShotSessionPreview preview)
     {
         if (!preview.hasActiveSession)
+        {
+            ForceSetAllHighlightRootsVisible(false);
             return;
+        }
 
         ConfigureLaunchSide(preview.launchSide);
+
+        if (introRevealCompleted && keepHighlightsVisibleAfterIntro)
+            ForceSetAllHighlightRootsVisible(true);
 
         if (verboseLogs)
         {
@@ -554,8 +433,8 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
                 " | HasCurrentBall=" + (currentBall != null) +
                 " | SpawnInProgress=" + spawnInProgress +
                 " | RetryScheduled=" + retryRespawnScheduled +
-                " | ShotLaunchObserved=" + shotLaunchObserved +
-                " | ShotResolutionPending=" + shotResolutionPending,
+                " | IntroCompleted=" + introRevealCompleted +
+                " | IntroInProgress=" + introRevealInProgress,
                 this);
         }
 
@@ -563,7 +442,9 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
             currentBall == null &&
             !shotResolutionPending &&
             !spawnInProgress &&
-            !retryRespawnScheduled)
+            !retryRespawnScheduled &&
+            !introRevealInProgress &&
+            introRevealCompleted)
         {
             _ = SpawnFreshBallAsync();
         }
@@ -571,20 +452,16 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
 
     private void HandleSessionResolved(LuckyShotResolvedResult result)
     {
-        if (result.success && currentBall != null)
-            currentBallAlreadyResolved = true;
+        CleanupCurrentBallReference();
 
-        if (result.success && result.isFinalResolution)
+        if (result.isFinalResolution)
         {
-            CleanupCurrentBallReference();
+            ForceSetAllHighlightRootsVisible(false);
             return;
         }
 
-        if (result.success && result.canRetry && result.remainingShotsAfterResolve > 0)
-        {
-            CleanupCurrentBallReference();
+        if (result.success && result.canRetry && !result.isFinalResolution)
             TryScheduleRetryBallSpawn();
-        }
     }
 
     private void ConfigureLaunchSide(LuckyShotLaunchSide side)
@@ -612,16 +489,12 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         ballLauncher.enabled = true;
         ballLauncher.SetStandaloneOfflineLaunchEnabled(true);
 
-        currentBallRigidbody = ResolveBallRigidbody(currentBall);
-        ResetSettlementRuntimeForCurrentBall();
-
         if (verboseLogs)
         {
             Debug.Log(
                 "[LuckyShotGameplayController] BindCurrentBall -> " +
                 "Ball=" + currentBall.name +
-                " | Owner=" + localLuckyShotPlayer +
-                " | Rigidbody=" + (currentBallRigidbody != null),
+                " | Owner=" + localLuckyShotPlayer,
                 this);
         }
     }
@@ -629,16 +502,8 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
     private void CleanupCurrentBallReference()
     {
         currentBall = null;
-        currentBallRigidbody = null;
-
         shotLaunchObserved = false;
         shotResolutionPending = false;
-        currentBallAlreadyResolved = false;
-
-        launchedElapsedSeconds = 0f;
-        stableElapsedSeconds = 0f;
-        lastObservedBallPosition = Vector3.zero;
-        hasLastObservedBallPosition = false;
 
         ClearLauncherBindingOnly();
     }
@@ -663,6 +528,9 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         if (spawnInProgress)
             return;
 
+        if (introRevealInProgress)
+            return;
+
         if (currentBall != null)
             return;
 
@@ -683,11 +551,14 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
     private async Task SpawnNextBallDelayedAsync()
     {
         if (retryRespawnDelaySeconds > 0f)
-            await Task.Delay(Mathf.RoundToInt(retryRespawnDelaySeconds * 1000f));
+            await DelaySecondsAsync(retryRespawnDelaySeconds, CancellationToken.None);
 
         retryRespawnScheduled = false;
 
         if (currentBall != null)
+            return;
+
+        if (introRevealInProgress)
             return;
 
         if (sessionRuntime == null || !sessionRuntime.HasActiveSession)
@@ -703,33 +574,181 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         await SpawnFreshBallAsync();
     }
 
-    private void ResetSettlementRuntimeForCurrentBall()
+    private async Task DelaySecondsAsync(float seconds, CancellationToken cancellationToken)
     {
-        launchedElapsedSeconds = 0f;
-        stableElapsedSeconds = 0f;
+        if (seconds <= 0f)
+            return;
 
-        if (currentBall != null)
+        float elapsed = 0f;
+
+        while (elapsed < seconds)
         {
-            lastObservedBallPosition = currentBall.transform.position;
-            hasLastObservedBallPosition = true;
-        }
-        else
-        {
-            lastObservedBallPosition = Vector3.zero;
-            hasLastObservedBallPosition = false;
+            cancellationToken.ThrowIfCancellationRequested();
+            elapsed += Time.unscaledDeltaTime;
+            await Task.Yield();
         }
     }
 
-    private Rigidbody ResolveBallRigidbody(BallPhysics ball)
+    private void MaintainHighlightVisibilityAfterIntro()
     {
-        if (ball == null)
-            return null;
+        if (!keepHighlightsVisibleAfterIntro)
+            return;
 
-        Rigidbody rb = ball.GetComponent<Rigidbody>();
-        if (rb != null)
-            return rb;
+        if (!introRevealCompleted || introRevealInProgress)
+            return;
 
-        return ball.GetComponentInChildren<Rigidbody>(true);
+        if (sessionRuntime == null || !sessionRuntime.HasActiveSession)
+            return;
+
+        LuckyShotActiveSession session = sessionRuntime.CurrentSession;
+        if (!session.IsValid() || session.remainingShots <= 0)
+            return;
+
+        ForceSetAllHighlightRootsVisible(true);
+    }
+
+    private void TryApplySessionToHighlightController(LuckyShotActiveSession session)
+    {
+        if (highlightController == null)
+            return;
+
+        try
+        {
+            highlightController.ApplySession(session);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning("[LuckyShotGameplayController] TryApplySessionToHighlightController -> failed. Direct light reveal will continue.\n" + exception, this);
+        }
+    }
+
+    private void ForceSetAllHighlightRootsVisible(bool visible)
+    {
+        ResolveHighlightRoots();
+        ForceSetBoardHighlightVisible(1, visible);
+        ForceSetBoardHighlightVisible(2, visible);
+        ForceSetBoardHighlightVisible(3, visible);
+    }
+
+    private void ForceSetBoardHighlightVisible(int board, bool visible)
+    {
+        Transform root = GetHighlightRoot(board);
+        if (root == null)
+        {
+            if (visible && verboseLogs)
+                Debug.LogWarning("[LuckyShotGameplayController] ForceSetBoardHighlightVisible -> Missing highlight root for Board " + board + ".", this);
+
+            return;
+        }
+
+        SetTransformTreeVisible(root, visible);
+    }
+
+    private Transform GetHighlightRoot(int board)
+    {
+        ResolveHighlightRoots();
+
+        switch (board)
+        {
+            case 1:
+                return winningHighlightBoard1;
+            case 2:
+                return winningHighlightBoard2;
+            case 3:
+                return winningHighlightBoard3;
+            default:
+                return null;
+        }
+    }
+
+    private void ResolveHighlightRoots()
+    {
+        if (winningHighlightBoard1 == null)
+            winningHighlightBoard1 = FindSceneTransformByExactName("WinningHighlight_Board1");
+
+        if (winningHighlightBoard2 == null)
+            winningHighlightBoard2 = FindSceneTransformByExactName("WinningHighlight_Board2");
+
+        if (winningHighlightBoard3 == null)
+            winningHighlightBoard3 = FindSceneTransformByExactName("WinningHighlight_Board3");
+    }
+
+    private Transform FindSceneTransformByExactName(string exactName)
+    {
+        Transform[] transforms = Resources.FindObjectsOfTypeAll<Transform>();
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            Transform candidate = transforms[i];
+            if (candidate == null)
+                continue;
+
+            if (!candidate.gameObject.scene.IsValid())
+                continue;
+
+            if (!string.Equals(candidate.name, exactName, StringComparison.Ordinal))
+                continue;
+
+            return candidate;
+        }
+
+        return null;
+    }
+
+    private void SetTransformTreeVisible(Transform root, bool visible)
+    {
+        if (root == null)
+            return;
+
+        GameObject rootObject = root.gameObject;
+        if (rootObject.activeSelf != visible)
+            rootObject.SetActive(visible);
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null)
+                renderers[i].enabled = visible;
+        }
+
+        Light[] lights = root.GetComponentsInChildren<Light>(true);
+        for (int i = 0; i < lights.Length; i++)
+        {
+            Light lightComponent = lights[i];
+            if (lightComponent == null)
+                continue;
+
+            lightComponent.enabled = visible;
+            if (visible && lightComponent.intensity <= 0f)
+                lightComponent.intensity = 1f;
+        }
+
+        ParticleSystem[] particleSystems = root.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem particleSystem = particleSystems[i];
+            if (particleSystem == null)
+                continue;
+
+            ParticleSystem.EmissionModule emission = particleSystem.emission;
+            emission.enabled = visible;
+
+            if (visible && !particleSystem.isPlaying)
+                particleSystem.Play(true);
+            else if (!visible && particleSystem.isPlaying)
+                particleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+    }
+
+    private void CancelIntroRevealFlow()
+    {
+        if (introRevealCancellation != null)
+        {
+            introRevealCancellation.Cancel();
+            introRevealCancellation.Dispose();
+            introRevealCancellation = null;
+        }
+
+        introRevealInProgress = false;
     }
 
     private void ResolveReferences()
@@ -749,6 +768,9 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
 
         if (ballLauncher == null)
             ballLauncher = FindFirstObjectByType<BallLauncher>(FindObjectsInactive.Include);
+
+        if (highlightController == null)
+            highlightController = FindFirstObjectByType<LuckyShotHighlightController>(FindObjectsInactive.Include);
 #else
         if (sessionRuntime == null)
             sessionRuntime = FindObjectOfType<LuckyShotSessionRuntime>();
@@ -761,7 +783,12 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
 
         if (ballLauncher == null)
             ballLauncher = FindObjectOfType<BallLauncher>(true);
+
+        if (highlightController == null)
+            highlightController = FindObjectOfType<LuckyShotHighlightController>(true);
 #endif
+
+        ResolveHighlightRoots();
     }
 
     private void Subscribe()
@@ -787,24 +814,5 @@ public sealed class LuckyShotGameplayController : MonoBehaviour
         sessionRuntime.SessionLoaded -= HandleSessionLoaded;
         sessionRuntime.SessionPreviewChanged -= HandleSessionPreviewChanged;
         sessionRuntime.SessionResolved -= HandleSessionResolved;
-    }
-
-    private void ResetControllerStateForSceneEntry()
-    {
-        currentBall = null;
-        currentBallRigidbody = null;
-
-        shotLaunchObserved = false;
-        shotResolutionPending = false;
-        spawnInProgress = false;
-        retryRespawnScheduled = false;
-        currentBallAlreadyResolved = false;
-
-        launchedElapsedSeconds = 0f;
-        stableElapsedSeconds = 0f;
-        lastObservedBallPosition = Vector3.zero;
-        hasLastObservedBallPosition = false;
-
-        ClearLauncherBindingOnly();
     }
 }

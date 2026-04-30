@@ -1527,6 +1527,25 @@ MonoBehaviour:
   board2WorldAimOffset: {x: 0, y: 0, z: 0}
   board3WorldAimOffset: {x: 0, y: 0, z: 0}
   lookAtUp: {x: 0, y: 1, z: 0}
+  keepHighlightsHiddenUntilIntroReveal: 1
+  introRevealBoardOrder: 010000000200000003000000
+  introInitialDelaySeconds: 0.35
+  introDelayBetweenBoardsSeconds: 0.65
+  introSingleBoardFadeSeconds: 0.25
+  introOffLightIntensity: 20
+  introOnLightIntensity: 20
+  forceLightsOffBeforeIntro: 1
+  introAudioSource: {fileID: 0}
+  introBoardRevealClip: {fileID: 0}
+  introBoardRevealVolume: 1
+  winnerBlinkCount: 5
+  winnerBlinkIntervalSeconds: 0.12
+  winnerLightIntensity: 2.5
+  winnerFinalDimIntensity: 0.1
+  disableWinnerHighlightAfterEffect: 0
+  winnerAudioSource: {fileID: 0}
+  winnerClip: {fileID: 0}
+  winnerClipVolume: 1
   leftLaunchMarker: {fileID: 0}
   rightLaunchMarker: {fileID: 0}
   verboseLogs: 1
@@ -1564,28 +1583,26 @@ MonoBehaviour:
   shotResolver: {fileID: 330605308}
   ballTurnSpawner: {fileID: 472537354}
   ballLauncher: {fileID: 472537353}
+  highlightController: {fileID: 330605307}
+  winningHighlightBoard1: {fileID: 961213449}
+  winningHighlightBoard2: {fileID: 878960869}
+  winningHighlightBoard3: {fileID: 1813347539}
   localLuckyShotPlayer: 1
   autoSpawnBallOnSessionLoaded: 1
   retryRespawnDelaySeconds: 0.5
-  useBallSettlementWatchdog: 1
-  minSecondsAfterLaunchBeforeSettlementCheck: 0.5
-  requiredStableSeconds: 2
-  linearVelocityThreshold: 0.08
-  angularVelocityThreshold: 0.35
-  positionDeltaThreshold: 0.0125
-  acceptRigidbodySleepAsStable: 1
-  resolveSettledBallAsMiss: 1
+  waitForIntroRevealBeforeFirstSpawn: 1
+  playIntroRevealOnlyOncePerSession: 1
+  revealInitialDelaySeconds: 0.25
+  revealStepDelaySeconds: 0.55
+  revealAfterAllLightsDelaySeconds: 0.35
+  keepHighlightsVisibleAfterIntro: 1
   currentBall: {fileID: 0}
   shotLaunchObserved: 0
   shotResolutionPending: 0
   spawnInProgress: 0
   retryRespawnScheduled: 0
-  currentBallAlreadyResolved: 0
-  currentBallRigidbody: {fileID: 0}
-  launchedElapsedSeconds: 0
-  stableElapsedSeconds: 0
-  lastObservedBallPosition: {x: 0, y: 0, z: 0}
-  hasLastObservedBallPosition: 0
+  introRevealInProgress: 0
+  introRevealCompleted: 0
   verboseLogs: 1
 --- !u!114 &330605310
 MonoBehaviour:
@@ -4967,6 +4984,7 @@ GameObject:
   - component: {fileID: 878960868}
   - component: {fileID: 878960867}
   - component: {fileID: 878960866}
+  - component: {fileID: 878960870}
   m_Layer: 0
   m_Name: WinningHighlight_Board2
   m_TagString: Untagged
@@ -5095,6 +5113,39 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 1.8}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &878960870
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 878960865}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4b8aa720a82fbd418830b1597680d92, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotAnimatedLight
+  lightComponents:
+  - {fileID: 878960868}
+  emissiveRenderers: []
+  emissionColorProperty: _EmissionColor
+  offMultiplier: 0
+  dimMultiplier: 0.15
+  onMultiplier: 1
+  winnerMultiplier: 1.75
+  revealFadeInSeconds: 0.25
+  winnerBlinkCount: 6
+  winnerBlinkOnSeconds: 0.12
+  winnerBlinkOffSeconds: 0.08
+  winnerFadeOutSeconds: 0.45
+  audioSource: {fileID: 0}
+  revealClip: {fileID: 0}
+  winnerBlinkClip: {fileID: 0}
+  revealVolume: 1
+  winnerBlinkVolume: 1
+  autoFindLightsInChildren: 1
+  autoFindRenderersInChildren: 0
+  verboseLogs: 0
 --- !u!1 &880244587
 GameObject:
   m_ObjectHideFlags: 0
@@ -5421,6 +5472,7 @@ GameObject:
   - component: {fileID: 961213453}
   - component: {fileID: 961213451}
   - component: {fileID: 961213452}
+  - component: {fileID: 961213454}
   m_Layer: 0
   m_Name: WinningHighlight_Board1
   m_TagString: Untagged
@@ -5549,6 +5601,39 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
+--- !u!114 &961213454
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 961213448}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4b8aa720a82fbd418830b1597680d92, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotAnimatedLight
+  lightComponents:
+  - {fileID: 961213453}
+  emissiveRenderers: []
+  emissionColorProperty: _EmissionColor
+  offMultiplier: 0
+  dimMultiplier: 0.15
+  onMultiplier: 1
+  winnerMultiplier: 1.75
+  revealFadeInSeconds: 0.25
+  winnerBlinkCount: 6
+  winnerBlinkOnSeconds: 0.12
+  winnerBlinkOffSeconds: 0.08
+  winnerFadeOutSeconds: 0.45
+  audioSource: {fileID: 0}
+  revealClip: {fileID: 0}
+  winnerBlinkClip: {fileID: 0}
+  revealVolume: 1
+  winnerBlinkVolume: 1
+  autoFindLightsInChildren: 1
+  autoFindRenderersInChildren: 0
+  verboseLogs: 0
 --- !u!1 &973354174
 GameObject:
   m_ObjectHideFlags: 0
@@ -8947,6 +9032,7 @@ GameObject:
   - component: {fileID: 1813347538}
   - component: {fileID: 1813347537}
   - component: {fileID: 1813347536}
+  - component: {fileID: 1813347540}
   m_Layer: 0
   m_Name: WinningHighlight_Board3
   m_TagString: Untagged
@@ -9075,6 +9161,39 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 1.8}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1813347540
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1813347535}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4b8aa720a82fbd418830b1597680d92, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyShotAnimatedLight
+  lightComponents:
+  - {fileID: 1813347538}
+  emissiveRenderers: []
+  emissionColorProperty: _EmissionColor
+  offMultiplier: 0
+  dimMultiplier: 0.15
+  onMultiplier: 1
+  winnerMultiplier: 1.75
+  revealFadeInSeconds: 0.25
+  winnerBlinkCount: 6
+  winnerBlinkOnSeconds: 0.12
+  winnerBlinkOffSeconds: 0.08
+  winnerFadeOutSeconds: 0.45
+  audioSource: {fileID: 0}
+  revealClip: {fileID: 0}
+  winnerBlinkClip: {fileID: 0}
+  revealVolume: 1
+  winnerBlinkVolume: 1
+  autoFindLightsInChildren: 1
+  autoFindRenderersInChildren: 0
+  verboseLogs: 0
 --- !u!1 &1834797289
 GameObject:
   m_ObjectHideFlags: 0
