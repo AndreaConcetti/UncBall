@@ -9,10 +9,8 @@ public sealed class LuckyShotAnimatedLight : MonoBehaviour
     [SerializeField] private string emissionColorProperty = "_EmissionColor";
 
     [Header("Intensity Multipliers")]
-    [SerializeField] private float offMultiplier = 0f;
+    [Tooltip("Usato solo per il dim finale dopo un punto. L'intro reveal non modifica piu l'intensita delle luci.")]
     [SerializeField] private float dimMultiplier = 0.15f;
-    [SerializeField] private float onMultiplier = 1f;
-    [SerializeField] private float winnerMultiplier = 1.75f;
 
     [Header("Reveal Animation")]
     [SerializeField] private float revealFadeInSeconds = 0.25f;
@@ -59,7 +57,7 @@ public sealed class LuckyShotAnimatedLight : MonoBehaviour
         StopActiveRoutine();
         CacheTargetsIfNeeded();
         CacheOriginalValues();
-        ApplyMultiplier(offMultiplier);
+        SetTargetsEnabled(false);
     }
 
     public void SetDimImmediate()
@@ -67,7 +65,8 @@ public sealed class LuckyShotAnimatedLight : MonoBehaviour
         StopActiveRoutine();
         CacheTargetsIfNeeded();
         CacheOriginalValues();
-        ApplyMultiplier(dimMultiplier);
+        SetTargetsEnabled(true);
+        ApplyDimMultiplier(dimMultiplier);
     }
 
     public void SetOnImmediate()
@@ -75,7 +74,8 @@ public sealed class LuckyShotAnimatedLight : MonoBehaviour
         StopActiveRoutine();
         CacheTargetsIfNeeded();
         CacheOriginalValues();
-        ApplyMultiplier(onMultiplier);
+        RestoreOriginalIntensityAndEmission();
+        SetTargetsEnabled(true);
     }
 
     public void PlayReveal()
@@ -111,25 +111,14 @@ public sealed class LuckyShotAnimatedLight : MonoBehaviour
 
         PlayOneShot(revealClip, revealVolume);
 
-        if (revealFadeInSeconds <= 0f)
-        {
-            ApplyMultiplier(onMultiplier);
-            activeRoutine = null;
-            yield break;
-        }
+        RestoreOriginalIntensityAndEmission();
+        SetTargetsEnabled(true);
 
-        float elapsed = 0f;
+        if (revealFadeInSeconds > 0f)
+            yield return new WaitForSeconds(revealFadeInSeconds);
 
-        while (elapsed < revealFadeInSeconds)
-        {
-            elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / revealFadeInSeconds);
-            float multiplier = Mathf.Lerp(offMultiplier, onMultiplier, t);
-            ApplyMultiplier(multiplier);
-            yield return null;
-        }
-
-        ApplyMultiplier(onMultiplier);
+        RestoreOriginalIntensityAndEmission();
+        SetTargetsEnabled(true);
         activeRoutine = null;
 
         if (verboseLogs)
@@ -141,52 +130,61 @@ public sealed class LuckyShotAnimatedLight : MonoBehaviour
         CacheTargetsIfNeeded();
         CacheOriginalValues();
 
-        for (int i = 0; i < winnerBlinkCount; i++)
+        RestoreOriginalIntensityAndEmission();
+
+        int blinkCount = Mathf.Max(1, winnerBlinkCount);
+
+        for (int i = 0; i < blinkCount; i++)
         {
             PlayOneShot(winnerBlinkClip, winnerBlinkVolume);
-            ApplyMultiplier(winnerMultiplier);
+            RestoreOriginalIntensityAndEmission();
+            SetTargetsEnabled(true);
 
             if (winnerBlinkOnSeconds > 0f)
                 yield return new WaitForSeconds(winnerBlinkOnSeconds);
 
-            ApplyMultiplier(dimMultiplier);
+            SetTargetsEnabled(false);
 
             if (winnerBlinkOffSeconds > 0f)
                 yield return new WaitForSeconds(winnerBlinkOffSeconds);
         }
 
+        SetTargetsEnabled(true);
+
         if (winnerFadeOutSeconds <= 0f)
         {
-            ApplyMultiplier(offMultiplier);
+            ApplyDimMultiplier(dimMultiplier);
             activeRoutine = null;
             yield break;
         }
 
         float elapsed = 0f;
+        float startMultiplier = 1f;
+        float targetMultiplier = Mathf.Max(0f, dimMultiplier);
 
         while (elapsed < winnerFadeOutSeconds)
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / winnerFadeOutSeconds);
-            float multiplier = Mathf.Lerp(dimMultiplier, offMultiplier, t);
-            ApplyMultiplier(multiplier);
+            float multiplier = Mathf.Lerp(startMultiplier, targetMultiplier, t);
+            ApplyDimMultiplier(multiplier);
             yield return null;
         }
 
-        ApplyMultiplier(offMultiplier);
+        ApplyDimMultiplier(targetMultiplier);
         activeRoutine = null;
 
         if (verboseLogs)
             Debug.Log("[LuckyShotAnimatedLight] Winner animation completed -> " + name, this);
     }
 
-    private void ApplyMultiplier(float multiplier)
+    private void SetTargetsEnabled(bool enabled)
     {
-        ApplyLightMultiplier(multiplier);
-        ApplyEmissionMultiplier(multiplier);
+        SetLightsEnabled(enabled);
+        SetEmissionEnabled(enabled);
     }
 
-    private void ApplyLightMultiplier(float multiplier)
+    private void SetLightsEnabled(bool enabled)
     {
         if (lightComponents == null)
             return;
@@ -197,13 +195,11 @@ public sealed class LuckyShotAnimatedLight : MonoBehaviour
             if (targetLight == null)
                 continue;
 
-            float baseIntensity = GetOriginalLightIntensity(i);
-            targetLight.enabled = multiplier > 0.001f;
-            targetLight.intensity = baseIntensity * Mathf.Max(0f, multiplier);
+            targetLight.enabled = enabled;
         }
     }
 
-    private void ApplyEmissionMultiplier(float multiplier)
+    private void SetEmissionEnabled(bool enabled)
     {
         if (emissiveRenderers == null)
             return;
@@ -221,12 +217,107 @@ public sealed class LuckyShotAnimatedLight : MonoBehaviour
             if (!material.HasProperty(emissionColorProperty))
                 continue;
 
+            if (enabled)
+                material.EnableKeyword("_EMISSION");
+            else
+                material.DisableKeyword("_EMISSION");
+        }
+    }
+
+    private void RestoreOriginalIntensityAndEmission()
+    {
+        RestoreOriginalLightIntensity();
+        RestoreOriginalEmissionColor();
+    }
+
+    private void RestoreOriginalLightIntensity()
+    {
+        if (lightComponents == null)
+            return;
+
+        for (int i = 0; i < lightComponents.Length; i++)
+        {
+            Light targetLight = lightComponents[i];
+            if (targetLight == null)
+                continue;
+
+            targetLight.intensity = GetOriginalLightIntensity(i);
+        }
+    }
+
+    private void RestoreOriginalEmissionColor()
+    {
+        if (emissiveRenderers == null)
+            return;
+
+        for (int i = 0; i < emissiveRenderers.Length; i++)
+        {
+            Renderer targetRenderer = emissiveRenderers[i];
+            if (targetRenderer == null)
+                continue;
+
+            Material material = targetRenderer.material;
+            if (material == null)
+                continue;
+
+            if (!material.HasProperty(emissionColorProperty))
+                continue;
+
+            material.SetColor(emissionColorProperty, GetOriginalEmissionColor(i));
+        }
+    }
+
+    private void ApplyDimMultiplier(float multiplier)
+    {
+        ApplyLightDimMultiplier(multiplier);
+        ApplyEmissionDimMultiplier(multiplier);
+    }
+
+    private void ApplyLightDimMultiplier(float multiplier)
+    {
+        if (lightComponents == null)
+            return;
+
+        float safeMultiplier = Mathf.Max(0f, multiplier);
+
+        for (int i = 0; i < lightComponents.Length; i++)
+        {
+            Light targetLight = lightComponents[i];
+            if (targetLight == null)
+                continue;
+
+            float baseIntensity = GetOriginalLightIntensity(i);
+            targetLight.enabled = safeMultiplier > 0.001f;
+            targetLight.intensity = baseIntensity * safeMultiplier;
+        }
+    }
+
+    private void ApplyEmissionDimMultiplier(float multiplier)
+    {
+        if (emissiveRenderers == null)
+            return;
+
+        float safeMultiplier = Mathf.Max(0f, multiplier);
+
+        for (int i = 0; i < emissiveRenderers.Length; i++)
+        {
+            Renderer targetRenderer = emissiveRenderers[i];
+            if (targetRenderer == null)
+                continue;
+
+            Material material = targetRenderer.material;
+            if (material == null)
+                continue;
+
+            if (!material.HasProperty(emissionColorProperty))
+                continue;
+
             Color baseColor = GetOriginalEmissionColor(i);
-            Color finalColor = baseColor * Mathf.Max(0f, multiplier);
+            Color finalColor = baseColor * safeMultiplier;
 
             material.SetColor(emissionColorProperty, finalColor);
 
-            if (multiplier > 0.001f)
+            if (safeMultiplier > 0.001f)
                 material.EnableKeyword("_EMISSION");
             else
                 material.DisableKeyword("_EMISSION");

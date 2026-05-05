@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -102,11 +103,15 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
     private bool introRevealInProgress;
 
     private CancellationTokenSource introRevealCancellation;
+    private readonly Dictionary<Light, float> originalLightIntensities = new Dictionary<Light, float>();
+    private readonly Dictionary<Renderer, Color> originalEmissionColors = new Dictionary<Renderer, Color>();
+
     private Coroutine winnerEffectCoroutine;
 
     private void Awake()
     {
         ResolveReferences();
+        CacheOriginalHighlightValues();
         CacheInitialRotations();
 
         if (keepHighlightsHiddenUntilIntroReveal)
@@ -116,6 +121,7 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
     private void OnEnable()
     {
         ResolveReferences();
+        CacheOriginalHighlightValues();
         CacheInitialRotations();
         Subscribe();
 
@@ -176,7 +182,7 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
             if (forceLightsOffBeforeIntro)
                 SetAllHighlightsVisible(false);
 
-            SetAllHighlightLightIntensity(introOffLightIntensity);
+            RestoreAllHighlightLightIntensity();
 
             await DelaySecondsAsync(introInitialDelaySeconds, cancellationToken);
 
@@ -191,15 +197,11 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
 
                 if (root != null)
                 {
+                    RestoreHighlightLightIntensity(root);
                     SetHighlightVisible(root, true);
                     PlayOneShot(introAudioSource, introBoardRevealClip, introBoardRevealVolume);
 
-                    await FadeHighlightLightIntensityAsync(
-                        root,
-                        introOffLightIntensity,
-                        introOnLightIntensity,
-                        introSingleBoardFadeSeconds,
-                        cancellationToken);
+                    await DelaySecondsAsync(introSingleBoardFadeSeconds, cancellationToken);
 
                     if (verboseLogs)
                     {
@@ -267,7 +269,7 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
     public void ClearHighlights()
     {
         SetAllHighlightsVisible(false);
-        SetAllHighlightLightIntensity(introOffLightIntensity);
+        RestoreAllHighlightLightIntensity();
 
         if (leftLaunchMarker != null)
             leftLaunchMarker.SetActive(false);
@@ -295,7 +297,7 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
         introRevealCompleted = false;
         introRevealInProgress = false;
         SetAllHighlightsVisible(false);
-        SetAllHighlightLightIntensity(introOffLightIntensity);
+        RestoreAllHighlightLightIntensity();
     }
 
     [ContextMenu("Lucky Shot/Force Show All Highlights")]
@@ -305,7 +307,7 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
         introRevealCompleted = true;
         introRevealInProgress = false;
         SetAllHighlightsVisible(true);
-        SetAllHighlightLightIntensity(introOnLightIntensity);
+        RestoreAllHighlightLightIntensity();
     }
 
     private void ApplySessionInternal(LuckyShotActiveSession session, bool showHighlights)
@@ -497,20 +499,20 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
         int blinkCount = Mathf.Max(1, winnerBlinkCount);
         float interval = Mathf.Max(0.01f, winnerBlinkIntervalSeconds);
 
+        RestoreHighlightLightIntensity(root);
+
         for (int i = 0; i < blinkCount; i++)
         {
-            SetHighlightLightIntensity(root, winnerLightIntensity);
+            RestoreHighlightLightIntensity(root);
+            SetHighlightVisible(root, true);
             yield return new WaitForSeconds(interval);
 
-            SetHighlightLightIntensity(root, introOffLightIntensity);
+            SetHighlightVisible(root, false);
             yield return new WaitForSeconds(interval);
         }
 
+        SetHighlightVisible(root, true);
         SetHighlightLightIntensity(root, winnerFinalDimIntensity);
-
-        if (disableWinnerHighlightAfterEffect)
-            SetHighlightVisible(root, false);
-
         winnerEffectCoroutine = null;
 
         if (verboseLogs)
@@ -576,11 +578,108 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
         if (root == null)
             return;
 
+        float safeIntensity = Mathf.Max(0f, intensity);
+
         Light[] lights = root.GetComponentsInChildren<Light>(true);
         for (int i = 0; i < lights.Length; i++)
         {
-            if (lights[i] != null)
-                lights[i].intensity = intensity;
+            Light targetLight = lights[i];
+            if (targetLight == null)
+                continue;
+
+            CacheOriginalLightIntensity(targetLight);
+            targetLight.enabled = safeIntensity > 0.001f;
+            targetLight.intensity = safeIntensity;
+        }
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null)
+                continue;
+
+            Material material = renderer.material;
+            if (material == null)
+                continue;
+
+            if (!material.HasProperty("_EmissionColor"))
+                continue;
+
+            CacheOriginalEmissionColor(renderer, material);
+            Color baseColor = GetOriginalEmissionColor(renderer);
+            Color emissionColor = baseColor * safeIntensity;
+            material.SetColor("_EmissionColor", emissionColor);
+
+            if (safeIntensity > 0.001f)
+                material.EnableKeyword("_EMISSION");
+            else
+                material.DisableKeyword("_EMISSION");
+        }
+    }
+
+    private void RestoreHighlightLightIntensity(Transform root)
+    {
+        if (root == null)
+            return;
+
+        Light[] lights = root.GetComponentsInChildren<Light>(true);
+        for (int i = 0; i < lights.Length; i++)
+        {
+            Light targetLight = lights[i];
+            if (targetLight == null)
+                continue;
+
+            CacheOriginalLightIntensity(targetLight);
+            targetLight.intensity = GetOriginalLightIntensity(targetLight);
+            targetLight.enabled = true;
+        }
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null)
+                continue;
+
+            Material material = renderer.material;
+            if (material == null)
+                continue;
+
+            if (!material.HasProperty("_EmissionColor"))
+                continue;
+
+            CacheOriginalEmissionColor(renderer, material);
+            material.SetColor("_EmissionColor", GetOriginalEmissionColor(renderer));
+            material.EnableKeyword("_EMISSION");
+        }
+    }
+
+    private void RestoreAllHighlightLightIntensity()
+    {
+        RestoreHighlightLightIntensity(board1HighlightRoot);
+        RestoreHighlightLightIntensity(board2HighlightRoot);
+        RestoreHighlightLightIntensity(board3HighlightRoot);
+    }
+
+    private void CacheOriginalHighlightValues()
+    {
+        CacheOriginalHighlightValues(board1HighlightRoot);
+        CacheOriginalHighlightValues(board2HighlightRoot);
+        CacheOriginalHighlightValues(board3HighlightRoot);
+    }
+
+    private void CacheOriginalHighlightValues(Transform root)
+    {
+        if (root == null)
+            return;
+
+        Light[] lights = root.GetComponentsInChildren<Light>(true);
+        for (int i = 0; i < lights.Length; i++)
+        {
+            Light targetLight = lights[i];
+            if (targetLight != null)
+                CacheOriginalLightIntensity(targetLight);
         }
 
         Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
@@ -595,18 +694,52 @@ public sealed class LuckyShotHighlightController : MonoBehaviour
                 continue;
 
             if (material.HasProperty("_EmissionColor"))
-            {
-                Color emissionColor = Color.white * Mathf.Max(0f, intensity);
-                material.SetColor("_EmissionColor", emissionColor);
-            }
+                CacheOriginalEmissionColor(renderer, material);
         }
     }
 
-    private void SetAllHighlightLightIntensity(float intensity)
+    private void CacheOriginalLightIntensity(Light targetLight)
     {
-        SetHighlightLightIntensity(board1HighlightRoot, intensity);
-        SetHighlightLightIntensity(board2HighlightRoot, intensity);
-        SetHighlightLightIntensity(board3HighlightRoot, intensity);
+        if (targetLight == null)
+            return;
+
+        if (originalLightIntensities.ContainsKey(targetLight))
+            return;
+
+        originalLightIntensities.Add(targetLight, Mathf.Max(0.001f, targetLight.intensity));
+    }
+
+    private float GetOriginalLightIntensity(Light targetLight)
+    {
+        if (targetLight == null)
+            return 1f;
+
+        if (originalLightIntensities.TryGetValue(targetLight, out float value))
+            return Mathf.Max(0.001f, value);
+
+        return Mathf.Max(0.001f, targetLight.intensity);
+    }
+
+    private void CacheOriginalEmissionColor(Renderer renderer, Material material)
+    {
+        if (renderer == null || material == null)
+            return;
+
+        if (originalEmissionColors.ContainsKey(renderer))
+            return;
+
+        originalEmissionColors.Add(renderer, material.GetColor("_EmissionColor"));
+    }
+
+    private Color GetOriginalEmissionColor(Renderer renderer)
+    {
+        if (renderer == null)
+            return Color.white;
+
+        if (originalEmissionColors.TryGetValue(renderer, out Color value))
+            return value;
+
+        return Color.white;
     }
 
     private void SetAllHighlightsVisible(bool visible)

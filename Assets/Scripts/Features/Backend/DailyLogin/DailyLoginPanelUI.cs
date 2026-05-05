@@ -20,6 +20,8 @@ public class DailyLoginPanelUI : MonoBehaviour
 
     [Header("Buttons")]
     [SerializeField] private Button claimButton;
+    [SerializeField] private CanvasGroup claimButtonCanvasGroup;
+    [SerializeField] private TMP_Text claimButtonLabel;
     [SerializeField] private Button closeButton;
 
     [Header("Optional popup presenter")]
@@ -27,16 +29,20 @@ public class DailyLoginPanelUI : MonoBehaviour
 
     [Header("Options")]
     [SerializeField] private bool refreshOnEnable = true;
+    [SerializeField] private bool clearFeedbackWhenClaimable = true;
     [SerializeField] private bool verboseLogs = true;
 
     private DailyLoginRewardService service;
     private CancellationTokenSource cts;
     private DailyLoginPreviewState currentPreview;
     private DailyLoginRewardItemUI[] spawnedItems = Array.Empty<DailyLoginRewardItemUI>();
+    private bool canClaimCached;
+    private bool claimInProgress;
 
     private void Awake()
     {
         ResolveService();
+        ResolveOptionalButtonVisuals();
 
         if (claimButton != null)
         {
@@ -49,6 +55,8 @@ public class DailyLoginPanelUI : MonoBehaviour
             closeButton.onClick.RemoveListener(ClosePanel);
             closeButton.onClick.AddListener(ClosePanel);
         }
+
+        ApplyClaimState(false, "CLAIM");
 
         if (verboseLogs)
         {
@@ -67,24 +75,10 @@ public class DailyLoginPanelUI : MonoBehaviour
         if (verboseLogs)
             Debug.Log("[DailyLoginPanelUI] OnEnable called.", this);
 
-        if (cts != null)
-        {
-            cts.Cancel();
-            cts.Dispose();
-        }
-
-        cts = new CancellationTokenSource();
-
+        ResetCancellationToken();
         ResolveService();
-
-        if (service != null)
-        {
-            service.PreviewUpdated -= HandlePreviewUpdated;
-            service.PreviewUpdated += HandlePreviewUpdated;
-
-            service.ClaimCompleted -= HandleClaimCompleted;
-            service.ClaimCompleted += HandleClaimCompleted;
-        }
+        ResolveOptionalButtonVisuals();
+        SubscribeServiceEvents();
 
         if (verboseLogs)
             Debug.Log("[DailyLoginPanelUI] OnEnable -> Service=" + (service != null), this);
@@ -95,18 +89,9 @@ public class DailyLoginPanelUI : MonoBehaviour
 
     private void OnDisable()
     {
-        if (service != null)
-        {
-            service.PreviewUpdated -= HandlePreviewUpdated;
-            service.ClaimCompleted -= HandleClaimCompleted;
-        }
-
-        if (cts != null)
-        {
-            cts.Cancel();
-            cts.Dispose();
-            cts = null;
-        }
+        UnsubscribeServiceEvents();
+        DisposeCancellationToken();
+        claimInProgress = false;
     }
 
     private void Update()
@@ -134,6 +119,7 @@ public class DailyLoginPanelUI : MonoBehaviour
         if (service == null)
         {
             SetFeedback("Daily login service missing.");
+            ApplyClaimState(false, "CLAIM");
             return;
         }
 
@@ -159,25 +145,57 @@ public class DailyLoginPanelUI : MonoBehaviour
         {
             Debug.LogError("[DailyLoginPanelUI] RefreshAsync failed -> " + ex, this);
             SetFeedback("Failed to refresh daily rewards.");
+            ApplyClaimState(false, "CLAIM");
         }
     }
 
     public void OpenPanel()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(true);
-        else
-            gameObject.SetActive(true);
-
+        SetPanelVisible(true);
         RefreshNow();
+    }
+
+    public async Task<bool> OpenPanelIfClaimAvailableAsync()
+    {
+        ResolveService();
+
+        if (service == null)
+        {
+            SetPanelVisible(false);
+            return false;
+        }
+
+        try
+        {
+            ResetCancellationToken();
+            SubscribeServiceEvents();
+
+            DailyLoginPreviewState preview = await service.RefreshPreviewAsync(cts != null ? cts.Token : default);
+            ApplyPreview(preview);
+
+            bool canOpen = IsPreviewClaimable(preview);
+            SetPanelVisible(canOpen);
+
+            if (verboseLogs)
+                Debug.Log("[DailyLoginPanelUI] OpenPanelIfClaimAvailableAsync -> CanOpen=" + canOpen, this);
+
+            return canOpen;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[DailyLoginPanelUI] OpenPanelIfClaimAvailableAsync failed -> " + ex, this);
+            SetPanelVisible(false);
+            return false;
+        }
     }
 
     public void ClosePanel()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
-        else
-            gameObject.SetActive(false);
+        SetPanelVisible(false);
     }
 
     private async void OnPressClaim()
@@ -187,15 +205,30 @@ public class DailyLoginPanelUI : MonoBehaviour
         if (service == null)
         {
             SetFeedback("Daily login service missing.");
+            ApplyClaimState(false, "CLAIM");
+            return;
+        }
+
+        if (claimInProgress)
+            return;
+
+        if (!canClaimCached || !IsPreviewClaimable(currentPreview))
+        {
+            SetFeedback(currentPreview.alreadyClaimedToday ? "Reward already claimed." : "No daily reward available.");
+            ApplyClaimState(false, currentPreview.alreadyClaimedToday ? "CLAIMED" : "CLAIM");
             return;
         }
 
         try
         {
+            claimInProgress = true;
             SetFeedback("Claiming...");
-            SetClaimInteractable(false);
+            ApplyClaimState(false, "CLAIMING...");
 
-            await service.ClaimTodayAsync(cts != null ? cts.Token : default);
+            DailyLoginClaimResult result = await service.ClaimTodayAsync(cts != null ? cts.Token : default);
+
+            if (result.previewAfterClaim.isReady)
+                ApplyPreview(result.previewAfterClaim);
         }
         catch (OperationCanceledException)
         {
@@ -204,7 +237,12 @@ public class DailyLoginPanelUI : MonoBehaviour
         {
             Debug.LogError("[DailyLoginPanelUI] Claim failed -> " + ex, this);
             SetFeedback("Claim failed.");
-            SetClaimInteractable(HasClaimableDay(currentPreview));
+            ApplyClaimState(IsPreviewClaimable(currentPreview), "CLAIM");
+        }
+        finally
+        {
+            claimInProgress = false;
+            ApplyClaimState(IsPreviewClaimable(currentPreview), IsPreviewClaimable(currentPreview) ? "CLAIM" : "CLAIMED");
         }
     }
 
@@ -228,10 +266,12 @@ public class DailyLoginPanelUI : MonoBehaviour
         else if (result.alreadyClaimed)
         {
             SetFeedback("Reward already claimed.");
+            ApplyClaimState(false, "CLAIMED");
         }
         else
         {
             SetFeedback(string.IsNullOrWhiteSpace(result.failureReason) ? "Claim failed." : result.failureReason);
+            ApplyClaimState(IsPreviewClaimable(currentPreview), IsPreviewClaimable(currentPreview) ? "CLAIM" : "CLAIMED");
         }
     }
 
@@ -249,7 +289,18 @@ public class DailyLoginPanelUI : MonoBehaviour
             resetTimerText.text = BuildResetText(preview.nextResetUnixSeconds);
 
         RebuildItems(preview);
-        SetClaimInteractable(HasClaimableDay(preview));
+
+        bool canClaim = IsPreviewClaimable(preview);
+        string claimLabel = canClaim ? "CLAIM" : "CLAIMED";
+        ApplyClaimState(canClaim && !claimInProgress, claimInProgress ? "CLAIMING..." : claimLabel);
+
+        if (feedbackText != null && !claimInProgress)
+        {
+            if (canClaim && clearFeedbackWhenClaimable)
+                feedbackText.text = string.Empty;
+            else if (!canClaim && preview.alreadyClaimedToday)
+                feedbackText.text = "Come back tomorrow.";
+        }
 
         if (verboseLogs)
         {
@@ -258,6 +309,8 @@ public class DailyLoginPanelUI : MonoBehaviour
                 "Ready=" + preview.isReady +
                 " | CurrentStreakDay=" + preview.currentStreakDay +
                 " | NextClaimDay=" + preview.nextClaimDayIndex +
+                " | CanClaim=" + canClaim +
+                " | AlreadyClaimedToday=" + preview.alreadyClaimedToday +
                 " | SpawnedItems=" + (preview.days != null ? preview.days.Length : 0),
                 this);
         }
@@ -308,9 +361,12 @@ public class DailyLoginPanelUI : MonoBehaviour
         }
     }
 
-    private bool HasClaimableDay(DailyLoginPreviewState preview)
+    private bool IsPreviewClaimable(DailyLoginPreviewState preview)
     {
-        if (preview.days == null)
+        if (!preview.isReady || !preview.canClaimNow || preview.alreadyClaimedToday)
+            return false;
+
+        if (preview.days == null || preview.days.Length == 0)
             return false;
 
         for (int i = 0; i < preview.days.Length; i++)
@@ -319,13 +375,25 @@ public class DailyLoginPanelUI : MonoBehaviour
                 return true;
         }
 
-        return preview.canClaimNow;
+        return false;
     }
 
-    private void SetClaimInteractable(bool value)
+    private void ApplyClaimState(bool interactable, string label)
     {
+        canClaimCached = interactable;
+
         if (claimButton != null)
-            claimButton.interactable = value;
+            claimButton.interactable = interactable;
+
+        if (claimButtonCanvasGroup != null)
+        {
+            claimButtonCanvasGroup.alpha = interactable ? 1f : 0.45f;
+            claimButtonCanvasGroup.interactable = interactable;
+            claimButtonCanvasGroup.blocksRaycasts = interactable;
+        }
+
+        if (claimButtonLabel != null)
+            claimButtonLabel.text = string.IsNullOrWhiteSpace(label) ? (interactable ? "CLAIM" : "CLAIMED") : label;
     }
 
     private string BuildClaimFeedback(DailyLoginClaimResult result)
@@ -363,6 +431,66 @@ public class DailyLoginPanelUI : MonoBehaviour
         if (service == null)
             service = FindObjectOfType<DailyLoginRewardService>();
 #endif
+    }
+
+    private void ResolveOptionalButtonVisuals()
+    {
+        if (claimButton != null)
+        {
+            if (claimButtonCanvasGroup == null)
+                claimButtonCanvasGroup = claimButton.GetComponent<CanvasGroup>();
+
+            if (claimButtonCanvasGroup == null)
+                claimButtonCanvasGroup = claimButton.gameObject.AddComponent<CanvasGroup>();
+
+            if (claimButtonLabel == null)
+                claimButtonLabel = claimButton.GetComponentInChildren<TMP_Text>(true);
+        }
+    }
+
+    private void SubscribeServiceEvents()
+    {
+        if (service == null)
+            return;
+
+        service.PreviewUpdated -= HandlePreviewUpdated;
+        service.PreviewUpdated += HandlePreviewUpdated;
+
+        service.ClaimCompleted -= HandleClaimCompleted;
+        service.ClaimCompleted += HandleClaimCompleted;
+    }
+
+    private void UnsubscribeServiceEvents()
+    {
+        if (service == null)
+            return;
+
+        service.PreviewUpdated -= HandlePreviewUpdated;
+        service.ClaimCompleted -= HandleClaimCompleted;
+    }
+
+    private void ResetCancellationToken()
+    {
+        DisposeCancellationToken();
+        cts = new CancellationTokenSource();
+    }
+
+    private void DisposeCancellationToken()
+    {
+        if (cts == null)
+            return;
+
+        cts.Cancel();
+        cts.Dispose();
+        cts = null;
+    }
+
+    private void SetPanelVisible(bool visible)
+    {
+        if (panelRoot != null)
+            panelRoot.SetActive(visible);
+        else
+            gameObject.SetActive(visible);
     }
 
     private void ClearContainer(Transform container)

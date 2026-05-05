@@ -1,6 +1,8 @@
 using System;
 using System.Reflection;
 using System.Threading;
+using PlayFab;
+using PlayFab.ClientModels;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -14,6 +16,7 @@ public class DailyLoginRewardService : MonoBehaviour
     [Header("Schedule")]
     [SerializeField] private bool useUtcDay = true;
     [SerializeField][Range(0, 23)] private int resetHourUtc = 0;
+    [SerializeField] private bool preferPlayFabServerTime = true;
 
     [Header("Rewards")]
     [SerializeField]
@@ -32,6 +35,11 @@ public class DailyLoginRewardService : MonoBehaviour
     [SerializeField] private bool verboseLogs = true;
 
     private const int MaxDailyDays = 7;
+
+    private DateTime cachedServerUtc;
+    private float cachedServerRealtime;
+    private bool hasCachedServerUtc;
+    private const float ServerTimeCacheSeconds = 60f;
 
     private void Awake()
     {
@@ -58,7 +66,7 @@ public class DailyLoginRewardService : MonoBehaviour
 
     public DailyLoginPreviewState GetPreview()
     {
-        DailyLoginPreviewState preview = BuildPreviewState(GetBackendState(), GetNowUtc());
+        DailyLoginPreviewState preview = BuildPreviewState(GetBackendState(), GetFallbackNowUtc());
         PreviewUpdated?.Invoke(preview);
         return preview;
     }
@@ -74,7 +82,9 @@ public class DailyLoginRewardService : MonoBehaviour
         if (cancellationToken.IsCancellationRequested)
             cancellationToken.ThrowIfCancellationRequested();
 
-        DailyLoginPreviewState preview = GetPreview();
+        DateTime authoritativeNowUtc = await GetAuthoritativeNowUtcAsync(cancellationToken);
+        DailyLoginPreviewState preview = BuildPreviewState(GetBackendState(), authoritativeNowUtc);
+        PreviewUpdated?.Invoke(preview);
 
         if (verboseLogs)
         {
@@ -96,7 +106,7 @@ public class DailyLoginRewardService : MonoBehaviour
             cancellationToken.ThrowIfCancellationRequested();
 
         BackendDailyLoginState state = GetBackendState();
-        DateTime nowUtc = GetNowUtc();
+        DateTime nowUtc = await GetAuthoritativeNowUtcAsync(cancellationToken);
 
         DailyLoginPreviewState beforePreview = BuildPreviewState(state, nowUtc);
 
@@ -142,13 +152,13 @@ public class DailyLoginRewardService : MonoBehaviour
         bool saveOk = await SaveBackendStateAsync(state, cancellationToken);
         if (!saveOk)
         {
-            DailyLoginPreviewState failedPreview = BuildPreviewState(GetBackendState(), GetNowUtc());
+            DailyLoginPreviewState failedPreview = BuildPreviewState(GetBackendState(), await GetAuthoritativeNowUtcAsync(cancellationToken));
             DailyLoginClaimResult failed = DailyLoginClaimResult.Failed(failedPreview, "Backend save failed.");
             ClaimCompleted?.Invoke(failed);
             return failed;
         }
 
-        DailyLoginPreviewState afterPreview = BuildPreviewState(GetBackendState(), GetNowUtc());
+        DailyLoginPreviewState afterPreview = BuildPreviewState(GetBackendState(), await GetAuthoritativeNowUtcAsync(cancellationToken));
 
         DailyLoginClaimResult result = DailyLoginClaimResult.Success(
             claimDay,
@@ -215,7 +225,7 @@ public class DailyLoginRewardService : MonoBehaviour
     private async Task DebugForceClaimAvailableTodayAsync()
     {
         BackendDailyLoginState state = GetBackendState();
-        DateTime nowUtc = GetNowUtc();
+        DateTime nowUtc = GetFallbackNowUtc();
         state.lastClaimDateUtc = GetWindowDateKey(nowUtc.AddDays(-2));
         state.lastClaimWindowIndex = GetWindowIndex(nowUtc) - 2;
         await SaveBackendStateAsync(state, CancellationToken.None);
@@ -331,9 +341,72 @@ public class DailyLoginRewardService : MonoBehaviour
         }
     }
 
-    private DateTime GetNowUtc()
+    private DateTime GetFallbackNowUtc()
     {
         return useUtcDay ? DateTime.UtcNow : DateTime.Now.ToUniversalTime();
+    }
+
+    private async Task<DateTime> GetAuthoritativeNowUtcAsync(CancellationToken cancellationToken)
+    {
+        if (!preferPlayFabServerTime)
+            return GetFallbackNowUtc();
+
+        if (hasCachedServerUtc && Time.realtimeSinceStartup - cachedServerRealtime <= ServerTimeCacheSeconds)
+        {
+            double elapsed = Math.Max(0d, Time.realtimeSinceStartup - cachedServerRealtime);
+            return cachedServerUtc.AddSeconds(elapsed);
+        }
+
+        try
+        {
+            DateTime serverUtc = await RequestPlayFabServerUtcAsync(cancellationToken);
+            cachedServerUtc = DateTime.SpecifyKind(serverUtc, DateTimeKind.Utc);
+            cachedServerRealtime = Time.realtimeSinceStartup;
+            hasCachedServerUtc = true;
+            return cachedServerUtc;
+        }
+        catch (Exception ex)
+        {
+            if (verboseLogs)
+                Debug.LogWarning("[DailyLoginRewardService] Server time unavailable, fallback UTC used -> " + ex.Message, this);
+
+            return GetFallbackNowUtc();
+        }
+    }
+
+    private Task<DateTime> RequestPlayFabServerUtcAsync(CancellationToken cancellationToken)
+    {
+        TaskCompletionSource<DateTime> tcs = new TaskCompletionSource<DateTime>();
+
+        CancellationTokenRegistration registration = default;
+        if (cancellationToken.CanBeCanceled)
+        {
+            registration = cancellationToken.Register(() =>
+            {
+                tcs.TrySetCanceled();
+            });
+        }
+
+        PlayFabClientAPI.GetTime(
+            new GetTimeRequest(),
+            result =>
+            {
+                registration.Dispose();
+                DateTime serverTime = result.Time;
+                if (serverTime.Kind == DateTimeKind.Unspecified)
+                    serverTime = DateTime.SpecifyKind(serverTime, DateTimeKind.Utc);
+                else
+                    serverTime = serverTime.ToUniversalTime();
+
+                tcs.TrySetResult(serverTime);
+            },
+            error =>
+            {
+                registration.Dispose();
+                tcs.TrySetException(new InvalidOperationException(error != null ? error.GenerateErrorReport() : "PlayFab GetTime failed."));
+            });
+
+        return tcs.Task;
     }
 
     private int GetWindowIndex(DateTime utcNow)
